@@ -1,0 +1,207 @@
+erDiagram
+    ORGANIZATION ||--o{ TEAM : "has"
+    ORGANIZATION ||--o{ PROJECT : "owns"
+    TEAM ||--o{ AGENT : "has"
+    TEAM ||--o{ PROJECT : "assigned to"
+
+    AGENT_TYPE ||--o{ AGENT : "defines"
+
+    PROJECT ||--o{ REPO : "contains"
+    PROJECT ||--o{ EPIC : "contains"
+    PROJECT ||--o{ MILESTONE : "tracks"
+    PROJECT ||--o{ BUG : "logged against"
+    PROJECT ||--o{ OPS_REQUEST : "scoped to"
+
+    REPO ||--o{ WORKTREE : "has"
+    REPO {
+        string id
+        string name
+        string url
+        string primary_language
+        string default_branch
+        string[] tags
+    }
+
+    WORKTREE ||--|| BRANCH : "checked out to"
+    WORKTREE {
+        string id
+        string repo_id
+        string path
+        string status
+        string work_item_id
+        string work_item_type
+        date created_at
+        date last_activity_at
+        date interrupted_at
+        string interrupted_reason
+    }
+
+    BRANCH }o--o| PULL_REQUEST : "opened as"
+    BRANCH }o--o| STORY : "linked to"
+    BRANCH }o--o| BUG : "linked to"
+    BRANCH }o--o| OPS_REQUEST : "linked to"
+    BRANCH {
+        string id
+        string repo_id
+        string name
+        string work_item_id
+        string work_item_type
+        string base_branch
+    }
+
+    EPIC ||--o{ STORY : "breaks into"
+    STORY ||--o{ TASK : "broken into"
+    TASK ||--o{ SUBTASK : "has"
+
+    STORY }o--|| AGENT : "assigned to"
+    TASK }o--|| AGENT : "assigned to"
+    BUG }o--|| AGENT : "assigned to"
+    OPS_REQUEST }o--|| AGENT : "assigned to"
+
+    STORY }o--o{ LABEL : "tagged with"
+    STORY }o--o| MILESTONE : "targets"
+    STORY }o--o{ DEPENDENCY : "blocked by"
+
+    BUG }o--o{ STORY : "linked to"
+    BUG }o--o| MILESTONE : "targets"
+    BUG }o--o{ LABEL : "tagged with"
+    BUG }o--o{ DEPENDENCY : "blocked by"
+
+    OPS_REQUEST }o--o{ REPO : "scoped to"
+    OPS_REQUEST }o--o{ STORY : "linked to"
+    OPS_REQUEST }o--o{ BUG : "linked to"
+    OPS_REQUEST ||--o| CHANGE_SET : "may produce"
+    OPS_REQUEST ||--o| RUNBOOK : "may produce"
+    OPS_REQUEST ||--o{ ACTION_LOG : "has"
+    OPS_REQUEST ||--o{ HITL_ESCALATION : "triggers"
+
+    OPS_REQUEST {
+        string id
+        string title
+        string description
+        string category
+        string execution_type
+        string risk_level
+        string status
+        string environment
+        date scheduled_at
+    }
+
+    RUNBOOK {
+        string id
+        string ops_request_id
+        string[] steps
+        string status
+        string executed_by
+        date executed_at
+    }
+
+    STORY ||--o{ ACTION_LOG : "has"
+    TASK ||--o{ ACTION_LOG : "has"
+    BUG ||--o{ ACTION_LOG : "has"
+    STORY ||--o{ ATTACHMENT : "has"
+    BUG ||--o{ ATTACHMENT : "has"
+    STORY ||--o{ HITL_ESCALATION : "triggers"
+    BUG ||--o{ HITL_ESCALATION : "triggers"
+    STORY ||--o{ CRITIQUE : "receives"
+    CRITIQUE }o--o| CRITIQUE : "supersedes"
+    HITL_ESCALATION }o--|| AGENT : "raised by"
+    CRITIQUE }o--|| AGENT : "authored by"
+
+    CRITIQUE {
+        string id
+        string work_item_id
+        string work_item_type
+        string critic_type
+        int revision
+        string[] issues
+        string[] questions
+        string[] recommendations
+        string severity
+        string disposition
+        string supersedes_id
+        date created_at
+    }
+
+    STORY ||--o{ CHANGE_SET : "implemented by"
+    BUG ||--o{ CHANGE_SET : "fixed by"
+    CHANGE_SET ||--o{ PULL_REQUEST : "contains"
+    CHANGE_SET {
+        string id
+        string status
+        string summary
+    }
+    PULL_REQUEST }o--|| BRANCH : "from"
+    PULL_REQUEST }o--|| REPO : "targets"
+    PULL_REQUEST }o--|| AGENT : "authored by"
+    PULL_REQUEST ||--o{ REVIEW : "requires"
+    REVIEW }o--|| AGENT : "submitted by"
+
+    AGENT_TYPE {
+        string id
+        string name
+        string[] responsibilities
+    }
+    AGENT {
+        string id
+        string name
+        string agent_type
+        string model
+        string[] tools
+        string[] capabilities
+        float confidence_threshold
+    }
+    STORY {
+        string id
+        string title
+        string status
+        string priority
+        int story_points
+        date due_date
+        int spec_revision_count
+        bool substantial_change
+        int dev_iteration_count
+    }
+    TASK {
+        string id
+        string title
+        string status
+        string type
+    }
+    BUG {
+        string id
+        string title
+        string severity
+        string priority
+        string status
+        string environment
+        string repro_steps
+        string linked_story_id
+    }
+    PULL_REQUEST {
+        string id
+        string branch
+        string status
+        date created_at
+    }
+    ACTION_LOG {
+        string id
+        string agent_id
+        string action
+        string reasoning
+        date timestamp
+    }
+    HITL_ESCALATION {
+        string id
+        string trigger_type
+        string trigger_class
+        string triggered_by_agent
+        string work_item_id
+        string work_item_type
+        string reason
+        float agent_confidence
+        string resolution
+        string resolved_by
+        date created_at
+        date resolved_at
+    }

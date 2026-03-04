@@ -1,0 +1,213 @@
+flowchart TD
+    subgraph StoryFlow["📖 Story Lifecycle"]
+        subgraph Discovery["🔍 Discovery"]
+            IDEA([Idea / Request]) --> BACKLOG[Backlog]
+            BACKLOG -->|"🤖 Spec Critic Agent\nreviews story quality"| SPEC_CRITIQUE["Spec Critique\n(advisory)"]
+            SPEC_CRITIQUE -->|"🤖 Planning Agent\nreviews critique + grooms"| GROOMING[Grooming / Refinement]
+            GROOMING -->|"🤖 Planning Agent\nrejects"| CLOSED_R([Closed – Won't Do])
+            GROOMING -->|"needs work\n🤖 minor revision"| BACKLOG
+            GROOMING -->|"needs work\n🤖 marks substantial change"| BACKLOG_SC[Backlog\n+ substantial_change=true]
+            BACKLOG_SC -->|"🤖 Spec Critic re-runs\non revised spec"| SPEC_CRITIQUE
+            GROOMING -->|"cross-team impact\nor strategic decision"| HITL_SCOPE[/"👤 HITL\nScope Review"/]
+            HITL_SCOPE -->|Approved| REFINED
+            HITL_SCOPE -->|Rejected| CLOSED_R
+        end
+
+        subgraph Planning["📋 Planning"]
+            GROOMING -->|"🤖 Planning Agent\napproves + estimates"| REFINED[Refined & Estimated]
+            REFINED -->|"🤖 Planning Agent\nscans all project repos"| SPRINT_WT_CHECK["Worktree Scan\n(pre-sprint)"]
+            SPRINT_WT_CHECK -->|"no conflicts\nor stale WIP"| SPRINT[Sprint Planned]
+            SPRINT_WT_CHECK -->|"stale WIP found\nfor stories in this sprint"| SPRINT_WT_SURFACE["WIP Surfaced\nto Sprint Plan"]
+            SPRINT_WT_SURFACE -->|"🤖 reassigns story\nto resume existing WIP"| SPRINT
+            SPRINT_WT_SURFACE -->|"conflict: WIP\nblocks sprint story"| HITL_SPRINT_CONFLICT[/"👤 HITL\nSprint WIP Review"/]
+            HITL_SPRINT_CONFLICT -->|"resolve / defer"| SPRINT
+        end
+
+        subgraph Development["💻 Development"]
+            SPRINT -->|"🤖 Design Critic Agent\nreviews implementation approach"| DESIGN_CRITIQUE["Design Critique\n(advisory)"]
+            DESIGN_CRITIQUE -->|"🤖 Coding Agent\nreviews critique + picks up task"| WORKTREE_CHECK["Check Existing\nWorktrees"]
+            WORKTREE_CHECK -->|"none found\n🤖 create fresh"| WORKTREE_CREATE["Worktrees Created\n(1 per affected repo)"]
+            WORKTREE_CHECK -->|"stale / interrupted WIP\nfor this work item"| WORKTREE_RESUME["Resume Worktree\n(continue from last commit)"]
+            WORKTREE_CHECK -->|"conflict: stale WIP\nfor different work item"| HITL_WORKTREE[/"👤 HITL\nWorktree Conflict"/]
+            HITL_WORKTREE -->|"discard stale"| WORKTREE_CREATE
+            HITL_WORKTREE -->|"finish stale first"| WORKTREE_RESUME
+            WORKTREE_CREATE -->|"🤖 Coding Agent\nbranch per work item + repo"| IN_DEV[In Development]
+            WORKTREE_RESUME --> IN_DEV
+            IN_DEV -->|"🤖 Coding Agent\nidentifies affected repos"| FANOUT["ChangeSet Created\n(1 PR per affected repo)"]
+            FANOUT -->|"🤖 Coding Agent\nopens PR from each branch"| PR_OPEN["PRs Opened\n(all repos)"]
+            IN_DEV -->|Blocked| BLOCKED[Blocked]
+            BLOCKED -->|"🤖 Planning Agent\nresolves block"| IN_DEV
+            BLOCKED -->|"cross-team dependency\nor external blocker"| HITL_BLOCK[/"👤 HITL\nBlock Resolution"/]
+            HITL_BLOCK --> IN_DEV
+        end
+
+        subgraph Review["🔎 Review"]
+            PR_OPEN -->|"🤖 Review Agent\nreviews each PR independently"| CODE_REVIEW["Code Review\n(per repo)"]
+            CODE_REVIEW -->|"🤖 any PR needs changes"| DESIGN_CRITIQUE_RERUN["Design Critique\nre-runs\n(always on loop-back)"]
+            DESIGN_CRITIQUE_RERUN --> IN_DEV
+            CODE_REVIEW -->|"🤖 all PRs approved"| CHANGESET_READY["ChangeSet Ready\n(all repos green)"]
+            CODE_REVIEW -->|"🤖 all PRs approved"| CHANGESET_READY["ChangeSet Ready\n(all repos green)"]
+            CODE_REVIEW -->|"security surface\nor breaking API change"| HITL_REVIEW[/"👤 HITL\nCode Review"/]
+            HITL_REVIEW -->|Approved| CHANGESET_READY
+            HITL_REVIEW -->|Changes needed| IN_DEV
+            CHANGESET_READY -->|"🤖 Test Agent\nruns integration tests"| QA[QA / Integration Testing]
+            QA -->|"🤖 Test Agent\npasses"| STAGING[Staging / UAT]
+            STAGING -->|"🤖 Test Agent\nregression found"| IN_DEV
+        end
+
+        subgraph Release["🚀 Release"]
+            STAGING -->|"🤖 Release Agent\npatch / minor"| MERGE[Merged to Main]
+            STAGING -->|"major version\nor infra change"| HITL_RELEASE[/"👤 HITL\nRelease Approval"/]
+            HITL_RELEASE -->|Approved| MERGE
+            MERGE -->|"🤖 Release Agent\ndeploys"| DEPLOY[Deployed to Prod]
+            DEPLOY -->|"🤖 Release Agent\nremoves worktrees + branches"| WORKTREE_CLEAN["Worktrees Cleaned Up"]
+            WORKTREE_CLEAN --> CLOSED_D([Closed – Done])
+        end
+    end
+
+    subgraph BugFlow["🐛 Bug Lifecycle"]
+        subgraph BugIngest["📥 Intake"]
+            B_SOURCE(["Report / Alert /\nMonitoring"]) -->|"🤖 Monitoring Agent\ndetects + files"| B_NEW[New]
+            B_NEW -->|"🤖 Triage Agent\nduplicates"| B_DUPE([Closed – Duplicate])
+            B_NEW -->|"🤖 Triage Agent\ncan't reproduce"| B_NOREPRO([Closed – Can't Reproduce])
+            B_NEW -->|"🤖 Triage Agent\nsets severity + priority"| B_TRIAGED[Triaged]
+            B_NEW -->|"data loss / security\nor ambiguous P0"| HITL_TRIAGE[/"👤 HITL\nTriage Review"/]
+            HITL_TRIAGE -->|Severity set| B_TRIAGED
+            HITL_TRIAGE -->|Closed| B_DUPE
+        end
+
+        subgraph BugPriority["🏷 Prioritization"]
+            B_TRIAGED -->|"🤖 Triage Agent\nP0 / Critical"| B_HOTFIX[Hotfix Queue]
+            B_TRIAGED -->|"🤖 Planning Agent\nnormal priority"| B_SPRINT[Added to Sprint]
+            B_TRIAGED -->|"🤖 Planning Agent\nlow priority"| B_BACKLOG[Bug Backlog]
+            B_BACKLOG -->|"🤖 Planning Agent\nreprioritizes"| B_SPRINT
+            B_HOTFIX -->|"always"| HITL_P0[/"👤 HITL\nP0 Sign-off"/]
+        end
+
+        subgraph BugDev["🔧 Fix"]
+            HITL_P0 -->|"🤖 Coding Agent"| B_WORKTREE["Worktrees Created\n(1 per affected repo)"]
+            B_SPRINT -->|"🤖 Coding Agent"| B_WORKTREE
+            B_WORKTREE --> B_INPROG[In Progress]
+            B_INPROG -->|"🤖 Coding Agent\nidentifies affected repos"| B_FANOUT["ChangeSet Created\n(1 PR per affected repo)"]
+            B_FANOUT --> B_PR["PRs Opened\n(all repos)"]
+            B_INPROG -->|Blocked| B_BLOCKED[Blocked]
+            B_BLOCKED -->|"🤖 Planning Agent\nresolves"| B_INPROG
+        end
+
+        subgraph BugReview["🔎 Verification"]
+            B_PR -->|"🤖 Review Agent\nper repo"| B_REVIEW["Code Review\n(per repo)"]
+            B_REVIEW -->|"🤖 any PR needs changes"| B_INPROG
+            B_REVIEW -->|"🤖 all PRs approved"| B_CHANGESET_READY["ChangeSet Ready\n(all repos green)"]
+            B_CHANGESET_READY -->|"🤖 Test Agent"| B_VERIFY[QA Verification]
+            B_VERIFY -->|"🤖 Test Agent\nnot fixed"| B_INPROG
+            B_VERIFY -->|"🤖 Test Agent\nverified"| B_RELEASE[Staged / Released]
+            B_RELEASE -->|"P0 fix\nalways"| HITL_BUGREL[/"👤 HITL\nHotfix Deploy Approval"/]
+            HITL_BUGREL -->|Approved| B_MERGE[Merged + Deployed]
+            B_RELEASE -->|"normal fix"| B_MERGE
+            B_MERGE -->|"🤖 Release Agent\nremoves worktrees + branches"| B_WORKTREE_CLEAN["Worktrees Cleaned Up"]
+            B_WORKTREE_CLEAN --> B_CLOSED([Closed – Fixed])
+        end
+    end
+
+    subgraph OpsFlow["⚙️ OpsRequest Lifecycle"]
+        subgraph OpsIntake["📥 Intake"]
+            O_SOURCE(["Request / Alert /\nScheduled Trigger"]) -->|"🤖 Triage Agent\nclassifies"| O_NEW[New]
+            O_NEW -->|"🤖 Triage Agent\nsets category + risk"| O_TRIAGED[Triaged]
+            O_NEW -->|"duplicate /\ninvalid"| O_CLOSED_INV([Closed – Invalid])
+        end
+
+        subgraph OpsPlanning["📋 Planning"]
+            O_TRIAGED -->|"🤖 Ops Agent\ncode_change path"| O_CODE[Route → Code Change\nopen ChangeSet]
+            O_TRIAGED -->|"🤖 Ops Agent\ndirect_action path\nlow risk"| O_DIRECT[Route → Direct Action]
+            O_TRIAGED -->|"🤖 Ops Agent\nrunbook path\nor high risk"| O_RUNBOOK_BUILD[Build Runbook]
+            O_CODE -->|"→ normal PR\nlifecycle"| O_PR_FLOW["(ChangeSet /\nPR flow)"]
+            O_PR_FLOW --> O_VERIFY
+        end
+
+        subgraph OpsExec["🔧 Execution"]
+            O_DIRECT -->|"low risk\n🤖 Ops Agent executes"| O_EXEC[Executing]
+            O_DIRECT -->|"high risk\nprod / destructive"| HITL_OPS_EXEC[/"👤 HITL\nExecution Approval"/]
+            HITL_OPS_EXEC -->|Approved| O_EXEC
+            HITL_OPS_EXEC -->|Rejected| O_CLOSED_REJ([Closed – Rejected])
+
+            O_RUNBOOK_BUILD -->|"🤖 Ops Agent\ngenerates steps"| O_RUNBOOK_READY[Runbook Ready]
+            O_RUNBOOK_READY -->|"always"| HITL_RUNBOOK[/"👤 HITL\nRunbook Review\n+ Execution"/]
+            HITL_RUNBOOK -->|Executed| O_EXEC
+            HITL_RUNBOOK -->|Rejected| O_CLOSED_REJ
+        end
+
+        subgraph OpsVerify["✅ Verification"]
+            O_EXEC -->|"🤖 Ops Agent\nverifies outcome"| O_VERIFY[Verifying]
+            O_VERIFY -->|"🤖 success"| O_DONE([Closed – Done])
+            O_VERIFY -->|"🤖 failed /\nunexpected state"| HITL_OPS_FAIL[/"👤 HITL\nFailure Review"/]
+            HITL_OPS_FAIL -->|Rollback| O_EXEC
+            HITL_OPS_FAIL -->|Accept| O_DONE
+        end
+    end
+    QA -->|"🤖 Test Agent\nfiles bug"| B_NEW
+    B_CLOSED -.->|"🤖 Planning Agent\nunblocks story"| IN_DEV
+
+    subgraph Agents["🤖 Agent Registry"]
+        direction LR
+        MON["Monitoring Agent\nObserves prod, files bugs"]
+        TRIAGE["Triage Agent\nDeduplicates, classifies, sets severity + priority"]
+        PLAN["Planning Agent\nGrooming, scheduling, unblocking"]
+        CODE["Coding Agent\nImplementation, PRs"]
+        REV["Review Agent\nDiff review, approval"]
+        TEST["Test Agent\nQA, regression, verification"]
+        REL["Release Agent\nMerge, deploy, sign-off"]
+        OPS["Ops Agent\nClassifies ops requests, executes direct actions,\ngenerates runbooks, verifies outcomes"]
+        SPEC_CRITIC["Spec Critic Agent\nReviews story quality before grooming:\nvague criteria, missing edge cases, contradictions"]
+        DESIGN_CRITIC["Design Critic Agent\nReviews implementation approach before coding:\nover-engineering, wrong abstraction, missed patterns"]
+    end
+
+    subgraph HITL["👤 Human-in-the-Loop Triggers  ·  escalate on consequence, not confidence"]
+        direction LR
+        H1["Scope Review\n⚠️ Cross-team impact or strategic scope"]
+        H2["Block Resolution\n⚠️ External / cross-team dependency only"]
+        H3["Code Review\n⚠️ Security surface or breaking API change"]
+        H4["Release Approval\n⚠️ Major version or infra change only"]
+        H5["Triage Review\n⚠️ Data loss, security, or ambiguous P0"]
+        H6["P0 Sign-off\n🔴 Always — no autonomous P0 start"]
+        H7["Hotfix Deploy\n🔴 Always — no autonomous P0 prod push"]
+        H8["Ops Execution\n⚠️ High-risk or prod direct actions"]
+        H9["Runbook Review\n🔴 Always — human reviews + executes runbook"]
+        H10["Ops Failure\n⚠️ Unexpected outcome after execution"]
+        H11["Worktree Conflict\n⚠️ Stale WIP found for different work item in same repo"]
+        H12["Sprint WIP Review\n⚠️ Stale WIP conflicts with sprint plan — resolve before scheduling"]
+    end
+
+    style Discovery fill:#e8f4fd,stroke:#3498db
+    style Planning fill:#fef9e7,stroke:#f39c12
+    style Development fill:#eafaf1,stroke:#27ae60
+    style Review fill:#fdf2f8,stroke:#8e44ad
+    style Release fill:#fdedec,stroke:#e74c3c
+    style BugIngest fill:#fdf5e6,stroke:#e67e22
+    style BugPriority fill:#fef9e7,stroke:#f39c12
+    style BugDev fill:#eafaf1,stroke:#27ae60
+    style BugReview fill:#fdf2f8,stroke:#8e44ad
+    style StoryFlow fill:#f0f8ff,stroke:#3498db
+    style BugFlow fill:#fff8f0,stroke:#e67e22
+    style OpsIntake fill:#f0fdf4,stroke:#16a34a
+    style OpsPlanning fill:#fef9e7,stroke:#f39c12
+    style OpsExec fill:#eafaf1,stroke:#27ae60
+    style OpsVerify fill:#fdf2f8,stroke:#8e44ad
+    style OpsFlow fill:#f0fff4,stroke:#16a34a
+    style Agents fill:#f0f0ff,stroke:#6c5ce7
+    style HITL fill:#fff0f0,stroke:#e74c3c
+
+    HITL_SCOPE:::hitl
+    HITL_BLOCK:::hitl
+    HITL_REVIEW:::hitl
+    HITL_RELEASE:::hitl
+    HITL_TRIAGE:::hitl
+    HITL_WORKTREE:::hitl
+    HITL_SPRINT_CONFLICT:::hitl
+    HITL_P0:::hitlhard
+    HITL_BUGREL:::hitlhard
+    HITL_OPS_EXEC:::hitl
+    HITL_RUNBOOK:::hitlhard
+    HITL_OPS_FAIL:::hitl
+
+    classDef hitl fill:#ffe8cc,stroke:#e67e22,stroke-width:2px,color:#a04000
+    classDef hitlhard fill:#ffe0e0,stroke:#e74c3c,stroke-width:3px,color:#c0392b
