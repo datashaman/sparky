@@ -1,15 +1,17 @@
+import argparse
 import asyncio
 import logging
 
 from sparky.models import (
-    Repo, Project, Story, Bug, OpsRequest,
+    Bug, OpsRequest, Project, Repo, Story,
 )
 from sparky.workflows.story import run_story_workflow
 from sparky.workflows.bug import run_bug_workflow
 from sparky.workflows.ops import run_ops_workflow
 
 
-async def async_main() -> None:
+async def run_demo() -> None:
+    """Run the hardcoded demo workflows."""
     # Project with multiple repos
     auth_project = Project(
         id="proj-auth",
@@ -112,6 +114,61 @@ async def async_main() -> None:
         print("Runbook steps:")
         for step in done_purge.runbook.steps:
             print(f"  {step}")
+
+
+async def run_from_source(items: list[Story | Bug]) -> None:
+    """Run workflows for issues fetched from an external source."""
+    for item in items:
+        if isinstance(item, Bug):
+            completed = await run_bug_workflow(item)
+            print(f"\n[{completed.id}] {completed.title} — status: {completed.status}")
+        else:
+            completed = await run_story_workflow(item)
+            print(f"\n[{completed.id}] {completed.title} — status: {completed.status}")
+
+
+async def async_main() -> None:
+    parser = argparse.ArgumentParser(
+        prog="sparky",
+        description="AI-powered story grooming workflow",
+    )
+    group = parser.add_mutually_exclusive_group()
+    group.add_argument(
+        "--github",
+        metavar="OWNER/REPO",
+        help="Fetch issues from a GitHub repository",
+    )
+    group.add_argument(
+        "--jira",
+        metavar="PROJECT_KEY",
+        help="Fetch issues from a Jira project",
+    )
+    args = parser.parse_args()
+
+    if args.github:
+        from sparky.sources.github import GitHubSource
+
+        source = GitHubSource()
+        items = await source.fetch_issues(args.github)
+        if not items:
+            print(f"No open issues found in {args.github}")
+            return
+        print(f"Fetched {len(items)} issues from GitHub ({args.github})")
+        await run_from_source(items)
+
+    elif args.jira:
+        from sparky.sources.jira import JiraSource
+
+        source = JiraSource()
+        items = await source.fetch_issues(args.jira)
+        if not items:
+            print(f"No open issues found in {args.jira}")
+            return
+        print(f"Fetched {len(items)} issues from Jira ({args.jira})")
+        await run_from_source(items)
+
+    else:
+        await run_demo()
 
 
 def main() -> None:
