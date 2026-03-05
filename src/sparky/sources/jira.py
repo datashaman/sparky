@@ -30,6 +30,7 @@ class JiraSource(IssueSource):
             raise ValueError(
                 "JIRA_URL, JIRA_USER, and JIRA_TOKEN environment variables are required"
             )
+        self._url = url
         self._jira = JIRA(server=url, basic_auth=(user, token))
 
     async def fetch_issues(self, project_key: str) -> list[Story | Bug]:
@@ -38,7 +39,7 @@ class JiraSource(IssueSource):
         Args:
             project_key: Jira project key (e.g., "PROJ").
         """
-        jql = f'project = "{project_key}" AND status != Done ORDER BY created DESC'
+        jql = f'project = "{project_key}" AND assignee = currentUser() AND sprint in openSprints() AND status != Done ORDER BY created DESC'
         issues = self._jira.search_issues(jql, maxResults=50)
 
         project = Project(
@@ -54,21 +55,30 @@ class JiraSource(IssueSource):
             priority_name = (getattr(issue.fields.priority, "name", "") or "").lower()
             priority = PRIORITY_MAP.get(priority_name, "normal")
 
+            status = (getattr(issue.fields.status, "name", "") or "")
+            status_category = getattr(issue.fields.status, "statusCategory", None)
+            category = (getattr(status_category, "name", "") or "")
+            category_id = int(getattr(status_category, "id", 999))
+            url = f"{self._url}/browse/{issue.key}"
+            display = {"status": status, "category": category, "category_id": category_id, "url": url}
+
             if issue_type == "bug":
-                items.append(Bug(
+                item = Bug(
                     id=issue.key,
                     title=title,
                     description=description,
                     project=project,
                     priority=priority,
-                ))
+                )
             else:
-                items.append(Story(
+                item = Story(
                     id=issue.key,
                     title=title,
                     description=description,
                     project=project,
                     priority=priority,
-                ))
+                )
+            item._display = display  # type: ignore[attr-defined]
+            items.append(item)
 
         return items

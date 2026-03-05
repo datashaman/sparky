@@ -11,6 +11,9 @@ dependencies = [
     "claude-agent-sdk",
     "PyGithub",
     "jira",
+    "python-dotenv",
+    "rich",
+    "textual",
 ]
 
 [project.scripts]

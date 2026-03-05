@@ -33,10 +33,17 @@ class GitHubSource(IssueSource):
             )],
         )
 
+        me = self._gh.get_user().login
+
         items: list[Story | Bug] = []
         for issue in repo.get_issues(state="open"):
             # Skip pull requests (GitHub API returns them as issues too)
             if issue.pull_request is not None:
+                continue
+
+            # Only include issues assigned to the authenticated user
+            assignees = [a.login for a in issue.assignees]
+            if me not in assignees:
                 continue
 
             label_names = [label.name.lower() for label in issue.labels]

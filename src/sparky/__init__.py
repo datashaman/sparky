@@ -2,12 +2,15 @@ import argparse
 import asyncio
 import logging
 
+from dotenv import load_dotenv
+
 from sparky.models import (
     Bug, OpsRequest, Project, Repo, Story,
 )
-from sparky.workflows.story import run_story_workflow
+from sparky.ui import IssueSelector, WorkflowApp
 from sparky.workflows.bug import run_bug_workflow
 from sparky.workflows.ops import run_ops_workflow
+from sparky.workflows.story import run_story_workflow
 
 
 async def run_demo() -> None:
@@ -116,15 +119,20 @@ async def run_demo() -> None:
             print(f"  {step}")
 
 
+
+async def select_issues(items: list[Story | Bug]) -> list[Story | Bug]:
+    """Show an interactive table for the user to select issues."""
+    app = IssueSelector(items)
+    return await app.run_async() or []
+
+
 async def run_from_source(items: list[Story | Bug]) -> None:
-    """Run workflows for issues fetched from an external source."""
-    for item in items:
-        if isinstance(item, Bug):
-            completed = await run_bug_workflow(item)
-            print(f"\n[{completed.id}] {completed.title} — status: {completed.status}")
-        else:
-            completed = await run_story_workflow(item)
-            print(f"\n[{completed.id}] {completed.title} — status: {completed.status}")
+    """Run workflows for selected issues from an external source."""
+    selected = await select_issues(items)
+    if not selected:
+        return
+    app = WorkflowApp(selected)
+    await app.run_async()
 
 
 async def async_main() -> None:
@@ -172,6 +180,8 @@ async def async_main() -> None:
 
 
 def main() -> None:
+    load_dotenv()
+
     fmt = "%(asctime)s %(name)s %(levelname)s  %(message)s"
     datefmt = "%H:%M:%S"
 
@@ -193,4 +203,7 @@ def main() -> None:
     logger.addHandler(console)
     logger.addHandler(fileh)
 
-    asyncio.run(async_main())
+    try:
+        asyncio.run(async_main())
+    except KeyboardInterrupt:
+        pass
