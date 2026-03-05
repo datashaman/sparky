@@ -1,9 +1,16 @@
+import asyncio
 import os
 
 from github import Auth, Github
 
 from sparky.models import Bug, Project, Repo, Story
 from sparky.sources import IssueSource
+
+# Map GitHub issue state to a pseudo-category matching Jira's model.
+_STATE_CATEGORY = {
+    "open": ("To Do", 2),
+    "closed": ("Done", 3),
+}
 
 
 class GitHubSource(IssueSource):
@@ -21,6 +28,9 @@ class GitHubSource(IssueSource):
         Args:
             project_key: Repository in "owner/repo" format.
         """
+        return await asyncio.to_thread(self._fetch_issues_sync, project_key)
+
+    def _fetch_issues_sync(self, project_key: str) -> list[Story | Bug]:
         repo = self._gh.get_repo(project_key)
         project = Project(
             id=f"gh-{repo.full_name}",
@@ -51,19 +61,29 @@ class GitHubSource(IssueSource):
             title = issue.title
             description = issue.body or ""
 
+            category, category_id = _STATE_CATEGORY.get(issue.state, ("Open", 2))
+            display = {
+                "status": issue.state,
+                "category": category,
+                "category_id": category_id,
+                "url": issue.html_url,
+            }
+
             if "bug" in label_names:
-                items.append(Bug(
+                item = Bug(
                     id=issue_id,
                     title=title,
                     description=description,
                     project=project,
-                ))
+                )
             else:
-                items.append(Story(
+                item = Story(
                     id=issue_id,
                     title=title,
                     description=description,
                     project=project,
-                ))
+                )
+            item._display = display  # type: ignore[attr-defined]
+            items.append(item)
 
         return items

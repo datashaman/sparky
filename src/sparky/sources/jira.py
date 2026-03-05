@@ -1,3 +1,4 @@
+import asyncio
 import os
 
 from jira import JIRA
@@ -39,6 +40,9 @@ class JiraSource(IssueSource):
         Args:
             project_key: Jira project key (e.g., "PROJ").
         """
+        return await asyncio.to_thread(self._fetch_issues_sync, project_key)
+
+    def _fetch_issues_sync(self, project_key: str) -> list[Story | Bug]:
         jql = f'project = "{project_key}" AND assignee = currentUser() AND sprint in openSprints() AND status != Done ORDER BY created DESC'
         issues = self._jira.search_issues(jql, maxResults=50)
 
