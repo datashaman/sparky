@@ -6,16 +6,30 @@ import {
 } from "../data/repos";
 import { addRepoToWorkspace, removeRepoFromWorkspace } from "../data/workspaceRepos";
 import { fetchRepo, listUserRepos, type GitHubRepo } from "../github";
+import { WorkspaceList } from "./WorkspaceList";
 import { ErrorMessage } from "./ErrorMessage";
 import type { Workspace, Repo } from "../data/types";
 
 interface WorkspaceDetailProps {
   workspaceId: string;
-  onBack: () => void;
+  onSwitchWorkspace: (id: string) => void;
   onDeleted: () => void;
 }
 
-export function WorkspaceDetail({ workspaceId, onBack, onDeleted }: WorkspaceDetailProps) {
+type WorkspacePage = "workspaces" | "dashboard" | "agents" | "skills" | "issues" | "settings";
+
+const TOOLBAR_COMPACT_KEY = "sparky_toolbar_compact";
+
+export function WorkspaceDetail({ workspaceId, onSwitchWorkspace, onDeleted }: WorkspaceDetailProps) {
+  const [page, setPage] = useState<WorkspacePage>("dashboard");
+  const [toolbarCompact, setToolbarCompact] = useState(() => {
+    try {
+      const stored = localStorage.getItem(TOOLBAR_COMPACT_KEY);
+      return stored === null ? true : stored === "true";
+    } catch {
+      return true;
+    }
+  });
   const [workspace, setWorkspace] = useState<Workspace | null>(null);
   const [repos, setRepos] = useState<Repo[]>([]);
   const [addRepoInput, setAddRepoInput] = useState("");
@@ -185,31 +199,210 @@ export function WorkspaceDetail({ workspaceId, onBack, onDeleted }: WorkspaceDet
     }
   }, [autocompleteOpen, highlightedIndex, suggestions]);
 
+  function toggleToolbarMode() {
+    const next = !toolbarCompact;
+    setToolbarCompact(next);
+    try {
+      localStorage.setItem(TOOLBAR_COMPACT_KEY, String(next));
+    } catch {
+      /* ignore */
+    }
+  }
+
   if (loading) {
     return <p className="loading">Loading…</p>;
   }
 
   if (!workspace) {
     return (
-      <div>
-        <ErrorMessage message="Workspace not found." />
-        <button onClick={onBack}>Back to workspaces</button>
+      <div className="workspace-detail">
+        <div className="workspace-detail-body">
+          <nav className={`workspace-toolbar ${toolbarCompact ? "compact" : "expanded"}`} aria-label="Workspace navigation">
+            <button type="button" className="workspace-toolbar-btn" onClick={() => setPage("workspaces")} title="All Workspaces">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                <rect width="8" height="4" x="2" y="4" rx="1" />
+                <path d="M10 4h12" />
+                <rect width="8" height="4" x="2" y="12" rx="1" />
+                <path d="M10 12h12" />
+                <rect width="8" height="4" x="2" y="20" rx="1" />
+                <path d="M10 20h12" />
+              </svg>
+              <span className="workspace-toolbar-label">All Workspaces</span>
+            </button>
+          </nav>
+          <div className="workspace-detail-content">
+            <ErrorMessage message="Workspace not found." />
+            <WorkspaceList
+              onSelectWorkspace={(id) => {
+                onSwitchWorkspace(id);
+                setPage("dashboard");
+              }}
+            />
+          </div>
+        </div>
       </div>
     );
   }
 
   return (
     <div className="workspace-detail">
-      <div className="workspace-detail-header">
-        <button onClick={onBack} className="back-btn">
-          ← Back
-        </button>
-        <h1>{workspace.name}</h1>
-        <button onClick={handleDeleteWorkspace} className="delete-workspace-btn">
-          Delete workspace
-        </button>
-      </div>
+      <div className="workspace-detail-body">
+        <nav
+          className={`workspace-toolbar ${toolbarCompact ? "compact" : "expanded"}`}
+          aria-label="Workspace navigation"
+        >
+          <button
+            type="button"
+            className={`workspace-toolbar-btn ${page === "workspaces" ? "active" : ""}`}
+            onClick={() => setPage("workspaces")}
+            title="All Workspaces"
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+              <rect width="8" height="4" x="2" y="4" rx="1" />
+              <path d="M10 4h12" />
+              <rect width="8" height="4" x="2" y="12" rx="1" />
+              <path d="M10 12h12" />
+              <rect width="8" height="4" x="2" y="20" rx="1" />
+              <path d="M10 20h12" />
+            </svg>
+            <span className="workspace-toolbar-label">All Workspaces</span>
+          </button>
+          <button
+            type="button"
+            className={`workspace-toolbar-btn ${page === "dashboard" ? "active" : ""}`}
+            onClick={() => setPage("dashboard")}
+            title="Dashboard"
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+              <rect width="7" height="9" x="3" y="3" rx="1" />
+              <rect width="7" height="5" x="14" y="3" rx="1" />
+              <rect width="7" height="9" x="14" y="12" rx="1" />
+              <rect width="7" height="5" x="3" y="16" rx="1" />
+            </svg>
+            <span className="workspace-toolbar-label">Dashboard</span>
+          </button>
+          <button
+            type="button"
+            className={`workspace-toolbar-btn ${page === "issues" ? "active" : ""}`}
+            onClick={() => setPage("issues")}
+            title="Issues"
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+              <circle cx="12" cy="12" r="10" />
+              <path d="M12 8v4" />
+              <path d="M12 16h.01" />
+            </svg>
+            <span className="workspace-toolbar-label">Issues</span>
+          </button>
+          <button
+            type="button"
+            className={`workspace-toolbar-btn ${page === "agents" ? "active" : ""}`}
+            onClick={() => setPage("agents")}
+            title="Agents"
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+              <path d="M12 8V4H8" />
+              <rect width="16" height="12" x="4" y="8" rx="2" />
+              <path d="M2 14h2" />
+              <path d="M20 14h2" />
+              <path d="M15 13v2" />
+              <path d="M9 13v2" />
+            </svg>
+            <span className="workspace-toolbar-label">Agents</span>
+          </button>
+          <button
+            type="button"
+            className={`workspace-toolbar-btn ${page === "skills" ? "active" : ""}`}
+            onClick={() => setPage("skills")}
+            title="Skills"
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+              <path d="m9.06 11.9 8.07-8.06a2.85 2.85 0 1 1 4.03 4.03l-8.06 8.08" />
+              <path d="M7.07 14.94c-1.66 0-3 1.35-3 3.02 0 1.33-2.5 1.52-2 2.02 1.08 1.1 2.49 2.02 4 2.02 2.2 0 4-1.8 4-4.04a3.01 3.01 0 0 0-3-3.02z" />
+            </svg>
+            <span className="workspace-toolbar-label">Skills</span>
+          </button>
+          <div className="workspace-toolbar-spacer" aria-hidden />
+          <div className="workspace-toolbar-bottom">
+            <button
+              type="button"
+              className={`workspace-toolbar-btn ${page === "settings" ? "active" : ""}`}
+              onClick={() => setPage("settings")}
+              title="Settings"
+            >
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" />
+                <circle cx="12" cy="12" r="3" />
+              </svg>
+              <span className="workspace-toolbar-label">Settings</span>
+            </button>
+            <button
+              type="button"
+              className="workspace-toolbar-toggle"
+              onClick={toggleToolbarMode}
+              title={toolbarCompact ? "Expand sidebar" : "Collapse sidebar"}
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                {toolbarCompact ? (
+                  <path d="m9 18 6-6-6-6" />
+                ) : (
+                  <path d="m15 18-6-6 6-6" />
+                )}
+              </svg>
+            </button>
+          </div>
+        </nav>
 
+        <div className="workspace-detail-content">
+          {page === "workspaces" && (
+            <div className="workspace-page workspace-page-workspaces">
+              <WorkspaceList
+                onSelectWorkspace={(id) => {
+                  onSwitchWorkspace(id);
+                  setPage("dashboard");
+                }}
+              />
+            </div>
+          )}
+          {page === "dashboard" && (
+            <div className="workspace-page workspace-page-dashboard">
+              <div className="dashboard-metrics">
+                <div className="metric-card">
+                  <span className="metric-value">{repos.length}</span>
+                  <span className="metric-label">Repos</span>
+                </div>
+                <div className="metric-card">
+                  <span className="metric-value">—</span>
+                  <span className="metric-label">Issues</span>
+                </div>
+                <div className="metric-card">
+                  <span className="metric-value">—</span>
+                  <span className="metric-label">Agents</span>
+                </div>
+              </div>
+              <section className="dashboard-recent">
+                <h3>Recent events</h3>
+                <p className="empty-state">No recent events.</p>
+              </section>
+            </div>
+          )}
+          {page === "agents" && (
+            <div className="workspace-page workspace-page-agents">
+              <p className="empty-state">Agents page — coming soon.</p>
+            </div>
+          )}
+          {page === "skills" && (
+            <div className="workspace-page workspace-page-skills">
+              <p className="empty-state">Skills page — coming soon.</p>
+            </div>
+          )}
+          {page === "issues" && (
+            <div className="workspace-page workspace-page-issues">
+              <p className="empty-state">Issues page — coming soon.</p>
+            </div>
+          )}
+          {page === "settings" && (
+            <>
       <div className="add-repo-section">
         <h3>Add repo</h3>
         <form
@@ -332,6 +525,24 @@ export function WorkspaceDetail({ workspaceId, onBack, onDeleted }: WorkspaceDet
             ))}
           </ul>
         )}
+      </div>
+
+      <section className="settings-danger-zone">
+        <h3>Danger Zone</h3>
+        <div className="danger-zone-content">
+          <p className="danger-zone-desc">Permanently delete this workspace and remove all associated data. This action cannot be undone.</p>
+          <button
+            type="button"
+            onClick={handleDeleteWorkspace}
+            className="delete-workspace-btn"
+          >
+            Delete workspace
+          </button>
+        </div>
+      </section>
+          </>
+          )}
+        </div>
       </div>
     </div>
   );

@@ -30,6 +30,5 @@ sha2 = "0.10"
 base64 = { version = "0.21", features = ["alloc"] }
 rand = "0.8"
 open = "2"
-socket2 = { version = "0.5", features = ["all"] }
 urlencoding = "2"
 

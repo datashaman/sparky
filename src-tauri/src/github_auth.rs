@@ -16,7 +16,6 @@ use rand::Rng;
 use reqwest::header::{ACCEPT, USER_AGENT};
 use serde::Deserialize;
 use sha2::{Digest, Sha256};
-use socket2::{Domain, Socket, Type};
 use std::net::SocketAddr;
 use std::sync::{Arc, Mutex};
 use tokio::sync::oneshot;
@@ -259,22 +258,9 @@ pub async fn login_with_web_flow() -> Result<String, String> {
     let client_secret_callback = client_secret.to_string();
 
     let addr = SocketAddr::from(([127, 0, 0, 1], REDIRECT_PORT));
-    let std_listener: std::net::TcpListener = {
-        let socket = Socket::new(Domain::IPV4, Type::STREAM, None)
-            .map_err(|e| format!("Could not create socket: {}", e))?;
-        socket
-            .set_reuse_address(true)
-            .map_err(|e| format!("Could not set socket option: {}", e))?;
-        socket
-            .bind(&addr.into())
-            .map_err(|e| format!("Could not bind to 127.0.0.1:8765. Is another app using that port? {}", e))?;
-        socket
-            .listen(128)
-            .map_err(|e| format!("Could not listen: {}", e))?;
-        socket.into()
-    };
-    let listener = tokio::net::TcpListener::from_std(std_listener)
-        .map_err(|e| format!("Could not create async listener: {}", e))?;
+    let listener = tokio::net::TcpListener::bind(addr)
+        .await
+        .map_err(|e| format!("Could not bind to 127.0.0.1:8765. Is another app using that port? {}", e))?;
 
     let app = Router::new().route("/callback", get({
         let tx_shared = tx_shared.clone();
