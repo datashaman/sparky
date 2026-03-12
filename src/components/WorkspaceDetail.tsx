@@ -5,7 +5,7 @@ import {
   listReposForWorkspace,
 } from "../data/repos";
 import { addRepoToWorkspace, removeRepoFromWorkspace } from "../data/workspaceRepos";
-import { fetchRepo, listUserRepos, type GitHubRepo } from "../github";
+import { fetchRepo, listUserRepos, listRepoOpenIssues, type GitHubRepo, type GitHubIssue } from "../github";
 import { WorkspaceList } from "./WorkspaceList";
 import { ErrorMessage } from "./ErrorMessage";
 import type { Workspace, Repo } from "../data/types";
@@ -42,6 +42,16 @@ export function WorkspaceDetail({ workspaceId, onSwitchWorkspace, onDeleted }: W
   const [highlightedIndex, setHighlightedIndex] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const issuesPanelCloseTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const issuesPanelOpenDelayRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const ISSUES_PANEL_OPEN_DELAY_MS = 600;
+
+  const [issuesPanelOpen, setIssuesPanelOpen] = useState(false);
+  const [selectedIssue, setSelectedIssue] = useState<(GitHubIssue & { full_name: string }) | null>(null);
+  const [issuesByRepo, setIssuesByRepo] = useState<Array<{ full_name: string; issues: GitHubIssue[] }>>([]);
+  const [issuesLoading, setIssuesLoading] = useState(false);
+  const [issuesError, setIssuesError] = useState<string | null>(null);
 
   useEffect(() => {
     load();
@@ -65,6 +75,45 @@ export function WorkspaceDetail({ workspaceId, onSwitchWorkspace, onDeleted }: W
       el?.scrollIntoView({ block: "nearest", behavior: "auto" });
     }
   }, [autocompleteOpen, suggestions, highlightedIndex]);
+
+  /* Prefetch issues when workspace repos are loaded so the hover panel opens instantly */
+  useEffect(() => {
+    if (repos.length === 0) {
+      setIssuesByRepo([]);
+      setIssuesLoading(false);
+      setIssuesError(null);
+      return;
+    }
+    let cancelled = false;
+    setIssuesLoading(true);
+    setIssuesError(null);
+    Promise.all(
+      repos.map(async (repo) => {
+        const fullName = repo.full_name || `${repo.owner}/${repo.name}`;
+        try {
+          const issues = await listRepoOpenIssues(fullName);
+          return { full_name: fullName, issues, error: null as string | null };
+        } catch (e) {
+          return { full_name: fullName, issues: [] as GitHubIssue[], error: String(e) };
+        }
+      })
+    )
+      .then((results) => {
+        if (cancelled) return;
+        const firstError = results.find((r) => r.error)?.error ?? null;
+        if (firstError) setIssuesError(firstError);
+        setIssuesByRepo(results.filter((g) => g.issues.length > 0).map(({ full_name, issues }) => ({ full_name, issues })));
+      })
+      .catch((e) => {
+        if (!cancelled) setIssuesError(String(e));
+      })
+      .finally(() => {
+        if (!cancelled) setIssuesLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [repos]);
 
   async function load() {
     setLoading(true);
@@ -162,6 +211,30 @@ export function WorkspaceDetail({ workspaceId, onSwitchWorkspace, onDeleted }: W
     }
   }
 
+  function onIssuesPanelAreaEnter() {
+    if (issuesPanelCloseTimeoutRef.current) {
+      clearTimeout(issuesPanelCloseTimeoutRef.current);
+      issuesPanelCloseTimeoutRef.current = null;
+    }
+    if (issuesPanelOpen) return;
+    if (issuesPanelOpenDelayRef.current) return;
+    issuesPanelOpenDelayRef.current = setTimeout(() => {
+      issuesPanelOpenDelayRef.current = null;
+      setIssuesPanelOpen(true);
+    }, ISSUES_PANEL_OPEN_DELAY_MS);
+  }
+
+  function onIssuesPanelAreaLeave() {
+    if (issuesPanelOpenDelayRef.current) {
+      clearTimeout(issuesPanelOpenDelayRef.current);
+      issuesPanelOpenDelayRef.current = null;
+    }
+    issuesPanelCloseTimeoutRef.current = setTimeout(() => {
+      issuesPanelCloseTimeoutRef.current = null;
+      setIssuesPanelOpen(false);
+    }, 200);
+  }
+
   function handleKeyDown(e: React.KeyboardEvent) {
     if (e.key === "Enter") {
       e.preventDefault();
@@ -218,7 +291,7 @@ export function WorkspaceDetail({ workspaceId, onSwitchWorkspace, onDeleted }: W
       <div className="workspace-detail">
         <div className="workspace-detail-body">
           <nav className={`workspace-toolbar ${toolbarCompact ? "compact" : "expanded"}`} aria-label="Workspace navigation">
-            <button type="button" className="workspace-toolbar-btn" onClick={() => setPage("workspaces")} title="All Workspaces">
+            <button type="button" className="workspace-toolbar-btn" onClick={() => { setSelectedIssue(null); setPage("workspaces"); }} title="All Workspaces">
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
                 <rect width="8" height="4" x="2" y="4" rx="1" />
                 <path d="M10 4h12" />
@@ -253,8 +326,8 @@ export function WorkspaceDetail({ workspaceId, onSwitchWorkspace, onDeleted }: W
         >
           <button
             type="button"
-            className={`workspace-toolbar-btn ${page === "workspaces" ? "active" : ""}`}
-            onClick={() => setPage("workspaces")}
+            className={`workspace-toolbar-btn ${page === "workspaces" && !selectedIssue ? "active" : ""}`}
+            onClick={() => { setSelectedIssue(null); setPage("workspaces"); }}
             title="All Workspaces"
           >
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
@@ -269,8 +342,8 @@ export function WorkspaceDetail({ workspaceId, onSwitchWorkspace, onDeleted }: W
           </button>
           <button
             type="button"
-            className={`workspace-toolbar-btn ${page === "dashboard" ? "active" : ""}`}
-            onClick={() => setPage("dashboard")}
+            className={`workspace-toolbar-btn ${page === "dashboard" && !selectedIssue ? "active" : ""}`}
+            onClick={() => { setSelectedIssue(null); setPage("dashboard"); }}
             title="Dashboard"
           >
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
@@ -283,9 +356,10 @@ export function WorkspaceDetail({ workspaceId, onSwitchWorkspace, onDeleted }: W
           </button>
           <button
             type="button"
-            className={`workspace-toolbar-btn ${page === "issues" ? "active" : ""}`}
-            onClick={() => setPage("issues")}
+            className={`workspace-toolbar-btn ${issuesPanelOpen || selectedIssue ? "active" : ""}`}
             title="Issues"
+            onMouseEnter={onIssuesPanelAreaEnter}
+            onMouseLeave={onIssuesPanelAreaLeave}
           >
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
               <circle cx="12" cy="12" r="10" />
@@ -296,8 +370,8 @@ export function WorkspaceDetail({ workspaceId, onSwitchWorkspace, onDeleted }: W
           </button>
           <button
             type="button"
-            className={`workspace-toolbar-btn ${page === "agents" ? "active" : ""}`}
-            onClick={() => setPage("agents")}
+            className={`workspace-toolbar-btn ${page === "agents" && !selectedIssue ? "active" : ""}`}
+            onClick={() => { setSelectedIssue(null); setPage("agents"); }}
             title="Agents"
           >
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
@@ -312,8 +386,8 @@ export function WorkspaceDetail({ workspaceId, onSwitchWorkspace, onDeleted }: W
           </button>
           <button
             type="button"
-            className={`workspace-toolbar-btn ${page === "skills" ? "active" : ""}`}
-            onClick={() => setPage("skills")}
+            className={`workspace-toolbar-btn ${page === "skills" && !selectedIssue ? "active" : ""}`}
+            onClick={() => { setSelectedIssue(null); setPage("skills"); }}
             title="Skills"
           >
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
@@ -326,8 +400,8 @@ export function WorkspaceDetail({ workspaceId, onSwitchWorkspace, onDeleted }: W
           <div className="workspace-toolbar-bottom">
             <button
               type="button"
-              className={`workspace-toolbar-btn ${page === "settings" ? "active" : ""}`}
-              onClick={() => setPage("settings")}
+              className={`workspace-toolbar-btn ${page === "settings" && !selectedIssue ? "active" : ""}`}
+              onClick={() => { setSelectedIssue(null); setPage("settings"); }}
               title="Settings"
             >
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
@@ -338,6 +412,45 @@ export function WorkspaceDetail({ workspaceId, onSwitchWorkspace, onDeleted }: W
             </button>
           </div>
         </nav>
+
+        <div
+          className={`workspace-issues-panel ${issuesPanelOpen ? "open" : ""}`}
+          onMouseEnter={onIssuesPanelAreaEnter}
+          onMouseLeave={onIssuesPanelAreaLeave}
+        >
+          <div className="workspace-issues-panel-inner">
+            {issuesLoading && <p className="empty-state">Loading…</p>}
+            {issuesError && <p className="workspace-issues-panel-error">{issuesError}</p>}
+            {!issuesLoading && !issuesError && issuesByRepo.length === 0 && (
+              <p className="empty-state">No open issues.</p>
+            )}
+            {!issuesLoading && !issuesError && issuesByRepo.length > 0 && (
+              <ul className="workspace-issues-list">
+                {issuesByRepo.map(({ full_name, issues }) => (
+                  <li key={full_name} className="workspace-issues-repo-group">
+                    <span className="workspace-issues-repo-name">{full_name}</span>
+                    <ul className="workspace-issues-repo-issues">
+                      {issues.map((issue) => (
+                        <li key={issue.id}>
+                          <button
+                            type="button"
+                            className="workspace-issues-item"
+                            onClick={() => {
+                              setSelectedIssue({ ...issue, full_name });
+                              setIssuesPanelOpen(false);
+                            }}
+                          >
+                            <span className="workspace-issues-item-title">#{issue.number} {issue.title}</span>
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </div>
 
         <div className="workspace-sidebar-border">
           <button
@@ -358,17 +471,34 @@ export function WorkspaceDetail({ workspaceId, onSwitchWorkspace, onDeleted }: W
         </div>
 
         <div className="workspace-detail-content">
-          {page === "workspaces" && (
+          {selectedIssue ? (
+            <div className="workspace-page workspace-page-issue">
+              <div className="issue-detail-header">
+                <h2 className="issue-detail-title">{selectedIssue.title}</h2>
+                <p className="issue-detail-meta">
+                  <a href={selectedIssue.html_url} target="_blank" rel="noopener noreferrer">
+                    {selectedIssue.full_name}#{selectedIssue.number}
+                  </a>
+                  {selectedIssue.state && ` · ${selectedIssue.state}`}
+                </p>
+              </div>
+              {selectedIssue.body ? (
+                <div className="issue-detail-body">{selectedIssue.body}</div>
+              ) : (
+                <p className="empty-state">No description.</p>
+              )}
+            </div>
+          ) : page === "workspaces" ? (
             <div className="workspace-page workspace-page-workspaces">
               <WorkspaceList
                 onSelectWorkspace={(id) => {
+                  setSelectedIssue(null);
                   onSwitchWorkspace(id);
                   setPage("dashboard");
                 }}
               />
             </div>
-          )}
-          {page === "dashboard" && (
+          ) : page === "dashboard" ? (
             <div className="workspace-page workspace-page-dashboard">
               <div className="dashboard-metrics">
                 <div className="metric-card">
@@ -389,23 +519,15 @@ export function WorkspaceDetail({ workspaceId, onSwitchWorkspace, onDeleted }: W
                 <p className="empty-state">No recent events.</p>
               </section>
             </div>
-          )}
-          {page === "agents" && (
+          ) : page === "agents" ? (
             <div className="workspace-page workspace-page-agents">
               <p className="empty-state">Agents page — coming soon.</p>
             </div>
-          )}
-          {page === "skills" && (
+          ) : page === "skills" ? (
             <div className="workspace-page workspace-page-skills">
               <p className="empty-state">Skills page — coming soon.</p>
             </div>
-          )}
-          {page === "issues" && (
-            <div className="workspace-page workspace-page-issues">
-              <p className="empty-state">Issues page — coming soon.</p>
-            </div>
-          )}
-          {page === "settings" && (
+          ) : page === "settings" ? (
             <>
       <div className="add-repo-section">
         <h3>Add repo</h3>
@@ -545,7 +667,7 @@ export function WorkspaceDetail({ workspaceId, onSwitchWorkspace, onDeleted }: W
         </div>
       </section>
           </>
-          )}
+          ) : null}
         </div>
       </div>
     </div>

@@ -110,7 +110,7 @@ pub async fn start_device_flow() -> Result<DeviceFlowResult, String> {
 
     let params = [
         ("client_id", client_id),
-        ("scope", "read:user user:email"),
+        ("scope", "read:user user:email repo"),
     ];
 
     let response = client
@@ -240,7 +240,7 @@ pub async fn login_with_web_flow() -> Result<String, String> {
     let code_challenge = pkce_code_challenge(&code_verifier);
 
     let auth_url = format!(
-        "https://github.com/login/oauth/authorize?client_id={}&redirect_uri={}&scope=read:user%20user:email&state={}&code_challenge={}&code_challenge_method=S256",
+        "https://github.com/login/oauth/authorize?client_id={}&redirect_uri={}&scope=read:user%20user:email%20repo&state={}&code_challenge={}&code_challenge_method=S256",
         client_id,
         urlencoding::encode(REDIRECT_URI),
         state,

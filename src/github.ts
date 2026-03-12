@@ -59,7 +59,7 @@ export async function fetchRepo(owner: string, name: string): Promise<GitHubRepo
   }
 
   const fullName = `${owner}/${name}`;
-  const url = `https://api.github.com/repos/${encodeURIComponent(fullName)}`;
+  const url = `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(name)}`;
 
   const response = await fetch(url, {
     headers: {
@@ -79,4 +79,52 @@ export async function fetchRepo(owner: string, name: string): Promise<GitHubRepo
 
   const data = (await response.json()) as GitHubRepo;
   return data;
+}
+
+export interface GitHubIssue {
+  id: number;
+  number: number;
+  title: string;
+  state: string;
+  html_url: string;
+  body: string | null;
+  user: { login: string } | null;
+  created_at: string;
+  updated_at: string;
+  pull_request?: unknown;
+}
+
+/**
+ * List open issues for a repository (excludes pull requests).
+ * GET /repos/{owner}/{repo}/issues?state=open
+ */
+export async function listRepoOpenIssues(fullName: string): Promise<GitHubIssue[]> {
+  const token = localStorage.getItem("github_token");
+  if (!token) {
+    throw new Error("Not logged in. Sign in with GitHub first.");
+  }
+  const repoPath = (fullName || "").trim();
+  const slash = repoPath.indexOf("/");
+  if (!repoPath || slash === -1) {
+    throw new Error(`Invalid repo path: "${fullName}". Expected "owner/name".`);
+  }
+  const owner = repoPath.slice(0, slash);
+  const name = repoPath.slice(slash + 1);
+  const url = `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(name)}/issues?state=open&per_page=100`;
+
+  const response = await fetch(url, {
+    headers: {
+      Accept: "application/vnd.github+json",
+      Authorization: `Bearer ${token}`,
+      "X-GitHub-Api-Version": "2022-11-28",
+    },
+  });
+
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(`GitHub API error: ${response.status} - ${text.slice(0, 200)}`);
+  }
+
+  const data = (await response.json()) as GitHubIssue[];
+  return data.filter((i) => !i.pull_request);
 }
