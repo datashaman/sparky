@@ -1,0 +1,848 @@
+.logo.vite:hover {
+  filter: drop-shadow(0 0 2em #747bff);
+}
+
+.logo.react:hover {
+  filter: drop-shadow(0 0 2em #61dafb);
+}
+:root {
+  font-family: Inter, Avenir, Helvetica, Arial, sans-serif;
+  font-size: 16px;
+  line-height: 24px;
+  font-weight: 400;
+
+  color: #0f0f0f;
+  background-color: #f6f6f6;
+
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  -webkit-text-size-adjust: 100%;
+}
+
+/* Sign-in / loading view - compact, no island */
+.container {
+  margin: 0;
+  padding: 1rem 1.25rem;
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  padding-top: 2rem;
+  text-align: center;
+}
+
+/* Full-width app layout - reduces "island" feel */
+.app-layout {
+  padding-top: 1.5rem;
+  padding-bottom: 2rem;
+  justify-content: flex-start;
+  align-items: stretch;
+  text-align: left;
+}
+
+.app-content {
+  width: 100%;
+  max-width: 560px;
+  margin: 0 auto;
+  padding: 0 1.5rem;
+}
+
+.logo {
+  height: 6em;
+  padding: 1.5em;
+  will-change: filter;
+  transition: 0.75s;
+}
+
+.logo.tauri:hover {
+  filter: drop-shadow(0 0 2em #24c8db);
+}
+
+.row {
+  display: flex;
+  justify-content: center;
+}
+
+a {
+  font-weight: 500;
+  color: #646cff;
+  text-decoration: inherit;
+}
+
+a:hover {
+  color: #535bf2;
+}
+
+h1 {
+  text-align: center;
+}
+
+input,
+button {
+  border-radius: 8px;
+  border: 1px solid transparent;
+  padding: 0.6em 1.2em;
+  font-size: 1em;
+  font-weight: 500;
+  font-family: inherit;
+  color: #0f0f0f;
+  background-color: #ffffff;
+  transition: border-color 0.25s;
+  box-shadow: 0 2px 2px rgba(0, 0, 0, 0.2);
+}
+
+button {
+  cursor: pointer;
+}
+
+button:hover {
+  border-color: #396cd8;
+}
+button:active {
+  border-color: #396cd8;
+  background-color: #e8e8e8;
+}
+
+/* Visible focus for keyboard users - never remove without replacement */
+input:focus-visible,
+button:focus-visible,
+a:focus-visible,
+.workspace-item:focus-visible {
+  outline: 2px solid #396cd8;
+  outline-offset: 2px;
+}
+
+@media (prefers-color-scheme: dark) {
+  input:focus-visible,
+  button:focus-visible,
+  a:focus-visible,
+  .workspace-item:focus-visible {
+    outline-color: #24c8db;
+  }
+}
+
+#greet-input {
+  margin-right: 5px;
+}
+
+.subtitle {
+  color: #666;
+  margin-bottom: 1.5rem;
+}
+
+.error {
+  color: #c00;
+  margin-bottom: 1rem;
+  font-size: 0.9rem;
+}
+
+.error-message {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+  padding: 1rem 1.25rem;
+  background: rgba(200, 0, 0, 0.08);
+  border: 1px solid rgba(200, 0, 0, 0.25);
+  border-radius: 8px;
+  max-width: 560px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.error-message-text {
+  flex: 1;
+  color: #b91c1c;
+  font-size: 1rem;
+  line-height: 1.5;
+  margin: 0;
+  word-break: break-word;
+}
+
+.error-copy-btn {
+  flex-shrink: 0;
+  padding: 0.35rem 0.75rem !important;
+  font-size: 0.875rem;
+}
+
+/* Sign-in – flat layout, no card (button on page background) */
+.sign-in-content {
+  margin: 1rem 0 0;
+  max-width: 320px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+  text-align: center;
+}
+
+/* GitHub button – distinct edge so it doesn't blend into background */
+.github-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  padding: 0.75rem 1.5rem;
+  font-size: 1rem;
+  font-weight: 600;
+  border-radius: 8px;
+  background: #24292e !important;
+  color: #fff !important;
+  border: 1px solid rgba(255, 255, 255, 0.4) !important;
+  box-shadow: none !important;
+  outline: none;
+  cursor: pointer;
+  transition: background 0.2s, border-color 0.2s;
+}
+
+.github-btn:focus:not(:focus-visible) {
+  outline: none;
+}
+
+.github-btn .github-logo {
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
+}
+
+.github-btn:hover:not(:disabled) {
+  background: #424a53 !important;
+  border-color: rgba(255, 255, 255, 0.5) !important;
+}
+
+.github-btn:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+.device-flow {
+  margin: 1.5rem 0;
+  padding: 1.5rem;
+  background: #e8e8e8;
+  border-radius: 12px;
+  max-width: 360px;
+  margin-left: auto;
+  margin-right: auto;
+  color: #1a1a1a;
+}
+
+.device-flow p {
+  color: inherit;
+  margin: 0.5rem 0;
+}
+
+.user-code {
+  font-family: monospace;
+  font-size: 1.5rem;
+  font-weight: 600;
+  letter-spacing: 0.15em;
+  margin: 0.75rem 0;
+  color: #24292e;
+}
+
+/* Click-to-copy auth code button – looks like code, not a button */
+.user-code.user-code-copy {
+  display: block;
+  width: 100%;
+  background: none;
+  border: none;
+  padding: 0.5rem;
+  cursor: pointer;
+  box-shadow: none;
+  border-radius: 4px;
+  transition: background 0.15s;
+}
+
+.user-code.user-code-copy:hover {
+  background: rgba(0, 0, 0, 0.05);
+}
+
+button.user-code {
+  display: block;
+  width: 100%;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  box-shadow: none;
+  text-align: center;
+}
+
+button.user-code:hover {
+  text-decoration: underline;
+}
+
+button.user-code {
+  display: block;
+  width: 100%;
+  padding: 0.5rem 0;
+  border: none;
+  background: none;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: background 0.15s;
+}
+
+button.user-code:hover {
+  background: rgba(0, 0, 0, 0.05);
+}
+
+button.user-code:focus-visible {
+  outline-offset: 4px;
+}
+
+.waiting {
+  color: #555;
+  font-style: italic;
+}
+
+.open-link {
+  margin-top: 1rem;
+}
+
+.user-card {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 1.5rem;
+  background: #f0f0f0;
+  border-radius: 12px;
+  margin: 1.5rem auto;
+  max-width: 320px;
+}
+
+.avatar {
+  border-radius: 50%;
+}
+
+.user-name {
+  font-weight: 600;
+  margin: 0 0 0.25rem;
+}
+
+.user-login {
+  color: #666;
+  margin: 0;
+}
+
+.logout-btn {
+  margin-top: 1rem;
+}
+
+/* Workspace UI - aligned within app-content */
+.app-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.75rem 0;
+  margin-bottom: 1.5rem;
+  background: transparent;
+  border-radius: 0;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+}
+
+.app-header h1 {
+  margin: 0;
+  text-align: left;
+}
+
+.header-user {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin: 0;
+  padding: 0;
+}
+
+.header-user .logout-btn {
+  margin-top: 0;
+  margin-bottom: 0;
+  padding-top: 0.4em;
+  padding-bottom: 0.4em;
+}
+
+/* Preview mode badge - matches header styling */
+.preview-badge {
+  padding: 0.25rem 0.6rem;
+  background: rgba(0, 0, 0, 0.1);
+  border-radius: 6px;
+  font-size: 0.875rem;
+}
+
+.user-card-compact {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.user-card-compact .avatar {
+  width: 32px;
+  height: 32px;
+}
+
+.user-card-compact .user-name {
+  margin: 0;
+  font-size: 0.9rem;
+}
+
+.user-card-compact .user-login {
+  margin: 0;
+  font-size: 0.8rem;
+}
+
+.workspace-list-view {
+  max-width: 560px;
+  margin: 0 auto;
+  text-align: left;
+}
+
+.workspace-list {
+  margin: 0;
+  text-align: left;
+}
+
+.workspace-list h2 {
+  font-size: 1.25rem;
+  margin: 0 0 1rem;
+  text-align: left;
+}
+
+.create-workspace {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 1.5rem;
+}
+
+.create-workspace input {
+  flex: 1;
+}
+
+.workspace-items {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.workspace-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1rem 1.25rem;
+  background: #e8e8e8;
+  border-radius: 8px;
+  margin-bottom: 0.5rem;
+  transition: background 0.2s;
+  cursor: pointer;
+  border: 2px solid transparent;
+}
+
+.workspace-item:hover {
+  background: #ddd;
+}
+
+.workspace-item a {
+  font-weight: 500;
+  text-decoration: none;
+}
+
+.workspace-item a:hover {
+  text-decoration: underline;
+}
+
+.create-workspace-row {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 1rem;
+}
+
+.create-workspace-input {
+  flex: 1;
+}
+
+.loading {
+  color: #666;
+  font-style: italic;
+}
+
+.workspace-detail {
+  text-align: left;
+}
+
+.workspace-detail-header {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.workspace-detail-header h1 {
+  flex: 1;
+  text-align: left;
+  margin: 0;
+  font-size: 1.5rem;
+}
+
+.back-btn {
+  flex-shrink: 0;
+}
+
+.delete-workspace-btn {
+  flex-shrink: 0;
+  color: #c00;
+  background: transparent !important;
+  border-color: #c00 !important;
+}
+
+.delete-workspace-btn:hover {
+  background: rgba(200, 0, 0, 0.1) !important;
+}
+
+.add-repo-section {
+  margin-bottom: 2rem;
+}
+
+.add-repo-section h3,
+.repo-list-section h3 {
+  font-size: 1rem;
+  margin: 0 0 0.75rem;
+  color: #555;
+}
+
+.add-repo-row {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.add-repo-row input,
+.add-repo-row textarea {
+  flex: 1;
+  border-color: #ccc;
+  min-width: 0;
+}
+
+/* Off-screen input: real typing happens here so browser chip appears off-screen */
+.add-repo-input-hidden {
+  position: fixed;
+  left: -9999px;
+  top: 0;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* Visible fake input: displays value, click focuses the hidden input */
+.add-repo-input-fake {
+  flex: 1;
+  min-width: 0;
+  border: 1px solid #ccc;
+  border-radius: 8px;
+  padding: 0.6em 1.2em;
+  font-size: 1em;
+  font-family: inherit;
+  background: #fff;
+  cursor: text;
+  min-height: 2.5em;
+  display: flex;
+  align-items: center;
+}
+
+.add-repo-input-placeholder {
+  color: #888;
+}
+
+/* Textarea styled as single-line input (different autocomplete behavior than input) */
+.add-repo-row textarea.add-repo-input-textarea {
+  resize: none;
+  overflow: hidden;
+  min-height: 2.5em;
+  line-height: 1.5;
+}
+
+/* Suppress WebKit autofill icons */
+.add-repo-row input::-webkit-contacts-auto-fill-button,
+.add-repo-row input::-webkit-credentials-auto-fill-button,
+.add-repo-row textarea::-webkit-contacts-auto-fill-button,
+.add-repo-row textarea::-webkit-credentials-auto-fill-button {
+  visibility: hidden;
+  display: none !important;
+}
+
+.add-repo-section .error-message {
+  margin-top: 0.5rem;
+}
+
+.add-repo-autocomplete {
+  position: relative;
+}
+
+/* Modal: add-repo in a dialog so chip doesn't overlap main UI */
+.add-repo-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.add-repo-modal {
+  background: #fff;
+  border-radius: 12px;
+  padding: 1.5rem;
+  min-width: 320px;
+  max-width: 90vw;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+}
+
+.add-repo-trigger-btn {
+  width: 100%;
+}
+
+/* Off-screen: any browser chip/tooltip appears here, not over our dropdown */
+.add-repo-input-hidden {
+  position: fixed !important;
+  left: -9999px !important;
+  top: 0;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* Visible "input" - div that mirrors value, focuses real input on click */
+.add-repo-input-fake {
+  flex: 1;
+  min-width: 0;
+  border: 1px solid #ccc;
+  border-radius: 8px;
+  padding: 0.6em 1.2em;
+  font-size: 1em;
+  font-weight: 500;
+  font-family: inherit;
+  background: #fff;
+  cursor: text;
+  min-height: 2.5em;
+  display: flex;
+  align-items: center;
+}
+
+.add-repo-input-placeholder {
+  color: #888;
+}
+
+.add-repo-dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 60px;
+  margin-top: 2px;
+  max-height: 240px;
+  overflow-y: auto;
+  background: #fff;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  z-index: 2147483647; /* Above browser autocomplete chip/tooltip overlays */
+}
+
+.add-repo-dropdown-item {
+  padding: 0.5rem 0.75rem;
+  cursor: pointer;
+  font-size: 0.95rem;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.add-repo-dropdown-item:hover {
+  background: #e8e8e8;
+}
+
+/* Keyboard focus - more visible than hover */
+.add-repo-dropdown-item.highlighted {
+  background: #d0e0ff;
+  border-left: 3px solid #646cff;
+}
+
+.add-repo-dropdown-loading,
+.add-repo-dropdown-empty {
+  color: #888;
+  cursor: default;
+}
+
+.add-repo-dropdown-loading:hover,
+.add-repo-dropdown-empty:hover {
+  background: transparent;
+}
+
+.add-repo-private-badge {
+  font-size: 0.85em;
+  opacity: 0.8;
+}
+
+.repo-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.repo-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.75rem 1rem;
+  background: #e8e8e8;
+  border-radius: 8px;
+  margin-bottom: 0.5rem;
+}
+
+.repo-link {
+  font-weight: 500;
+  text-decoration: none;
+}
+
+.repo-link:hover {
+  text-decoration: underline;
+}
+
+.remove-repo-btn {
+  flex-shrink: 0;
+  font-size: 0.85rem;
+  padding: 0.35rem 0.75rem;
+}
+
+.workspace-delete {
+  padding: 0.4em 0.6em;
+  min-width: 2rem;
+  font-size: 1.25em;
+  line-height: 1;
+}
+
+.empty-state {
+  color: #888;
+  font-style: italic;
+  padding: 1rem 0;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    color: #f6f6f6;
+    background-color: #2f2f2f;
+  }
+
+  .subtitle {
+    color: #aaa;
+  }
+
+  .device-flow {
+    background: #1e1e1e;
+    color: #e8e8e8;
+  }
+
+  .device-flow .user-code {
+    color: #ffffff;
+    font-weight: 700;
+  }
+
+  .device-flow .waiting {
+    color: #b0b0b0;
+  }
+
+  .user-card {
+    background: #1e1e1e;
+  }
+
+  .user-card .user-name {
+    color: #f0f0f0;
+  }
+
+  .user-card .user-login {
+    color: #999;
+  }
+
+  a:hover {
+    color: #24c8db;
+  }
+
+  input,
+  button {
+    color: #ffffff;
+    background-color: #0f0f0f98;
+  }
+
+  input::placeholder {
+    color: #9ca3af;
+  }
+
+  .preview-badge {
+    background: rgba(255, 255, 255, 0.12);
+  }
+
+  button:active {
+    background-color: #0f0f0f69;
+  }
+
+  /* Workspace UI dark mode */
+  .app-header {
+    background: transparent;
+    border-bottom-color: rgba(255, 255, 255, 0.12);
+  }
+
+  .header-user .user-login {
+    color: #999;
+  }
+
+  .error-message {
+    background: rgba(248, 113, 113, 0.15);
+    border-color: rgba(248, 113, 113, 0.4);
+  }
+
+  .error-message-text {
+    color: #fca5a5;
+  }
+
+  .workspace-list h2,
+  .workspace-detail-header h1 {
+    color: #f0f0f0;
+  }
+
+  .workspace-item,
+  .repo-item {
+    background: #1e1e1e;
+  }
+
+  .workspace-item:hover {
+    background: #2a2a2a;
+  }
+
+.workspace-name {
+    color: #f0f0f0;
+  }
+
+  .workspace-delete {
+    color: #ff6b6b;
+    padding: 0.4em 0.6em;
+    min-width: 2rem;
+  }
+
+  .workspace-delete:hover {
+    background: rgba(255, 107, 107, 0.15) !important;
+  }
+
+  .add-repo-section h3,
+  .repo-list-section h3 {
+    color: #aaa;
+  }
+
+  .empty,
+  .empty-state {
+    color: #888;
+  }
+}
