@@ -331,12 +331,12 @@ export function WorkspaceDetail({ workspaceId, onSwitchWorkspace, onDeleted }: W
             title="All Workspaces"
           >
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-              <rect width="8" height="4" x="2" y="4" rx="1" />
-              <path d="M10 4h12" />
-              <rect width="8" height="4" x="2" y="12" rx="1" />
-              <path d="M10 12h12" />
-              <rect width="8" height="4" x="2" y="20" rx="1" />
-              <path d="M10 20h12" />
+              <rect width="8" height="4" x="2" y="3" rx="1" />
+              <path d="M10 3h12" />
+              <rect width="8" height="4" x="2" y="11" rx="1" />
+              <path d="M10 11h12" />
+              <rect width="8" height="4" x="2" y="19" rx="1" />
+              <path d="M10 19h12" />
             </svg>
             <span className="workspace-toolbar-label">All Workspaces</span>
           </button>
