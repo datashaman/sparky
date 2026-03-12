@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { getWorkspace, deleteWorkspace } from "../data/workspaces";
+import { getWorkspace, deleteWorkspace, updateWorkspaceName } from "../data/workspaces";
 import {
   getOrCreateRepo,
   listReposForWorkspace,
@@ -14,13 +14,14 @@ interface WorkspaceDetailProps {
   workspaceId: string;
   onSwitchWorkspace: (id: string) => void;
   onDeleted: () => void;
+  onWorkspaceNameChange?: (name: string) => void;
 }
 
 type WorkspacePage = "workspaces" | "dashboard" | "agents" | "skills" | "issues" | "settings";
 
 const TOOLBAR_COMPACT_KEY = "sparky_toolbar_compact";
 
-export function WorkspaceDetail({ workspaceId, onSwitchWorkspace, onDeleted }: WorkspaceDetailProps) {
+export function WorkspaceDetail({ workspaceId, onSwitchWorkspace, onDeleted, onWorkspaceNameChange }: WorkspaceDetailProps) {
   const [page, setPage] = useState<WorkspacePage>("dashboard");
   const [toolbarCompact, setToolbarCompact] = useState(() => {
     try {
@@ -52,6 +53,9 @@ export function WorkspaceDetail({ workspaceId, onSwitchWorkspace, onDeleted }: W
   const [issuesByRepo, setIssuesByRepo] = useState<Array<{ full_name: string; issues: GitHubIssue[] }>>([]);
   const [issuesLoading, setIssuesLoading] = useState(false);
   const [issuesError, setIssuesError] = useState<string | null>(null);
+  const [workspaceNameInput, setWorkspaceNameInput] = useState("");
+  const [savingWorkspace, setSavingWorkspace] = useState(false);
+  const [workspaceSaveError, setWorkspaceSaveError] = useState<string | null>(null);
 
   useEffect(() => {
     load();
@@ -123,11 +127,45 @@ export function WorkspaceDetail({ workspaceId, onSwitchWorkspace, onDeleted }: W
         listReposForWorkspace(workspaceId),
       ]);
       setWorkspace(ws ?? null);
+      setWorkspaceNameInput(ws?.name ?? "");
+      if (ws && onWorkspaceNameChange) {
+        onWorkspaceNameChange(ws.name);
+      }
       setRepos(repoList);
     } finally {
       setLoading(false);
     }
   }
+
+  // Debounce workspace name updates while typing
+  useEffect(() => {
+    if (!workspace) return;
+    const trimmedName = workspaceNameInput.trim();
+    if (!trimmedName || trimmedName === workspace.name) {
+      return;
+    }
+
+    setWorkspaceSaveError(null);
+    const timeoutId = setTimeout(async () => {
+      setSavingWorkspace(true);
+      try {
+        const updated = await updateWorkspaceName(workspace.id, trimmedName);
+        if (updated) {
+          setWorkspace(updated);
+          setWorkspaceNameInput(updated.name);
+          if (onWorkspaceNameChange) {
+            onWorkspaceNameChange(updated.name);
+          }
+        }
+      } catch (err) {
+        setWorkspaceSaveError(String(err));
+      } finally {
+        setSavingWorkspace(false);
+      }
+    }, 500);
+
+    return () => clearTimeout(timeoutId);
+  }, [workspaceNameInput, workspace]);
 
   async function handleAddRepo() {
     const input = addRepoInput.trim();
@@ -528,7 +566,28 @@ export function WorkspaceDetail({ workspaceId, onSwitchWorkspace, onDeleted }: W
               <p className="empty-state">Skills page — coming soon.</p>
             </div>
           ) : page === "settings" ? (
-            <>
+            <div className="workspace-page workspace-page-settings">
+      <section className="workspace-settings-section">
+        <h3>Workspace details</h3>
+        <div className="workspace-settings-form">
+          <div className="form-row">
+            <label htmlFor="workspace-name">Name</label>
+            <input
+              id="workspace-name"
+              type="text"
+              value={workspaceNameInput}
+              onChange={(e) => setWorkspaceNameInput(e.target.value)}
+              placeholder="Workspace name"
+              autoComplete="off"
+            />
+          </div>
+          {workspaceSaveError && <ErrorMessage message={workspaceSaveError} />}
+          {savingWorkspace && !workspaceSaveError && (
+            <p className="workspace-settings-status">Saving…</p>
+          )}
+        </div>
+      </section>
+
       <div className="add-repo-section">
         <h3>Add repo</h3>
         <form
@@ -666,7 +725,7 @@ export function WorkspaceDetail({ workspaceId, onSwitchWorkspace, onDeleted }: W
           </button>
         </div>
       </section>
-          </>
+          </div>
           ) : null}
         </div>
       </div>

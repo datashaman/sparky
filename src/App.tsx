@@ -308,7 +308,9 @@ function App() {
               onDeleted={() => {
                 setView("workspaces");
                 setSelectedWorkspaceId(null);
+                setWorkspaceName(null);
               }}
+              onWorkspaceNameChange={(name) => setWorkspaceName(name)}
             />
           ) : null}
         </div>

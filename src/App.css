@@ -1263,6 +1263,64 @@ button.user-code:focus-visible {
   padding: 0.35rem 0.75rem;
 }
 
+/* Workspace settings layout */
+.workspace-page-settings {
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+  max-width: 640px;
+}
+
+.workspace-settings-section h3 {
+  font-size: 1.05rem;
+  margin: 0 0 0.75rem;
+  color: #444;
+}
+
+.workspace-settings-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+}
+
+.workspace-settings-form .form-row {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.workspace-settings-form label {
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: #555;
+}
+
+.workspace-settings-form input[type="text"] {
+  width: 100%;
+}
+
+.workspace-settings-form .form-row-inline {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.workspace-settings-form .form-field-readonly {
+  flex: 1 1 0;
+  min-width: 220px;
+}
+
+.workspace-settings-form .form-field-readonly input[readonly] {
+  background-color: #f3f4f6;
+  box-shadow: none;
+}
+
+.workspace-settings-status {
+  font-size: 0.8rem;
+  color: #6b7280;
+  margin: 0;
+}
+
 .workspace-delete {
   padding: 0.4em 0.6em;
   min-width: 2rem;

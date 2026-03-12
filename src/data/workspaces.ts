@@ -38,6 +38,16 @@ export async function getWorkspace(id: string): Promise<Workspace | null> {
   return rows[0] ?? null;
 }
 
+export async function updateWorkspaceName(id: string, name: string): Promise<Workspace | null> {
+  if (!isTauri()) {
+    mockWorkspaces = mockWorkspaces.map((w) => (w.id === id ? { ...w, name } : w));
+    return mockWorkspaces.find((w) => w.id === id) ?? null;
+  }
+  const db = await getDb();
+  await db.execute("UPDATE workspaces SET name = $1 WHERE id = $2", [name, id]);
+  return getWorkspace(id);
+}
+
 export async function deleteWorkspace(id: string): Promise<void> {
   if (!isTauri()) {
     mockWorkspaces = mockWorkspaces.filter((w) => w.id !== id);
