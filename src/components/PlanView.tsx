@@ -5,6 +5,7 @@ interface PlanViewProps {
   result: ExecutionPlanResult;
   stepStatuses?: Map<number, StepExecutionStatus>;
   executing?: boolean;
+  executionError?: string | null;
   onExecute?: () => void;
 }
 
@@ -21,7 +22,7 @@ function StepStatusBadge({ status }: { status: StepExecutionStatus }) {
   }
 }
 
-export function PlanView({ result, stepStatuses, executing, onExecute }: PlanViewProps) {
+export function PlanView({ result, stepStatuses, executing, executionError, onExecute }: PlanViewProps) {
   const [expandedSteps, setExpandedSteps] = useState<Set<number>>(new Set());
 
   const toggleExpanded = (order: number) => {
@@ -70,7 +71,7 @@ export function PlanView({ result, stepStatuses, executing, onExecute }: PlanVie
                 </div>
               )}
               {status?.status === "error" && status.error && (
-                <div className="pv-step-error">{status.error}</div>
+                <div className="pv-step-error-text">{status.error}</div>
               )}
               {status?.status === "done" && status.output && (
                 <div className="pv-step-result">
@@ -98,6 +99,9 @@ export function PlanView({ result, stepStatuses, executing, onExecute }: PlanVie
 
       {onExecute && (
         <div className="pv-execute">
+          {executionError && (
+            <div className="pv-execute-error">{executionError}</div>
+          )}
           <button
             type="button"
             className="pv-execute-btn"

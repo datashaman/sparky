@@ -4453,6 +4453,18 @@ button.user-code:focus-visible {
   cursor: default;
 }
 
+.pv-execute-error {
+  width: 100%;
+  font-size: 0.8rem;
+  color: #dc2626;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: 6px;
+  padding: 0.5rem 0.75rem;
+  margin-bottom: 0.5rem;
+  text-align: center;
+}
+
 /* PlanView dark mode */
 @media (prefers-color-scheme: dark) {
   .pv-goal,
@@ -4533,6 +4545,12 @@ button.user-code:focus-visible {
 
   .pv-execute-btn:hover:not(:disabled) {
     background: #6366f1;
+  }
+
+  .pv-execute-error {
+    background: #450a0a;
+    border-color: #7f1d1d;
+    color: #fca5a5;
   }
 }
 
