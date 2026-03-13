@@ -1,5 +1,10 @@
 import type { AgentProvider, LLMToolDef } from "./types";
 
+const OLLAMA_BASE_URL = "http://localhost:11434/v1";
+
+/** Providers that don't require an API key. */
+export const KEYLESS_PROVIDERS = new Set<AgentProvider>(["ollama"]);
+
 export async function callLLM(opts: {
   provider: AgentProvider;
   modelId: string;
@@ -100,7 +105,7 @@ export async function callLLM(opts: {
     }
 
     case "ollama": {
-      const res = await fetch("http://localhost:11434/v1/chat/completions", {
+      const res = await fetch(`${OLLAMA_BASE_URL}/chat/completions`, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
@@ -147,7 +152,7 @@ export async function callLLMWithTools(opts: {
     case "openai":
       return openaiToolLoop({ modelId, apiKey, systemPrompt, userPrompt, tools, maxTurns, onToolCall, baseUrl: "https://api.openai.com/v1" });
     case "ollama":
-      return openaiToolLoop({ modelId, apiKey, systemPrompt, userPrompt, tools, maxTurns, onToolCall, baseUrl: "http://localhost:11434/v1" });
+      return openaiToolLoop({ modelId, apiKey, systemPrompt, userPrompt, tools, maxTurns, onToolCall, baseUrl: OLLAMA_BASE_URL });
     case "gemini":
       return geminiToolLoop({ modelId, apiKey, systemPrompt, userPrompt, tools, maxTurns, onToolCall });
   }
@@ -279,12 +284,13 @@ async function openaiToolLoop(opts: {
 
     if (!res.ok) {
       const body = await res.text();
-      throw new Error(`OpenAI API ${res.status}: ${body}`);
+      const label = baseUrl.includes("openai.com") ? "OpenAI" : baseUrl.includes("localhost") ? "Ollama" : "API";
+      throw new Error(`${label} API ${res.status}: ${body}`);
     }
 
     const data = await res.json();
     const choice = data.choices?.[0];
-    if (!choice) throw new Error("No choices in OpenAI response");
+    if (!choice) throw new Error(`No choices in ${baseUrl.includes("openai.com") ? "OpenAI" : baseUrl.includes("localhost") ? "Ollama" : "API"} response`);
 
     const msg = choice.message;
     messages.push(msg);

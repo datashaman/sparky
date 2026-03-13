@@ -24,7 +24,7 @@ const PROVIDER_COLORS: Record<AgentProvider, string> = {
   openai: "#10a37f",
   anthropic: "#d4a27f",
   gemini: "#4285f4",
-  ollama: "#ffffff",
+  ollama: "#1d1d1d",
 };
 
 export function SkillDetail({ skillId, onBack, onDeleted }: SkillDetailProps) {
@@ -230,24 +230,33 @@ export function SkillDetail({ skillId, onBack, onDeleted }: SkillDetailProps) {
 
         <div className="detail-field">
           <Label>Model</Label>
-          <Select
-            value={formModel}
-            onValueChange={setFormModel}
-            disabled={saving || !formProvider}
-          >
-            <SelectTrigger>
-              <SelectValue
-                placeholder={formProvider ? "Select model" : "Pick provider first"}
-              />
-            </SelectTrigger>
-            <SelectContent>
-              {models.map((m) => (
-                <SelectItem key={m} value={m}>
-                  {m}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          {formProvider && models.length === 0 ? (
+            <Input
+              placeholder="e.g. qwen2.5:3b"
+              value={formModel}
+              onChange={(e) => setFormModel(e.target.value)}
+              disabled={saving}
+            />
+          ) : (
+            <Select
+              value={formModel}
+              onValueChange={setFormModel}
+              disabled={saving || !formProvider}
+            >
+              <SelectTrigger>
+                <SelectValue
+                  placeholder={formProvider ? "Select model" : "Pick provider first"}
+                />
+              </SelectTrigger>
+              <SelectContent>
+                {models.map((m) => (
+                  <SelectItem key={m} value={m}>
+                    {m}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
         </div>
 
         {error && <p className="skills-drawer-error">{error}</p>}

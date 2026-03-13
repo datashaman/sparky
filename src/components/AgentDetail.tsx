@@ -311,20 +311,29 @@ export function AgentDetail({ agentId, workspaceId, onBack, onDeleted }: AgentDe
             </div>
             <div className="flex flex-col gap-1.5 flex-1 min-w-0">
               <Label>Model</Label>
-              <Select
-                value={formModel}
-                onValueChange={setFormModel}
-                disabled={saving}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {models.map((m) => (
-                    <SelectItem key={m} value={m}>{m}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              {models.length === 0 ? (
+                <Input
+                  placeholder="e.g. qwen2.5:3b"
+                  value={formModel}
+                  onChange={(e) => setFormModel(e.target.value)}
+                  disabled={saving}
+                />
+              ) : (
+                <Select
+                  value={formModel}
+                  onValueChange={setFormModel}
+                  disabled={saving}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {models.map((m) => (
+                      <SelectItem key={m} value={m}>{m}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
             </div>
           </div>
         </div>

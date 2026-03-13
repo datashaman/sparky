@@ -31,7 +31,7 @@ const PROVIDER_COLORS: Record<AgentProvider, string> = {
   openai: "#10a37f",
   anthropic: "#d4a27f",
   gemini: "#4285f4",
-  ollama: "#ffffff",
+  ollama: "#1d1d1d",
 };
 
 export function AgentsList({ workspaceId, onSelectAgent }: Props) {
@@ -279,20 +279,29 @@ export function AgentsList({ workspaceId, onSelectAgent }: Props) {
                 </div>
                 <div className="flex flex-col gap-1.5 flex-1 min-w-0">
                   <Label>Model</Label>
-                  <Select
-                    value={formModel}
-                    onValueChange={setFormModel}
-                    disabled={creating}
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {models.map((m) => (
-                        <SelectItem key={m} value={m}>{m}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  {models.length === 0 ? (
+                    <Input
+                      placeholder="e.g. qwen2.5:3b"
+                      value={formModel}
+                      onChange={(e) => setFormModel(e.target.value)}
+                      disabled={creating}
+                    />
+                  ) : (
+                    <Select
+                      value={formModel}
+                      onValueChange={setFormModel}
+                      disabled={creating}
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {models.map((m) => (
+                          <SelectItem key={m} value={m}>{m}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
                 </div>
               </div>
               <div className="flex gap-3">

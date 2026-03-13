@@ -4,7 +4,7 @@ import type { IssueAnalysis, Skill, Agent } from "./types";
 import type { GitHubIssue } from "../github";
 import { listSkillsForWorkspace } from "./skills";
 import { listAgentsForWorkspace } from "./agents";
-import { callLLM } from "./llm";
+import { callLLM, KEYLESS_PROVIDERS } from "./llm";
 import { TOOLS } from "./tools";
 
 const SYSTEM_PROMPT = `You are a senior software engineer analysing a GitHub issue. Provide a concise, structured analysis. Be direct and practical. No filler.
@@ -149,7 +149,7 @@ export async function runAnalysis(
   }
 
   const apiKey = getApiKey(provider);
-  if (!apiKey) {
+  if (!apiKey && !KEYLESS_PROVIDERS.has(provider)) {
     const msg = `No API key configured for ${provider}. Add one in Settings.`;
     console.warn("[analyse] abort:", msg);
     await updateAnalysis(analysis.id, { status: "error", error: msg });

@@ -2,7 +2,7 @@ import { getDefaultProvider, getDefaultModel, getApiKey } from "../components/Us
 import { getDb } from "../db";
 import type { ExecutionPlan, ExecutionPlanResult, AnalysisResult, Agent, Skill } from "./types";
 import type { GitHubIssue } from "../github";
-import { callLLM } from "./llm";
+import { callLLM, KEYLESS_PROVIDERS } from "./llm";
 import { TOOLS } from "./tools";
 import { reviewPlan, refinePlan } from "./criticPlan";
 
@@ -142,7 +142,7 @@ export async function runPlanGeneration(
   }
 
   const apiKey = getApiKey(provider);
-  if (!apiKey) {
+  if (!apiKey && !KEYLESS_PROVIDERS.has(provider)) {
     const msg = `No API key configured for ${provider}. Add one in Settings.`;
     console.warn("[plan] abort:", msg);
     await updatePlan(plan.id, { status: "error", error: msg });
