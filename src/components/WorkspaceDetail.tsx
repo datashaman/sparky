@@ -681,174 +681,179 @@ export function WorkspaceDetail({ workspaceId, onSwitchWorkspace, onDeleted, onW
             </div>
           ) : page === "settings" ? (
             <div className="workspace-page workspace-page-settings">
-      <section className="workspace-settings-section">
-        <h3>Workspace details</h3>
-        <div className="workspace-settings-form">
-          <div className="form-row">
-            <label htmlFor="workspace-name">Name</label>
+      <section className="settings-card">
+        <h3 className="settings-card-title">General</h3>
+        <div className="settings-card-body">
+          <div className="settings-field">
+            <label htmlFor="workspace-name" className="settings-label">Name</label>
             <input
               id="workspace-name"
               type="text"
+              className="settings-input"
               value={workspaceNameInput}
               onChange={(e) => setWorkspaceNameInput(e.target.value)}
               placeholder="Workspace name"
               autoComplete="off"
             />
+            {savingWorkspace && !workspaceSaveError && (
+              <span className="settings-saving">Saving…</span>
+            )}
           </div>
           {workspaceSaveError && <ErrorMessage message={workspaceSaveError} />}
-          {savingWorkspace && !workspaceSaveError && (
-            <p className="workspace-settings-status">Saving…</p>
+        </div>
+      </section>
+
+      <section className="settings-card">
+        <h3 className="settings-card-title">Repos</h3>
+        <div className="settings-card-body">
+          <form
+            className="add-repo-autocomplete"
+            autoComplete="off"
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (autocompleteOpen && suggestions.length > 0 && highlightedIndex < suggestions.length) {
+                handleAddRepoFromSelection(suggestions[highlightedIndex]);
+              } else {
+                handleAddRepo();
+              }
+            }}
+          >
+            <div className="settings-add-repo-row">
+              <input
+                ref={inputRef}
+                type="text"
+                className="settings-input"
+                value={addRepoInput}
+                onChange={(e) => {
+                  setAddRepoInput(e.target.value);
+                  setAutocompleteOpen(true);
+                  setHighlightedIndex(0);
+                }}
+                onFocus={() => loadUserRepos()}
+                onKeyDown={handleKeyDown}
+                onBlur={() => setTimeout(() => setAutocompleteOpen(false), 150)}
+                disabled={adding}
+                placeholder="Search or type owner/repo…"
+                autoComplete="off"
+                autoCorrect="off"
+                autoCapitalize="off"
+                spellCheck={false}
+                role="combobox"
+                aria-autocomplete="list"
+                aria-expanded={autocompleteOpen}
+                aria-controls="add-repo-listbox"
+                aria-activedescendant={
+                  suggestions.length > 0 && highlightedIndex < suggestions.length
+                    ? `add-repo-option-${suggestions[highlightedIndex].id}`
+                    : undefined
+                }
+                id="add-repo-input"
+              />
+              <button type="button" className="settings-add-btn" onClick={(e) => { e.preventDefault(); handleAddRepo(); }} disabled={adding}>
+                {adding ? "Adding…" : "Add"}
+              </button>
+            </div>
+            {autocompleteOpen && (
+              <div
+                ref={dropdownRef}
+                className="add-repo-dropdown"
+                role="listbox"
+                id="add-repo-listbox"
+                aria-labelledby="add-repo-input"
+              >
+                {loadingRepos ? (
+                  <div className="add-repo-dropdown-item add-repo-dropdown-loading">
+                    Loading your repos…
+                  </div>
+                ) : suggestions.length === 0 ? (
+                  <div className="add-repo-dropdown-item add-repo-dropdown-empty">
+                    {userRepos?.length === 0
+                      ? "No repos found"
+                      : query
+                        ? "No matching repos"
+                        : "Type to search your repos"}
+                  </div>
+                ) : (
+                  suggestions.map((gh, i) => (
+                    <div
+                      key={gh.id}
+                      id={`add-repo-option-${gh.id}`}
+                      role="option"
+                      aria-selected={i === highlightedIndex}
+                      className={`add-repo-dropdown-item ${i === highlightedIndex ? "highlighted" : ""}`}
+                      onMouseDown={(e) => {
+                        e.preventDefault();
+                        handleAddRepoFromSelection(gh);
+                      }}
+                    >
+                      {gh.full_name}
+                      {gh.private && (
+                        <span className="add-repo-private-badge" title="Private">🔒</span>
+                      )}
+                    </div>
+                  ))
+                )}
+              </div>
+            )}
+            {addError && <ErrorMessage message={addError} />}
+          </form>
+
+          {repos.length === 0 ? (
+            <p className="empty-state">No repos yet.</p>
+          ) : (
+            <ul className="settings-repo-list">
+              {repos.map((repo) => (
+                <li key={repo.id} className="settings-repo-item">
+                  <a
+                    href={repo.url ?? `https://github.com/${repo.full_name}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="settings-repo-name"
+                  >
+                    {repo.full_name}
+                  </a>
+                  <button
+                    onClick={() => handleRemoveRepo(repo.id)}
+                    className="settings-repo-remove"
+                    title="Remove from workspace"
+                  >
+                    ×
+                  </button>
+                </li>
+              ))}
+            </ul>
           )}
         </div>
       </section>
 
-      <div className="add-repo-section">
-        <h3>Add repo</h3>
-        <form
-          className="add-repo-autocomplete"
-          autoComplete="off"
-          onSubmit={(e) => {
-            e.preventDefault();
-            if (autocompleteOpen && suggestions.length > 0 && highlightedIndex < suggestions.length) {
-              handleAddRepoFromSelection(suggestions[highlightedIndex]);
-            } else {
-              handleAddRepo();
-            }
-          }}
-        >
-          <div className="add-repo-row">
-            <input
-              ref={inputRef}
-              type="text"
-              value={addRepoInput}
-              onChange={(e) => {
-                setAddRepoInput(e.target.value);
-                setAutocompleteOpen(true);
-                setHighlightedIndex(0);
-              }}
-              onFocus={() => loadUserRepos()}
-              onKeyDown={handleKeyDown}
-              onBlur={() => setTimeout(() => setAutocompleteOpen(false), 150)}
-              disabled={adding}
-              placeholder="Search or type owner/repo…"
-              autoComplete="off"
-              autoCorrect="off"
-              autoCapitalize="off"
-              spellCheck={false}
-              role="combobox"
-              aria-autocomplete="list"
-              aria-expanded={autocompleteOpen}
-              aria-controls="add-repo-listbox"
-              aria-activedescendant={
-                suggestions.length > 0 && highlightedIndex < suggestions.length
-                  ? `add-repo-option-${suggestions[highlightedIndex].id}`
-                  : undefined
-              }
-              className="add-repo-input"
-              id="add-repo-input"
-            />
-            <button type="button" onClick={(e) => { e.preventDefault(); handleAddRepo(); }} disabled={adding}>
-              {adding ? "Adding…" : "Add"}
-            </button>
-          </div>
-          {autocompleteOpen && (
-            <div
-              ref={dropdownRef}
-              className="add-repo-dropdown"
-              role="listbox"
-              id="add-repo-listbox"
-              aria-labelledby="add-repo-input"
-            >
-              {loadingRepos ? (
-                <div className="add-repo-dropdown-item add-repo-dropdown-loading">
-                  Loading your repos…
-                </div>
-              ) : suggestions.length === 0 ? (
-                <div className="add-repo-dropdown-item add-repo-dropdown-empty">
-                  {userRepos?.length === 0
-                    ? "No repos found"
-                    : query
-                      ? "No matching repos"
-                      : "Type to search your repos"}
-                </div>
-              ) : (
-                suggestions.map((gh, i) => (
-                  <div
-                    key={gh.id}
-                    id={`add-repo-option-${gh.id}`}
-                    role="option"
-                    aria-selected={i === highlightedIndex}
-                    className={`add-repo-dropdown-item ${i === highlightedIndex ? "highlighted" : ""}`}
-                    onMouseDown={(e) => {
-                      e.preventDefault();
-                      handleAddRepoFromSelection(gh);
-                    }}
-                  >
-                    {gh.full_name}
-                    {gh.private && (
-                      <span className="add-repo-private-badge" title="Private">🔒</span>
-                    )}
-                  </div>
-                ))
+      <section className={`settings-card settings-card-danger ${confirmingDelete ? "settings-card-danger-confirming" : ""}`}>
+        <h3 className="settings-card-title">Danger zone</h3>
+        <div className="settings-card-body">
+          <div className="settings-danger-row">
+            <p className="settings-danger-desc">
+              {confirmingDelete
+                ? `Really delete "${workspace.name}"? This cannot be undone.`
+                : "Permanently delete this workspace and all associated data."}
+            </p>
+            <div className="settings-danger-actions">
+              <button
+                type="button"
+                onClick={handleDeleteWorkspace}
+                className="settings-danger-btn"
+              >
+                {confirmingDelete ? "Confirm delete" : "Delete workspace"}
+              </button>
+              {confirmingDelete && (
+                <button
+                  type="button"
+                  className="settings-danger-cancel"
+                  onClick={() => setConfirmingDelete(false)}
+                >
+                  Cancel
+                </button>
               )}
             </div>
-          )}
-          {addError && <ErrorMessage message={addError} />}
-        </form>
-      </div>
-
-      <div className="repo-list-section">
-        <h3>Repos ({repos.length})</h3>
-        {repos.length === 0 ? (
-          <p className="empty-state">No repos yet. Add one above.</p>
-        ) : (
-          <ul className="repo-list">
-            {repos.map((repo) => (
-              <li key={repo.id} className="repo-item">
-                <a
-                  href={repo.url ?? `https://github.com/${repo.full_name}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="repo-link"
-                >
-                  {repo.full_name}
-                </a>
-                <button
-                  onClick={() => handleRemoveRepo(repo.id)}
-                  className="remove-repo-btn"
-                  title="Remove from workspace"
-                >
-                  Remove
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
-
-      <section className={`settings-danger-zone ${confirmingDelete ? "settings-danger-zone-confirming" : ""}`}>
-        <h3>Danger Zone</h3>
-        <div className="danger-zone-content">
-          <p className="danger-zone-desc">
-            {confirmingDelete
-              ? `Really delete workspace "${workspace.name}"? This cannot be undone.`
-              : "Permanently delete this workspace and remove all associated data. This action cannot be undone."}
-          </p>
-          <button
-            type="button"
-            onClick={handleDeleteWorkspace}
-            className="delete-workspace-btn"
-          >
-            {confirmingDelete ? "Confirm delete" : "Delete workspace"}
-          </button>
-          {confirmingDelete && (
-            <button
-              type="button"
-              onClick={() => setConfirmingDelete(false)}
-            >
-              Cancel
-            </button>
-          )}
+          </div>
         </div>
       </section>
           </div>
