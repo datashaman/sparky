@@ -177,23 +177,44 @@ pub async fn git_create_worktree(
             std::fs::create_dir_all(parent).map_err(|e| format!("mkdir failed: {}", e))?;
         }
 
-        // Resolve base branch: caller-provided, or detect from repo
-        let base = match base_branch {
-            Some(b) => b,
-            None => resolve_default_branch(&clone_path)?,
-        };
+        // Check if the branch already exists
+        let branch_exists = Command::new("git")
+            .args(["rev-parse", "--verify", &branch_name])
+            .current_dir(&clone_path)
+            .output()
+            .map(|o| o.status.success())
+            .unwrap_or(false);
 
-        run_git(
-            &[
-                "worktree",
-                "add",
-                "-b",
-                &branch_name,
-                &wt_path.to_string_lossy(),
-                &base,
-            ],
-            &clone_path,
-        )?;
+        if branch_exists {
+            // Branch exists (e.g. from a previous worktree), reuse it
+            run_git(
+                &[
+                    "worktree",
+                    "add",
+                    &wt_path.to_string_lossy(),
+                    &branch_name,
+                ],
+                &clone_path,
+            )?;
+        } else {
+            // Resolve base branch: caller-provided, or detect from repo
+            let base = match base_branch {
+                Some(b) => b,
+                None => resolve_default_branch(&clone_path)?,
+            };
+
+            run_git(
+                &[
+                    "worktree",
+                    "add",
+                    "-b",
+                    &branch_name,
+                    &wt_path.to_string_lossy(),
+                    &base,
+                ],
+                &clone_path,
+            )?;
+        }
 
         Ok(GitWorktreeResult {
             path: wt_path.to_string_lossy().to_string(),

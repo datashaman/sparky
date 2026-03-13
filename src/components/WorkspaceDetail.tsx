@@ -99,6 +99,7 @@ export function WorkspaceDetail({ workspaceId, onSwitchWorkspace, onDeleted, onW
   const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
   const [executing, setExecuting] = useState(false);
   const [stepStatuses, setStepStatuses] = useState<Map<number, StepExecutionStatus>>(new Map());
+  const [executionError, setExecutionError] = useState<string | null>(null);
 
   useEffect(() => {
     load();
@@ -829,10 +830,12 @@ export function WorkspaceDetail({ workspaceId, onSwitchWorkspace, onDeleted, onW
                           result={parsed}
                           stepStatuses={stepStatuses}
                           executing={executing}
+                          executionError={executionError}
                           onExecute={() => {
                             if (executing || !selectedIssue) return;
                             setExecuting(true);
                             setStepStatuses(new Map());
+                            setExecutionError(null);
                             executePlan({
                               planResult: parsed,
                               workspaceId,
@@ -846,7 +849,11 @@ export function WorkspaceDetail({ workspaceId, onSwitchWorkspace, onDeleted, onW
                               },
                               onWorktreeUpdate: setWorktree,
                             })
-                              .catch((e) => console.error("[execute] failed:", e))
+                              .catch((e) => {
+                                const msg = e instanceof Error ? e.message : String(e);
+                                console.error("[execute] failed:", msg);
+                                setExecutionError(msg);
+                              })
                               .finally(() => setExecuting(false));
                           }}
                         />
