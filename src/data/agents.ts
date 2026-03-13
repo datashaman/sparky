@@ -10,6 +10,16 @@ export function validateAgentSlug(name: string): boolean {
 
 export const AGENT_PROVIDERS: AgentProvider[] = ["openai", "anthropic", "gemini"];
 
+/** Extract the first non-empty paragraph from markdown content. */
+function firstParagraph(content: string | null | undefined): string | null {
+  if (!content) return null;
+  const para = content
+    .split(/\n\s*\n/)
+    .map((p) => p.replace(/^#+\s+/gm, "").trim())
+    .find((p) => p.length > 0);
+  return para || null;
+}
+
 export const AGENT_MODELS: Record<AgentProvider, string[]> = {
   openai: ["gpt-5.4", "gpt-5.2", "gpt-5-mini", "o4-mini", "o3", "o3-mini", "gpt-4.1", "gpt-4.1-mini", "gpt-4o", "gpt-4o-mini"],
   anthropic: ["claude-opus-4-6", "claude-sonnet-4-6", "claude-opus-4-5", "claude-sonnet-4-5", "claude-haiku-4-5"],
@@ -22,7 +32,7 @@ export async function listAgentsForWorkspace(workspaceId: string): Promise<Agent
   if (!isTauri()) return mockAgents.filter((a) => a.workspace_id === workspaceId);
   const db = await getDb();
   const rows = await db.select<(Omit<Agent, "background"> & { background: number })[]>(
-    `SELECT id, workspace_id, name, description, provider, model, max_turns, background, created_at 
+    `SELECT id, workspace_id, name, description, content, provider, model, max_turns, background, created_at 
      FROM agents WHERE workspace_id = $1 ORDER BY created_at DESC`,
     [workspaceId]
   );
@@ -33,6 +43,7 @@ export interface CreateAgentParams {
   workspaceId: string;
   name: string;
   description: string;
+  content?: string | null;
   provider: AgentProvider;
   model: string;
   max_turns?: number | null;
@@ -40,7 +51,8 @@ export interface CreateAgentParams {
 }
 
 export async function createAgent(params: CreateAgentParams): Promise<Agent> {
-  const { workspaceId, name, description, provider, model, max_turns = null, background = false } = params;
+  const { workspaceId, name, content = null, provider, model, max_turns = null, background = false } = params;
+  const description = params.description?.trim() || firstParagraph(content) || name;
   const id = crypto.randomUUID();
   const created_at = new Date().toISOString();
   const agent: Agent = {
@@ -48,6 +60,7 @@ export async function createAgent(params: CreateAgentParams): Promise<Agent> {
     workspace_id: workspaceId,
     name,
     description,
+    content,
     provider,
     model,
     max_turns,
@@ -62,9 +75,9 @@ export async function createAgent(params: CreateAgentParams): Promise<Agent> {
 
   const db = await getDb();
   await db.execute(
-    `INSERT INTO agents (id, workspace_id, name, description, provider, model, max_turns, background, created_at) 
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
-    [id, workspaceId, name, description, provider, model, max_turns ?? null, background ? 1 : 0, created_at]
+    `INSERT INTO agents (id, workspace_id, name, description, content, provider, model, max_turns, background, created_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+    [id, workspaceId, name, description, content, provider, model, max_turns ?? null, background ? 1 : 0, created_at]
   );
   return agent;
 }
@@ -73,7 +86,7 @@ export async function getAgent(id: string): Promise<Agent | null> {
   if (!isTauri()) return mockAgents.find((a) => a.id === id) ?? null;
   const db = await getDb();
   const rows = await db.select<(Omit<Agent, "background"> & { background: number })[]>(
-    "SELECT id, workspace_id, name, description, provider, model, max_turns, background, created_at FROM agents WHERE id = $1",
+    "SELECT id, workspace_id, name, description, content, provider, model, max_turns, background, created_at FROM agents WHERE id = $1",
     [id]
   );
   const r = rows[0];
@@ -82,9 +95,14 @@ export async function getAgent(id: string): Promise<Agent | null> {
 }
 
 export async function updateAgent(id: string, updates: Partial<CreateAgentParams>): Promise<Agent | null> {
+  const resolvedUpdates = { ...updates };
+  if (!resolvedUpdates.description?.trim() && resolvedUpdates.content) {
+    resolvedUpdates.description = firstParagraph(resolvedUpdates.content) || undefined;
+  }
+
   if (!isTauri()) {
     mockAgents = mockAgents.map((a) =>
-      a.id === id ? { ...a, ...updates } : a
+      a.id === id ? { ...a, ...resolvedUpdates } : a
     );
     return mockAgents.find((a) => a.id === id) ?? null;
   }
@@ -92,29 +110,33 @@ export async function updateAgent(id: string, updates: Partial<CreateAgentParams
   const sets: string[] = [];
   const values: unknown[] = [];
   let i = 1;
-  if (updates.name !== undefined) {
+  if (resolvedUpdates.name !== undefined) {
     sets.push(`name = $${i++}`);
-    values.push(updates.name);
+    values.push(resolvedUpdates.name);
   }
-  if (updates.description !== undefined) {
+  if (resolvedUpdates.description !== undefined) {
     sets.push(`description = $${i++}`);
-    values.push(updates.description);
+    values.push(resolvedUpdates.description);
   }
-  if (updates.provider !== undefined) {
+  if (resolvedUpdates.content !== undefined) {
+    sets.push(`content = $${i++}`);
+    values.push(resolvedUpdates.content);
+  }
+  if (resolvedUpdates.provider !== undefined) {
     sets.push(`provider = $${i++}`);
-    values.push(updates.provider);
+    values.push(resolvedUpdates.provider);
   }
-  if (updates.model !== undefined) {
+  if (resolvedUpdates.model !== undefined) {
     sets.push(`model = $${i++}`);
-    values.push(updates.model);
+    values.push(resolvedUpdates.model);
   }
-  if (updates.max_turns !== undefined) {
+  if (resolvedUpdates.max_turns !== undefined) {
     sets.push(`max_turns = $${i++}`);
-    values.push(updates.max_turns);
+    values.push(resolvedUpdates.max_turns);
   }
-  if (updates.background !== undefined) {
+  if (resolvedUpdates.background !== undefined) {
     sets.push(`background = $${i++}`);
-    values.push(updates.background ? 1 : 0);
+    values.push(resolvedUpdates.background ? 1 : 0);
   }
   if (sets.length === 0) return getAgent(id);
   values.push(id);
@@ -125,8 +147,41 @@ export async function updateAgent(id: string, updates: Partial<CreateAgentParams
 export async function deleteAgent(id: string): Promise<void> {
   if (!isTauri()) {
     mockAgents = mockAgents.filter((a) => a.id !== id);
+    mockAgentSkills = mockAgentSkills.filter((r) => r.agent_id !== id);
     return;
   }
   const db = await getDb();
   await db.execute("DELETE FROM agents WHERE id = $1", [id]);
+}
+
+// ─── Agent–Skill associations ───
+
+let mockAgentSkills: { agent_id: string; skill_id: string }[] = [];
+
+export async function getSkillIdsForAgent(agentId: string): Promise<string[]> {
+  if (!isTauri()) return mockAgentSkills.filter((r) => r.agent_id === agentId).map((r) => r.skill_id);
+  const db = await getDb();
+  const rows = await db.select<{ skill_id: string }[]>(
+    "SELECT skill_id FROM agent_skills WHERE agent_id = $1",
+    [agentId]
+  );
+  return rows.map((r) => r.skill_id);
+}
+
+export async function setSkillIdsForAgent(agentId: string, skillIds: string[]): Promise<void> {
+  if (!isTauri()) {
+    mockAgentSkills = mockAgentSkills.filter((r) => r.agent_id !== agentId);
+    for (const skillId of skillIds) {
+      mockAgentSkills.push({ agent_id: agentId, skill_id: skillId });
+    }
+    return;
+  }
+  const db = await getDb();
+  await db.execute("DELETE FROM agent_skills WHERE agent_id = $1", [agentId]);
+  for (const skillId of skillIds) {
+    await db.execute(
+      "INSERT INTO agent_skills (agent_id, skill_id) VALUES ($1, $2)",
+      [agentId, skillId]
+    );
+  }
 }

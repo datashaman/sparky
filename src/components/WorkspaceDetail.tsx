@@ -8,7 +8,13 @@ import { addRepoToWorkspace, removeRepoFromWorkspace } from "../data/workspaceRe
 import { fetchRepo, listUserRepos, listRepoOpenIssues, type GitHubRepo, type GitHubIssue } from "../github";
 import { listAgentsForWorkspace } from "../data/agents";
 import { listSkillsForWorkspace } from "../data/skills";
+import { getAnalysisForIssue, createAnalysis } from "../data/issueAnalyses";
+import { runAnalysis } from "../data/analyseIssue";
+import type { IssueAnalysis, AnalysisResult } from "../data/types";
 import { marked } from "marked";
+import { AnalysisView } from "./AnalysisView";
+import { SkillDetail } from "./SkillDetail";
+import { AgentDetail } from "./AgentDetail";
 
 marked.setOptions({ gfm: true, breaks: true });
 import { WorkspaceList } from "./WorkspaceList";
@@ -77,10 +83,31 @@ export function WorkspaceDetail({ workspaceId, onSwitchWorkspace, onDeleted, onW
   const [savingWorkspace, setSavingWorkspace] = useState(false);
   const [workspaceSaveError, setWorkspaceSaveError] = useState<string | null>(null);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [analysis, setAnalysis] = useState<IssueAnalysis | null>(null);
+  const [analysisLoading, setAnalysisLoading] = useState(false);
+  const [issueTab, setIssueTab] = useState<"issue" | "analysis">("issue");
+  const [selectedSkillId, setSelectedSkillId] = useState<string | null>(null);
+  const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
 
   useEffect(() => {
     load();
   }, [workspaceId]);
+
+  // Load existing analysis when an issue is selected
+  useEffect(() => {
+    if (!selectedIssue) {
+      setAnalysis(null);
+      setIssueTab("issue");
+      return;
+    }
+    let cancelled = false;
+    setAnalysisLoading(true);
+    getAnalysisForIssue(workspaceId, selectedIssue.full_name, selectedIssue.number)
+      .then((a) => { if (!cancelled) setAnalysis(a); })
+      .catch(() => { if (!cancelled) setAnalysis(null); })
+      .finally(() => { if (!cancelled) setAnalysisLoading(false); });
+    return () => { cancelled = true; };
+  }, [selectedIssue, workspaceId]);
 
   const query = addRepoInput.trim().toLowerCase();
   const workspaceFullNames = new Set(repos.map((r) => r.full_name));
@@ -441,7 +468,7 @@ export function WorkspaceDetail({ workspaceId, onSwitchWorkspace, onDeleted, onW
           <button
             type="button"
             className={`workspace-toolbar-btn ${page === "agents" && !selectedIssue ? "active" : ""}`}
-            onClick={() => { setSelectedIssue(null); setPage("agents"); }}
+            onClick={() => { setSelectedIssue(null); setSelectedAgentId(null); setPage("agents"); }}
             title="Agents"
           >
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
@@ -457,7 +484,7 @@ export function WorkspaceDetail({ workspaceId, onSwitchWorkspace, onDeleted, onW
           <button
             type="button"
             className={`workspace-toolbar-btn ${page === "skills" && !selectedIssue ? "active" : ""}`}
-            onClick={() => { setSelectedIssue(null); setPage("skills"); }}
+            onClick={() => { setSelectedIssue(null); setSelectedSkillId(null); setPage("skills"); }}
             title="Skills"
           >
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
@@ -581,13 +608,92 @@ export function WorkspaceDetail({ workspaceId, onSwitchWorkspace, onDeleted, onW
                   </div>
                 )}
               </div>
-              {selectedIssue.body ? (
-                <div
-                  className="issue-detail-body markdown-body"
-                  dangerouslySetInnerHTML={{ __html: marked.parse(selectedIssue.body, { async: false }) as string }}
-                />
+              <div className="issue-tabs">
+                <button
+                  type="button"
+                  className={`issue-tab ${issueTab === "issue" ? "issue-tab-active" : ""}`}
+                  onClick={() => setIssueTab("issue")}
+                >
+                  Issue
+                </button>
+                <button
+                  type="button"
+                  className={`issue-tab ${issueTab === "analysis" ? "issue-tab-active" : ""}`}
+                  onClick={() => {
+                    setIssueTab("analysis");
+                    if (!analysis && !analysisLoading) {
+                      createAnalysis(workspaceId, selectedIssue.full_name, selectedIssue.number).then((a) => {
+                        setAnalysis(a);
+                        runAnalysis(a, selectedIssue, setAnalysis);
+                      });
+                    }
+                  }}
+                >
+                  Analysis
+                  {analysis && (
+                    <span className={`issue-tab-dot issue-tab-dot-${analysis.status}`} />
+                  )}
+                </button>
+                {analysis?.status === "done" && (
+                  <button
+                    type="button"
+                    className="analyse-btn analyse-btn-inline"
+                    onClick={async () => {
+                      const a = await createAnalysis(workspaceId, selectedIssue.full_name, selectedIssue.number);
+                      setAnalysis(a);
+                      setIssueTab("analysis");
+                      runAnalysis(a, selectedIssue, setAnalysis);
+                    }}
+                  >
+                    Re-analyse
+                  </button>
+                )}
+              </div>
+              {issueTab === "issue" ? (
+                selectedIssue.body ? (
+                  <div
+                    className="issue-detail-body markdown-body"
+                    dangerouslySetInnerHTML={{ __html: marked.parse(selectedIssue.body, { async: false }) as string }}
+                  />
+                ) : (
+                  <p className="empty-state">No description.</p>
+                )
               ) : (
-                <p className="empty-state">No description.</p>
+                <div className="issue-analysis-tab">
+                  {analysis?.status === "running" && (
+                    <p className="analysis-running">Analysing...</p>
+                  )}
+                  {analysis?.status === "done" && analysis.result && (() => {
+                    try {
+                      const parsed: AnalysisResult = JSON.parse(analysis.result);
+                      return <AnalysisView result={parsed} workspaceId={workspaceId} />;
+                    } catch {
+                      // Legacy markdown result — fall back to raw rendering
+                      return (
+                        <div
+                          className="analysis-result markdown-body"
+                          dangerouslySetInnerHTML={{ __html: marked.parse(analysis.result, { async: false }) as string }}
+                        />
+                      );
+                    }
+                  })()}
+                  {analysis?.status === "error" && (
+                    <div className="analysis-error">
+                      <p>{analysis.error}</p>
+                      <button
+                        type="button"
+                        className="analyse-btn"
+                        onClick={async () => {
+                          const a = await createAnalysis(workspaceId, selectedIssue.full_name, selectedIssue.number);
+                          setAnalysis(a);
+                          runAnalysis(a, selectedIssue, setAnalysis);
+                        }}
+                      >
+                        Retry
+                      </button>
+                    </div>
+                  )}
+                </div>
               )}
             </div>
           ) : page === "workspaces" ? (
@@ -673,11 +779,28 @@ export function WorkspaceDetail({ workspaceId, onSwitchWorkspace, onDeleted, onW
             </div>
           ) : page === "agents" ? (
             <div className="workspace-page workspace-page-agents">
-              <AgentsList workspaceId={workspaceId} />
+              {selectedAgentId ? (
+                <AgentDetail
+                  agentId={selectedAgentId}
+                  workspaceId={workspaceId}
+                  onBack={() => setSelectedAgentId(null)}
+                  onDeleted={() => { setSelectedAgentId(null); load(); }}
+                />
+              ) : (
+                <AgentsList workspaceId={workspaceId} onSelectAgent={setSelectedAgentId} />
+              )}
             </div>
           ) : page === "skills" ? (
             <div className="workspace-page workspace-page-skills">
-              <SkillsList workspaceId={workspaceId} />
+              {selectedSkillId ? (
+                <SkillDetail
+                  skillId={selectedSkillId}
+                  onBack={() => setSelectedSkillId(null)}
+                  onDeleted={() => { setSelectedSkillId(null); load(); }}
+                />
+              ) : (
+                <SkillsList workspaceId={workspaceId} onSelectSkill={setSelectedSkillId} />
+              )}
             </div>
           ) : page === "settings" ? (
             <div className="workspace-page workspace-page-settings">

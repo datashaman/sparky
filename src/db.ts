@@ -56,6 +56,41 @@ CREATE TABLE IF NOT EXISTS skills (
 );
 
 CREATE INDEX IF NOT EXISTS idx_skills_workspace ON skills(workspace_id);
+
+CREATE TABLE IF NOT EXISTS issue_analyses (
+  id TEXT PRIMARY KEY,
+  workspace_id TEXT NOT NULL,
+  repo_full_name TEXT NOT NULL,
+  issue_number INTEGER NOT NULL,
+  status TEXT NOT NULL DEFAULT 'pending',
+  result TEXT,
+  error TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  FOREIGN KEY (workspace_id) REFERENCES workspaces(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_issue_analyses_lookup ON issue_analyses(workspace_id, repo_full_name, issue_number);
+`;
+
+/** Migrations that add columns — safe to fail if column already exists. */
+const ALTER_MIGRATIONS = [
+  "ALTER TABLE skills ADD COLUMN content TEXT",
+  "ALTER TABLE agents ADD COLUMN content TEXT",
+];
+
+/** DDL that uses IF NOT EXISTS — safe to re-run. */
+const ADDITIONAL_TABLES = `
+CREATE TABLE IF NOT EXISTS agent_skills (
+  agent_id TEXT NOT NULL,
+  skill_id TEXT NOT NULL,
+  PRIMARY KEY (agent_id, skill_id),
+  FOREIGN KEY (agent_id) REFERENCES agents(id) ON DELETE CASCADE,
+  FOREIGN KEY (skill_id) REFERENCES skills(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_agent_skills_agent ON agent_skills(agent_id);
+CREATE INDEX IF NOT EXISTS idx_agent_skills_skill ON agent_skills(skill_id);
 `;
 
 /** Standard location: AppConfig (e.g. ~/Library/Application Support/{bundle-id}/ on macOS) */
@@ -75,6 +110,30 @@ export async function getDb(): Promise<Database> {
       await db.execute(stmt);
     } catch (e) {
       throw new Error(`Migration failed: ${e}. Statement: ${stmt.slice(0, 80)}...`);
+    }
+  }
+
+  // Run additional CREATE TABLE statements (idempotent via IF NOT EXISTS)
+  const additionalStmts = ADDITIONAL_TABLES.split(";")
+    .map((s) => s.trim())
+    .filter(Boolean);
+  for (const stmt of additionalStmts) {
+    try {
+      await db.execute(stmt);
+    } catch (e) {
+      throw new Error(`Migration failed: ${e}. Statement: ${stmt.slice(0, 80)}...`);
+    }
+  }
+
+  // Run ALTER TABLE migrations — tolerate "duplicate column" errors for idempotency
+  for (const stmt of ALTER_MIGRATIONS) {
+    try {
+      await db.execute(stmt);
+    } catch (e) {
+      const msg = String(e);
+      if (!msg.includes("duplicate column")) {
+        throw new Error(`Migration failed: ${e}. Statement: ${stmt}`);
+      }
     }
   }
 

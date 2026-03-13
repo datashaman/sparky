@@ -543,7 +543,7 @@ function App() {
                   <button
                     type="button"
                     className="header-user-menu-item"
-                    onClick={() => setUserMenuOpen(false)}
+                    onClick={() => { setUserMenuOpen(false); setUserSettingsOpen(true); }}
                   >
                     Settings
                   </button>

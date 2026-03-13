@@ -17,6 +17,7 @@ import {
 
 interface Props {
   workspaceId: string;
+  onSelectSkill?: (id: string) => void;
 }
 
 const PROVIDER_COLORS: Record<AgentProvider, string> = {
@@ -25,7 +26,7 @@ const PROVIDER_COLORS: Record<AgentProvider, string> = {
   gemini: "#4285f4",
 };
 
-export function SkillsList({ workspaceId }: Props) {
+export function SkillsList({ workspaceId, onSelectSkill }: Props) {
   const [skills, setSkills] = useState<Skill[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -149,6 +150,10 @@ export function SkillsList({ workspaceId }: Props) {
             <li
               key={s.id}
               className={`skill-item ${confirmingDeleteId === s.id ? "skill-item-confirming" : ""}`}
+              onClick={() => onSelectSkill?.(s.id)}
+              role={onSelectSkill ? "button" : undefined}
+              tabIndex={onSelectSkill ? 0 : undefined}
+              style={onSelectSkill ? { cursor: "pointer" } : undefined}
             >
               <span
                 className="skill-item-icon"

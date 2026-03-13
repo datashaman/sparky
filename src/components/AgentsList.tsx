@@ -24,6 +24,7 @@ import {
 
 interface Props {
   workspaceId: string;
+  onSelectAgent?: (id: string) => void;
 }
 
 const PROVIDER_COLORS: Record<AgentProvider, string> = {
@@ -32,7 +33,7 @@ const PROVIDER_COLORS: Record<AgentProvider, string> = {
   gemini: "#4285f4",
 };
 
-export function AgentsList({ workspaceId }: Props) {
+export function AgentsList({ workspaceId, onSelectAgent }: Props) {
   const [agents, setAgents] = useState<Agent[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -168,6 +169,10 @@ export function AgentsList({ workspaceId }: Props) {
             <li
               key={a.id}
               className={`agent-item ${confirmingDeleteId === a.id ? "agent-item-confirming" : ""}`}
+              onClick={() => onSelectAgent?.(a.id)}
+              role={onSelectAgent ? "button" : undefined}
+              tabIndex={onSelectAgent ? 0 : undefined}
+              style={onSelectAgent ? { cursor: "pointer" } : undefined}
             >
               <span
                 className="agent-item-icon"

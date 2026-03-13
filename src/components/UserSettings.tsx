@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { AGENT_PROVIDERS, AGENT_MODELS } from "../data/agents";
 import type { AgentProvider } from "../data/types";
 import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
 import {
   Select,
   SelectTrigger,
@@ -13,6 +14,7 @@ import {
 const DISPLAY_MODE_KEY = "sparky_display_mode";
 const DEFAULT_PROVIDER_KEY = "sparky_default_provider";
 const DEFAULT_MODEL_KEY = "sparky_default_model";
+const API_KEY_PREFIX = "sparky_api_key_";
 
 export type DisplayMode = "light" | "dark" | "system";
 
@@ -38,7 +40,13 @@ export function getDefaultModel(): string {
   } catch { return ""; }
 }
 
-function applyDisplayMode(mode: DisplayMode) {
+export function getApiKey(provider: AgentProvider): string {
+  try {
+    return localStorage.getItem(API_KEY_PREFIX + provider) ?? "";
+  } catch { return ""; }
+}
+
+export function applyDisplayMode(mode: DisplayMode) {
   const root = document.documentElement;
   if (mode === "dark") {
     root.classList.add("dark");
@@ -63,6 +71,12 @@ export function UserSettings({ open, onClose }: Props) {
   const [displayMode, setDisplayMode] = useState<DisplayMode>(getDisplayMode);
   const [provider, setProvider] = useState<AgentProvider | "">(getDefaultProvider);
   const [model, setModel] = useState(getDefaultModel);
+
+  const [apiKeys, setApiKeys] = useState<Record<string, string>>(() => {
+    const keys: Record<string, string> = {};
+    for (const p of AGENT_PROVIDERS) keys[p] = getApiKey(p);
+    return keys;
+  });
 
   const models = provider ? AGENT_MODELS[provider] : [];
 
@@ -159,6 +173,30 @@ export function UserSettings({ open, onClose }: Props) {
               </div>
               <p className="user-settings-hint">
                 Used as defaults when creating new agents and skills.
+              </p>
+            </div>
+          </section>
+
+          <section className="settings-card">
+            <h3 className="settings-card-title">API Keys</h3>
+            <div className="settings-card-body">
+              {AGENT_PROVIDERS.map((p) => (
+                <div key={p} className="flex flex-col gap-1.5">
+                  <Label>{p}</Label>
+                  <Input
+                    type="password"
+                    placeholder={`${p} API key`}
+                    value={apiKeys[p] ?? ""}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setApiKeys((prev) => ({ ...prev, [p]: val }));
+                      try { localStorage.setItem(API_KEY_PREFIX + p, val); } catch { /* ignore */ }
+                    }}
+                  />
+                </div>
+              ))}
+              <p className="user-settings-hint">
+                Stored locally on this device. Required for issue analysis.
               </p>
             </div>
           </section>
