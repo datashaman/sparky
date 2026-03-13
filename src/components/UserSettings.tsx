@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { AGENT_PROVIDERS, AGENT_MODELS } from "../data/agents";
+import { fetchOllamaModels } from "../data/ollamaModels";
 import type { AgentProvider } from "../data/types";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
@@ -96,8 +97,16 @@ export function UserSettings({ open, onClose }: Props) {
     return keys;
   });
 
-  const models = provider ? AGENT_MODELS[provider] : [];
-  const execModels = execProvider ? AGENT_MODELS[execProvider] : [];
+  const [ollamaModels, setOllamaModels] = useState<string[]>([]);
+
+  useEffect(() => {
+    if (provider === "ollama" || execProvider === "ollama") {
+      fetchOllamaModels().then(setOllamaModels);
+    }
+  }, [provider, execProvider]);
+
+  const models = provider === "ollama" ? ollamaModels : provider ? AGENT_MODELS[provider] : [];
+  const execModels = execProvider === "ollama" ? ollamaModels : execProvider ? AGENT_MODELS[execProvider] : [];
 
   useEffect(() => {
     applyDisplayMode(displayMode);
@@ -106,15 +115,12 @@ export function UserSettings({ open, onClose }: Props) {
 
   useEffect(() => {
     try { localStorage.setItem(DEFAULT_PROVIDER_KEY, provider); } catch { /* ignore */ }
-    // Reset model if provider changes and current model isn't in new list
-    // Skip for free-text providers (empty model list)
-    if (provider) {
-      const available = AGENT_MODELS[provider];
-      if (available.length > 0 && !available.includes(model)) {
-        setModel(available[0] ?? "");
-      }
-    } else {
-      setModel("");
+    // Reset model when provider changes to one with a fixed model list.
+    // Skip for ollama (async) and openrouter (free-text). Don't wipe on empty.
+    if (!provider || provider === "ollama" || provider === "openrouter") return;
+    const available = AGENT_MODELS[provider];
+    if (available.length > 0 && !available.includes(model)) {
+      setModel(available[0] ?? "");
     }
   }, [provider]);
 
@@ -124,14 +130,10 @@ export function UserSettings({ open, onClose }: Props) {
 
   useEffect(() => {
     try { localStorage.setItem(EXEC_PROVIDER_KEY, execProvider); } catch { /* ignore */ }
-    // Skip for free-text providers (empty model list)
-    if (execProvider) {
-      const available = AGENT_MODELS[execProvider];
-      if (available.length > 0 && !available.includes(execModel)) {
-        setExecModel(available[0] ?? "");
-      }
-    } else {
-      setExecModel("");
+    if (!execProvider || execProvider === "ollama" || execProvider === "openrouter") return;
+    const available = AGENT_MODELS[execProvider];
+    if (available.length > 0 && !available.includes(execModel)) {
+      setExecModel(available[0] ?? "");
     }
   }, [execProvider]);
 
@@ -196,9 +198,9 @@ export function UserSettings({ open, onClose }: Props) {
                 </div>
                 <div className="flex flex-col gap-1.5 flex-1 min-w-0">
                   <Label>Model</Label>
-                  {provider === "ollama" || provider === "openrouter" ? (
+                  {provider === "openrouter" ? (
                     <Input
-                      placeholder={provider === "ollama" ? "e.g. qwen2.5:3b" : "e.g. anthropic/claude-sonnet-4"}
+                      placeholder="e.g. anthropic/claude-sonnet-4"
                       value={model}
                       onChange={(e) => setModel(e.target.value)}
                     />
@@ -208,7 +210,7 @@ export function UserSettings({ open, onClose }: Props) {
                         <SelectValue placeholder={provider ? "Select model" : "Pick provider first"} />
                       </SelectTrigger>
                       <SelectContent>
-                        {models.map((m) => (
+                        {[...models].sort().map((m) => (
                           <SelectItem key={m} value={m}>{m}</SelectItem>
                         ))}
                       </SelectContent>
@@ -241,9 +243,9 @@ export function UserSettings({ open, onClose }: Props) {
                 </div>
                 <div className="flex flex-col gap-1.5 flex-1 min-w-0">
                   <Label>Model</Label>
-                  {execProvider === "ollama" || execProvider === "openrouter" ? (
+                  {execProvider === "openrouter" ? (
                     <Input
-                      placeholder={execProvider === "ollama" ? "e.g. qwen2.5:3b" : "e.g. anthropic/claude-sonnet-4"}
+                      placeholder="e.g. anthropic/claude-sonnet-4"
                       value={execModel}
                       onChange={(e) => setExecModel(e.target.value)}
                     />
@@ -253,7 +255,7 @@ export function UserSettings({ open, onClose }: Props) {
                         <SelectValue placeholder={execProvider ? "Select model" : "Pick provider first"} />
                       </SelectTrigger>
                       <SelectContent>
-                        {execModels.map((m) => (
+                        {[...execModels].sort().map((m) => (
                           <SelectItem key={m} value={m}>{m}</SelectItem>
                         ))}
                       </SelectContent>

@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
   getAgent,
   updateAgent,
@@ -12,6 +12,7 @@ import {
 } from "../data/agents";
 import { listSkillsForWorkspace } from "../data/skills";
 import { TOOLS } from "../data/tools";
+import { fetchOllamaModels } from "../data/ollamaModels";
 import type { Agent, AgentProvider, Skill } from "../data/types";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -97,16 +98,27 @@ export function AgentDetail({ agentId, workspaceId, onBack, onDeleted }: AgentDe
     };
   }, [agentId, workspaceId]);
 
+  const [ollamaModels, setOllamaModels] = useState<string[]>([]);
+  const providerRef = useRef(formProvider);
+  providerRef.current = formProvider;
+
   // When provider changes, reset model to first available for that provider
   useEffect(() => {
     if (!agent) return;
-    // Only auto-reset when provider actually changes away from the agent's saved provider
-    if (formProvider !== agent.provider && AGENT_MODELS[formProvider].length > 0) {
-      setFormModel(AGENT_MODELS[formProvider][0] ?? "");
+    const current = formProvider;
+    if (current === "ollama") {
+      if (current !== agent.provider) setFormModel("");
+      fetchOllamaModels().then((m) => {
+        if (providerRef.current !== current) return;
+        setOllamaModels(m);
+        if (current !== agent.provider && m.length > 0) setFormModel(m[0]);
+      });
+    } else if (current !== agent.provider && current !== "openrouter" && AGENT_MODELS[current].length > 0) {
+      setFormModel(AGENT_MODELS[current][0] ?? "");
     }
   }, [formProvider]);
 
-  const models = AGENT_MODELS[formProvider] ?? [];
+  const models = formProvider === "ollama" ? ollamaModels : (AGENT_MODELS[formProvider] ?? []);
 
   const skillsChanged = selectedSkillIds.size !== savedSkillIds.size ||
     [...selectedSkillIds].some((id) => !savedSkillIds.has(id));
@@ -311,9 +323,9 @@ export function AgentDetail({ agentId, workspaceId, onBack, onDeleted }: AgentDe
             </div>
             <div className="flex flex-col gap-1.5 flex-1 min-w-0">
               <Label>Model</Label>
-              {models.length === 0 ? (
+              {formProvider === "openrouter" ? (
                 <Input
-                  placeholder="e.g. qwen2.5:3b"
+                  placeholder="e.g. anthropic/claude-sonnet-4"
                   value={formModel}
                   onChange={(e) => setFormModel(e.target.value)}
                   disabled={saving}
@@ -328,7 +340,7 @@ export function AgentDetail({ agentId, workspaceId, onBack, onDeleted }: AgentDe
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {models.map((m) => (
+                    {[...models].sort().map((m) => (
                       <SelectItem key={m} value={m}>{m}</SelectItem>
                     ))}
                   </SelectContent>
