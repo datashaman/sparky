@@ -31,3 +31,13 @@ export interface Agent {
   background: boolean;
   created_at: string;
 }
+
+export interface Skill {
+  id: string;
+  workspace_id: string;
+  name: string;
+  description: string | null;
+  provider: AgentProvider | null;
+  model: string | null;
+  created_at: string;
+}

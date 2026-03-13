@@ -8,6 +8,7 @@ import { addRepoToWorkspace, removeRepoFromWorkspace } from "../data/workspaceRe
 import { fetchRepo, listUserRepos, listRepoOpenIssues, type GitHubRepo, type GitHubIssue } from "../github";
 import { WorkspaceList } from "./WorkspaceList";
 import { AgentsList } from "./AgentsList";
+import { SkillsList } from "./SkillsList";
 import { ErrorMessage } from "./ErrorMessage";
 import type { Workspace, Repo } from "../data/types";
 
@@ -574,7 +575,7 @@ export function WorkspaceDetail({ workspaceId, onSwitchWorkspace, onDeleted, onW
             </div>
           ) : page === "skills" ? (
             <div className="workspace-page workspace-page-skills">
-              <p className="empty-state">Skills page — coming soon.</p>
+              <SkillsList workspaceId={workspaceId} />
             </div>
           ) : page === "settings" ? (
             <div className="workspace-page workspace-page-settings">
