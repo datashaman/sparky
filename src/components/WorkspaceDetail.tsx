@@ -6,11 +6,23 @@ import {
 } from "../data/repos";
 import { addRepoToWorkspace, removeRepoFromWorkspace } from "../data/workspaceRepos";
 import { fetchRepo, listUserRepos, listRepoOpenIssues, type GitHubRepo, type GitHubIssue } from "../github";
+import { marked } from "marked";
+
+marked.setOptions({ gfm: true, breaks: true });
 import { WorkspaceList } from "./WorkspaceList";
 import { AgentsList } from "./AgentsList";
 import { SkillsList } from "./SkillsList";
 import { ErrorMessage } from "./ErrorMessage";
 import type { Workspace, Repo } from "../data/types";
+
+/** Returns black or white text depending on background luminance. */
+function labelTextColor(hex: string): string {
+  const r = parseInt(hex.slice(0, 2), 16);
+  const g = parseInt(hex.slice(2, 4), 16);
+  const b = parseInt(hex.slice(4, 6), 16);
+  const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+  return luminance > 0.6 ? "#24292f" : "#fff";
+}
 
 interface WorkspaceDetailProps {
   workspaceId: string;
@@ -525,15 +537,47 @@ export function WorkspaceDetail({ workspaceId, onSwitchWorkspace, onDeleted, onW
             <div className="workspace-page workspace-page-issue">
               <div className="issue-detail-header">
                 <h2 className="issue-detail-title">{selectedIssue.title}</h2>
-                <p className="issue-detail-meta">
-                  <a href={selectedIssue.html_url} target="_blank" rel="noopener noreferrer">
+                <div className="issue-detail-meta">
+                  <span className={`issue-state-badge issue-state-${selectedIssue.state}`}>
+                    {selectedIssue.state === "open" ? (
+                      <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M8 9.5a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3Z"/><path d="M8 0a8 8 0 1 1 0 16A8 8 0 0 1 8 0ZM1.5 8a6.5 6.5 0 1 0 13 0 6.5 6.5 0 0 0-13 0Z"/></svg>
+                    ) : (
+                      <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M11.28 6.78a.75.75 0 0 0-1.06-1.06L7.25 8.69 5.78 7.22a.75.75 0 0 0-1.06 1.06l2 2a.75.75 0 0 0 1.06 0l3.5-3.5Z"/><path d="M16 8A8 8 0 1 1 0 8a8 8 0 0 1 16 0Zm-1.5 0a6.5 6.5 0 1 0-13 0 6.5 6.5 0 0 0 13 0Z"/></svg>
+                    )}
+                    {selectedIssue.state}
+                  </span>
+                  <a href={selectedIssue.html_url} target="_blank" rel="noopener noreferrer" className="issue-detail-repo-link">
                     {selectedIssue.full_name}#{selectedIssue.number}
                   </a>
-                  {selectedIssue.state && ` · ${selectedIssue.state}`}
-                </p>
+                  {selectedIssue.user && (
+                    <span className="issue-detail-author">
+                      opened by {selectedIssue.user.login}
+                    </span>
+                  )}
+                </div>
+                {selectedIssue.labels && selectedIssue.labels.length > 0 && (
+                  <div className="issue-detail-labels">
+                    {selectedIssue.labels.map((label) => (
+                      <span
+                        key={label.id}
+                        className="issue-label"
+                        style={{
+                          background: `#${label.color}`,
+                          color: labelTextColor(label.color),
+                          borderColor: `#${label.color}`,
+                        }}
+                      >
+                        {label.name}
+                      </span>
+                    ))}
+                  </div>
+                )}
               </div>
               {selectedIssue.body ? (
-                <div className="issue-detail-body">{selectedIssue.body}</div>
+                <div
+                  className="issue-detail-body markdown-body"
+                  dangerouslySetInnerHTML={{ __html: marked.parse(selectedIssue.body, { async: false }) as string }}
+                />
               ) : (
                 <p className="empty-state">No description.</p>
               )}

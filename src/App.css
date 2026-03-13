@@ -1445,21 +1445,25 @@ button.user-code:focus-visible {
   min-width: 0;
   min-height: 0;
   align-self: stretch;
-  overflow: hidden;
-  transition: width 0.2s ease, min-width 0.2s ease;
-  background: #fafafa;
-  border-right: 1px solid rgba(0, 0, 0, 0.06);
+  overflow: visible;
+  z-index: 10;
 }
 
-.workspace-issues-panel.open {
-  width: 280px;
-  min-width: 280px;
+.workspace-issues-panel.open .workspace-issues-panel-inner {
+  opacity: 1;
+  pointer-events: auto;
 }
 
 .workspace-issues-panel-inner {
   width: 280px;
   height: 100%;
   min-height: 0;
+  background: #fafafa;
+  border-right: 1px solid rgba(0, 0, 0, 0.06);
+  box-shadow: 2px 0 8px rgba(0, 0, 0, 0.06);
+  opacity: 0;
+  transition: opacity 0.15s ease;
+  pointer-events: none;
   overflow-y: auto;
   padding: 0.75rem 0;
 }
@@ -1532,31 +1536,206 @@ button.user-code:focus-visible {
 
 /* Issue detail (main pane when an issue is selected) */
 .issue-detail-header {
-  margin-bottom: 1rem;
+  margin-bottom: 1.25rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
 }
 
 .issue-detail-title {
-  font-size: 1.25rem;
+  font-size: 1.35rem;
   font-weight: 600;
-  margin: 0 0 0.35rem;
-  color: #222;
+  margin: 0 0 0.5rem;
+  color: #1a1a1a;
+  line-height: 1.35;
 }
 
 .issue-detail-meta {
-  font-size: 0.85rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.825rem;
   color: #666;
   margin: 0;
+  flex-wrap: wrap;
 }
 
-.issue-detail-meta a {
+.issue-state-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  text-transform: capitalize;
+}
+
+.issue-state-open {
+  background: #dafbe1;
+  color: #1a7f37;
+}
+
+.issue-state-closed {
+  background: #e8d5f5;
+  color: #8250df;
+}
+
+.issue-detail-repo-link {
   color: #0969da;
+  text-decoration: none;
 }
 
-.issue-detail-body {
+.issue-detail-repo-link:hover {
+  text-decoration: underline;
+}
+
+.issue-detail-author {
+  color: #888;
+}
+
+.issue-detail-labels {
+  display: flex;
+  gap: 0.375rem;
+  flex-wrap: wrap;
+  margin-top: 0.6rem;
+}
+
+.issue-label {
+  display: inline-block;
+  padding: 0.1rem 0.5rem;
+  border-radius: 999px;
+  font-size: 0.725rem;
+  font-weight: 500;
+  border: 1px solid;
+  line-height: 1.6;
+}
+
+/* Markdown body — GitHub-like typography */
+.issue-detail-body.markdown-body {
   font-size: 0.9rem;
-  line-height: 1.5;
-  white-space: pre-wrap;
+  line-height: 1.65;
   color: #333;
+}
+
+.markdown-body h1,
+.markdown-body h2,
+.markdown-body h3,
+.markdown-body h4 {
+  margin: 1.25rem 0 0.5rem;
+  font-weight: 600;
+  line-height: 1.3;
+  color: #1a1a1a;
+}
+
+.markdown-body h1 { font-size: 1.25rem; }
+.markdown-body h2 { font-size: 1.1rem; padding-bottom: 0.25rem; border-bottom: 1px solid rgba(0,0,0,0.08); }
+.markdown-body h3 { font-size: 1rem; }
+.markdown-body h4 { font-size: 0.9rem; }
+
+.markdown-body p {
+  margin: 0.5rem 0;
+}
+
+.markdown-body ul,
+.markdown-body ol {
+  margin: 0.5rem 0;
+  padding-left: 1.5rem;
+  list-style: revert;
+}
+
+.markdown-body li {
+  margin: 0.25rem 0;
+}
+
+.markdown-body code {
+  background: rgba(0, 0, 0, 0.06);
+  padding: 0.15rem 0.35rem;
+  border-radius: 4px;
+  font-size: 0.85em;
+}
+
+.markdown-body pre {
+  background: #f6f8fa;
+  border-radius: 8px;
+  padding: 0.75rem 1rem;
+  overflow-x: auto;
+  margin: 0.75rem 0;
+}
+
+.markdown-body pre code {
+  background: none;
+  padding: 0;
+  font-size: 0.825rem;
+  line-height: 1.5;
+}
+
+.markdown-body blockquote {
+  margin: 0.5rem 0;
+  padding: 0.25rem 0.75rem;
+  border-left: 3px solid #ddd;
+  color: #666;
+}
+
+.markdown-body a {
+  color: #0969da;
+  text-decoration: none;
+}
+
+.markdown-body a:hover {
+  text-decoration: underline;
+}
+
+.markdown-body hr {
+  border: none;
+  border-top: 1px solid rgba(0, 0, 0, 0.08);
+  margin: 1rem 0;
+}
+
+.markdown-body img {
+  max-width: 100%;
+  border-radius: 6px;
+}
+
+.markdown-body table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 0.75rem 0;
+}
+
+.markdown-body th,
+.markdown-body td {
+  border: 1px solid #ddd;
+  padding: 0.4rem 0.75rem;
+  text-align: left;
+  font-size: 0.85rem;
+}
+
+.markdown-body th {
+  background: #f6f8fa;
+  font-weight: 600;
+}
+
+/* GFM task list checkboxes */
+.markdown-body ul.contains-task-list {
+  list-style: none;
+  padding-left: 0.25rem;
+}
+
+.markdown-body .task-list-item {
+  display: flex;
+  align-items: baseline;
+  gap: 0.4rem;
+}
+
+.markdown-body .task-list-item input[type="checkbox"] {
+  margin: 0;
+  pointer-events: none;
+}
+
+/* GFM strikethrough */
+.markdown-body del {
+  text-decoration: line-through;
+  color: #888;
 }
 
 .workspace-detail-content {

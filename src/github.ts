@@ -81,6 +81,13 @@ export async function fetchRepo(owner: string, name: string): Promise<GitHubRepo
   return data;
 }
 
+export interface GitHubLabel {
+  id: number;
+  name: string;
+  color: string;
+  description: string | null;
+}
+
 export interface GitHubIssue {
   id: number;
   number: number;
@@ -88,7 +95,8 @@ export interface GitHubIssue {
   state: string;
   html_url: string;
   body: string | null;
-  user: { login: string } | null;
+  user: { login: string; avatar_url: string } | null;
+  labels: GitHubLabel[];
   created_at: string;
   updated_at: string;
   pull_request?: unknown;
