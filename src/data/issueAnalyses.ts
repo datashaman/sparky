@@ -14,6 +14,18 @@ export async function getAnalysisForIssue(
   return rows[0] ?? null;
 }
 
+export async function deleteAnalysesForIssue(
+  workspaceId: string,
+  repoFullName: string,
+  issueNumber: number,
+): Promise<void> {
+  const db = await getDb();
+  await db.execute(
+    "DELETE FROM issue_analyses WHERE workspace_id = ? AND repo_full_name = ? AND issue_number = ?",
+    [workspaceId, repoFullName, issueNumber],
+  );
+}
+
 export async function createAnalysis(
   workspaceId: string,
   repoFullName: string,

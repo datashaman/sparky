@@ -8,9 +8,9 @@ import { addRepoToWorkspace, removeRepoFromWorkspace } from "../data/workspaceRe
 import { fetchRepo, listUserRepos, listRepoOpenIssues, type GitHubRepo, type GitHubIssue } from "../github";
 import { listAgentsForWorkspace } from "../data/agents";
 import { listSkillsForWorkspace } from "../data/skills";
-import { getAnalysisForIssue, createAnalysis } from "../data/issueAnalyses";
-import { getPlanForIssue, createPlan } from "../data/executionPlans";
-import { getWorktreeForIssue } from "../data/issueWorktrees";
+import { getAnalysisForIssue, createAnalysis, deleteAnalysesForIssue } from "../data/issueAnalyses";
+import { getPlanForIssue, createPlan, deletePlansForIssue } from "../data/executionPlans";
+import { getWorktreeForIssue, removeWorktree } from "../data/issueWorktrees";
 import { runAnalysis } from "../data/analyseIssue";
 import { runPlanGeneration } from "../data/generatePlan";
 import type { IssueAnalysis, AnalysisResult, ExecutionPlan, ExecutionPlanResult, IssueWorktree } from "../data/types";
@@ -726,6 +726,28 @@ export function WorkspaceDetail({ workspaceId, onSwitchWorkspace, onDeleted, onW
                         Re-plan
                       </button>
                     )}
+                    <button
+                      type="button"
+                      className="analyse-btn analyse-btn-inline analyse-btn-danger"
+                      onClick={async () => {
+                        const { full_name, number } = selectedIssue;
+                        const wt = _worktree;
+                        if (wt && wt.status === "ready") {
+                          try { await removeWorktree(wt, setWorktree); } catch { /* best-effort */ }
+                        }
+                        await Promise.all([
+                          deleteAnalysesForIssue(workspaceId, full_name, number),
+                          deletePlansForIssue(workspaceId, full_name, number),
+                        ]);
+                        setAnalysis(null);
+                        setPlan(null);
+                        setWorktree(null);
+                        setAllCreated(false);
+                        setIssueTab("issue");
+                      }}
+                    >
+                      Reset
+                    </button>
                   </div>
                 )}
               </div>
