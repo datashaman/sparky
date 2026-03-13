@@ -213,6 +213,24 @@ export function WorkspaceDetail({ workspaceId, onSwitchWorkspace, onDeleted, onW
     }
   }
 
+  async function triggerPlanGeneration() {
+    if (!selectedIssue || !analysis?.result) return;
+    setPlanLoading(true);
+    try {
+      const analysisResult: AnalysisResult = JSON.parse(analysis.result);
+      const [agents, skills] = await Promise.all([
+        listAgentsForWorkspace(workspaceId),
+        listSkillsForWorkspace(workspaceId),
+      ]);
+      const p = await createPlan(workspaceId, selectedIssue.full_name, selectedIssue.number);
+      setPlan(p);
+      setIssueTab("plan");
+      runPlanGeneration(p, selectedIssue, analysisResult, agents, skills, setPlan);
+    } finally {
+      setPlanLoading(false);
+    }
+  }
+
   // Debounce workspace name updates while typing
   useEffect(() => {
     if (!workspace) return;
@@ -662,17 +680,10 @@ export function WorkspaceDetail({ workspaceId, onSwitchWorkspace, onDeleted, onW
                   <button
                     type="button"
                     className={`issue-tab ${issueTab === "plan" ? "issue-tab-active" : ""}`}
-                    onClick={async () => {
+                    onClick={() => {
                       setIssueTab("plan");
                       if (!plan && !planLoading) {
-                        const analysisResult: AnalysisResult = JSON.parse(analysis.result!);
-                        const [agents, skills] = await Promise.all([
-                          listAgentsForWorkspace(workspaceId),
-                          listSkillsForWorkspace(workspaceId),
-                        ]);
-                        const p = await createPlan(workspaceId, selectedIssue.full_name, selectedIssue.number);
-                        setPlan(p);
-                        runPlanGeneration(p, selectedIssue, analysisResult, agents, skills, setPlan);
+                        triggerPlanGeneration();
                       }
                     }}
                   >
@@ -691,6 +702,7 @@ export function WorkspaceDetail({ workspaceId, onSwitchWorkspace, onDeleted, onW
                         onClick={async () => {
                           const a = await createAnalysis(workspaceId, selectedIssue.full_name, selectedIssue.number);
                           setAnalysis(a);
+                          setPlan(null);
                           setAllCreated(false);
                           setIssueTab("analysis");
                           runAnalysis(a, selectedIssue, setAnalysis);
@@ -703,17 +715,7 @@ export function WorkspaceDetail({ workspaceId, onSwitchWorkspace, onDeleted, onW
                       <button
                         type="button"
                         className="analyse-btn analyse-btn-inline"
-                        onClick={async () => {
-                          const analysisResult: AnalysisResult = JSON.parse(analysis!.result!);
-                          const [agents, skills] = await Promise.all([
-                            listAgentsForWorkspace(workspaceId),
-                            listSkillsForWorkspace(workspaceId),
-                          ]);
-                          const p = await createPlan(workspaceId, selectedIssue.full_name, selectedIssue.number);
-                          setPlan(p);
-                          setIssueTab("plan");
-                          runPlanGeneration(p, selectedIssue, analysisResult, agents, skills, setPlan);
-                        }}
+                        onClick={() => triggerPlanGeneration()}
                       >
                         Re-plan
                       </button>
@@ -767,7 +769,7 @@ export function WorkspaceDetail({ workspaceId, onSwitchWorkspace, onDeleted, onW
                 </div>
               ) : (
                 <div className="issue-plan-tab">
-                  {plan?.status === "running" && (
+                  {(plan?.status === "pending" || plan?.status === "running") && (
                     <p className="analysis-running">Generating plan...</p>
                   )}
                   {plan?.status === "done" && plan.result && (() => {
@@ -784,16 +786,7 @@ export function WorkspaceDetail({ workspaceId, onSwitchWorkspace, onDeleted, onW
                       <button
                         type="button"
                         className="analyse-btn"
-                        onClick={async () => {
-                          const analysisResult: AnalysisResult = JSON.parse(analysis!.result!);
-                          const [agents, skills] = await Promise.all([
-                            listAgentsForWorkspace(workspaceId),
-                            listSkillsForWorkspace(workspaceId),
-                          ]);
-                          const p = await createPlan(workspaceId, selectedIssue.full_name, selectedIssue.number);
-                          setPlan(p);
-                          runPlanGeneration(p, selectedIssue, analysisResult, agents, skills, setPlan);
-                        }}
+                        onClick={() => triggerPlanGeneration()}
                       >
                         Retry
                       </button>
