@@ -31,7 +31,7 @@ export function getDisplayMode(): DisplayMode {
 export function getDefaultProvider(): AgentProvider | "" {
   try {
     const stored = localStorage.getItem(DEFAULT_PROVIDER_KEY);
-    if (stored === "openai" || stored === "anthropic" || stored === "gemini" || stored === "ollama") return stored;
+    if (stored === "openai" || stored === "anthropic" || stored === "gemini" || stored === "ollama" || stored === "openrouter") return stored;
   } catch { /* ignore */ }
   return "";
 }
@@ -45,7 +45,7 @@ export function getDefaultModel(): string {
 export function getExecProvider(): AgentProvider | "" {
   try {
     const stored = localStorage.getItem(EXEC_PROVIDER_KEY);
-    if (stored === "openai" || stored === "anthropic" || stored === "gemini" || stored === "ollama") return stored;
+    if (stored === "openai" || stored === "anthropic" || stored === "gemini" || stored === "ollama" || stored === "openrouter") return stored;
   } catch { /* ignore */ }
   return "";
 }
@@ -194,9 +194,9 @@ export function UserSettings({ open, onClose }: Props) {
                 </div>
                 <div className="flex flex-col gap-1.5 flex-1 min-w-0">
                   <Label>Model</Label>
-                  {provider === "ollama" ? (
+                  {provider === "ollama" || provider === "openrouter" ? (
                     <Input
-                      placeholder="e.g. qwen2.5:3b"
+                      placeholder={provider === "ollama" ? "e.g. qwen2.5:3b" : "e.g. anthropic/claude-sonnet-4"}
                       value={model}
                       onChange={(e) => setModel(e.target.value)}
                     />
@@ -239,9 +239,9 @@ export function UserSettings({ open, onClose }: Props) {
                 </div>
                 <div className="flex flex-col gap-1.5 flex-1 min-w-0">
                   <Label>Model</Label>
-                  {execProvider === "ollama" ? (
+                  {execProvider === "ollama" || execProvider === "openrouter" ? (
                     <Input
-                      placeholder="e.g. qwen2.5:3b"
+                      placeholder={execProvider === "ollama" ? "e.g. qwen2.5:3b" : "e.g. anthropic/claude-sonnet-4"}
                       value={execModel}
                       onChange={(e) => setExecModel(e.target.value)}
                     />
