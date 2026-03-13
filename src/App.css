@@ -1881,6 +1881,25 @@ button.user-code:focus-visible {
   border-color: #ea580c;
 }
 
+.av-pill-dangerous {
+  border-color: #ef4444;
+}
+
+.av-pill-dangerous::before {
+  background: #ef4444;
+  border-color: #ef4444;
+}
+
+.av-pill-dangerous:hover:not(:disabled) {
+  border-color: #dc2626;
+  background: #fef2f2;
+}
+
+.av-pill-dangerous:hover:not(:disabled)::before {
+  background: #dc2626;
+  border-color: #dc2626;
+}
+
 .av-pill:disabled {
   cursor: default;
 }

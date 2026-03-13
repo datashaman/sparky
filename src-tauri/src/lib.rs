@@ -1,3 +1,4 @@
+mod agent_tools;
 mod git_ops;
 mod github_auth;
 
@@ -43,6 +44,12 @@ pub fn run() {
             git_ops::git_create_worktree,
             git_ops::git_remove_worktree,
             git_ops::git_worktree_status,
+            agent_tools::tool_read_file,
+            agent_tools::tool_write_file,
+            agent_tools::tool_edit_file,
+            agent_tools::tool_glob,
+            agent_tools::tool_grep,
+            agent_tools::tool_bash,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
