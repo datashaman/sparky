@@ -61,11 +61,13 @@ export interface IssueAnalysis {
 export interface AnalysisResultSkill {
   name: string;
   description: string;
+  content: string;
 }
 
 export interface AnalysisResultAgent {
   name: string;
   description: string;
+  content: string;
   skill_names: string[];
   tool_names: string[];
 }
