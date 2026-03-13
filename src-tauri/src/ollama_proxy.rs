@@ -1,5 +1,14 @@
 use reqwest::Client;
 use serde::Serialize;
+use std::sync::LazyLock;
+use std::time::Duration;
+
+static OLLAMA_CLIENT: LazyLock<Client> = LazyLock::new(|| {
+    Client::builder()
+        .timeout(Duration::from_secs(300))
+        .build()
+        .expect("Failed to create Ollama HTTP client")
+});
 
 #[derive(Serialize)]
 pub struct OllamaResponse {
@@ -9,8 +18,7 @@ pub struct OllamaResponse {
 
 #[tauri::command]
 pub async fn ollama_chat(body: String) -> Result<OllamaResponse, String> {
-    let client = Client::new();
-    let res = client
+    let res = OLLAMA_CLIENT
         .post("http://localhost:11434/v1/chat/completions")
         .header("content-type", "application/json")
         .body(body)

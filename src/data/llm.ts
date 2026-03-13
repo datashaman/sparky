@@ -1,12 +1,29 @@
-import { invoke } from "@tauri-apps/api/core";
+import { invoke, isTauri } from "@tauri-apps/api/core";
 import type { AgentProvider, LLMToolDef } from "./types";
 
 const OLLAMA_BASE_URL = "http://localhost:11434/v1";
 
-/** Call Ollama via Tauri backend proxy to bypass CORS. */
+/* eslint-disable @typescript-eslint/no-explicit-any */
+
+/** Call Ollama via Tauri backend proxy to bypass CORS, or direct fetch in non-Tauri mode. */
 async function ollamaFetch(body: string): Promise<{ status: number; data: any }> {
-  const res = await invoke<{ status: number; body: string }>("ollama_chat", { body });
-  return { status: res.status, data: JSON.parse(res.body) };
+  if (isTauri()) {
+    const res = await invoke<{ status: number; body: string }>("ollama_chat", { body });
+    let data: any;
+    try {
+      data = JSON.parse(res.body);
+    } catch {
+      data = { raw: res.body };
+    }
+    return { status: res.status, data };
+  }
+  // Fallback: direct fetch (works if CORS is configured)
+  const res = await fetch(`${OLLAMA_BASE_URL}/chat/completions`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body,
+  });
+  return { status: res.status, data: await res.json() };
 }
 
 /** Providers that don't require an API key. */
@@ -288,6 +305,8 @@ async function openaiToolLoop(opts: {
 }): Promise<string> {
   const { modelId, apiKey, systemPrompt, tools, maxTurns, onToolCall, baseUrl = "https://api.openai.com/v1", useProxy = false } = opts;
 
+  const providerLabel = useProxy ? "Ollama" : baseUrl.includes("openai.com") ? "OpenAI" : baseUrl.includes("openrouter") ? "OpenRouter" : "API";
+
   const openaiTools = tools.map((t) => ({
     type: "function" as const,
     function: { name: t.name, description: t.description, parameters: t.parameters },
@@ -331,14 +350,13 @@ async function openaiToolLoop(opts: {
 
       if (!res.ok) {
         const body = await res.text();
-        const label = baseUrl.includes("openai.com") ? "OpenAI" : baseUrl.includes("openrouter") ? "OpenRouter" : "API";
-        throw new Error(`${label} API ${res.status}: ${body}`);
+        throw new Error(`${providerLabel} API ${res.status}: ${body}`);
       }
       data = await res.json();
     }
 
     const choice = data.choices?.[0];
-    if (!choice) throw new Error(`No choices in ${useProxy ? "Ollama" : baseUrl.includes("openrouter") ? "OpenRouter" : "API"} response`);
+    if (!choice) throw new Error(`No choices in ${providerLabel} response`);
 
     const msg = choice.message;
     messages.push(msg);
