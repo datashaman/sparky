@@ -116,15 +116,13 @@ export function UserSettings({ open, onClose }: Props) {
 
   useEffect(() => {
     try { localStorage.setItem(DEFAULT_PROVIDER_KEY, provider); } catch { /* ignore */ }
-    // Reset model if provider changes and current model isn't in new list
-    // Skip for free-text providers (openrouter)
-    if (provider && provider !== "openrouter") {
-      const available = provider === "ollama" ? ollamaModels : AGENT_MODELS[provider];
-      if (available.length > 0 && !available.includes(model)) {
-        setModel(available[0] ?? "");
-      }
-    } else {
-      setModel("");
+    // Reset model when provider changes to one with a fixed model list
+    // and the current model isn't in that list. Skip for openrouter (free-text)
+    // and ollama (async model list). Don't wipe on empty provider.
+    if (!provider || provider === "openrouter" || provider === "ollama") return;
+    const available = AGENT_MODELS[provider];
+    if (available.length > 0 && !available.includes(model)) {
+      setModel(available[0] ?? "");
     }
   }, [provider]);
 
@@ -134,14 +132,10 @@ export function UserSettings({ open, onClose }: Props) {
 
   useEffect(() => {
     try { localStorage.setItem(EXEC_PROVIDER_KEY, execProvider); } catch { /* ignore */ }
-    // Skip for free-text providers (openrouter)
-    if (execProvider && execProvider !== "openrouter") {
-      const available = execProvider === "ollama" ? ollamaModels : AGENT_MODELS[execProvider];
-      if (available.length > 0 && !available.includes(execModel)) {
-        setExecModel(available[0] ?? "");
-      }
-    } else {
-      setExecModel("");
+    if (!execProvider || execProvider === "openrouter" || execProvider === "ollama") return;
+    const available = AGENT_MODELS[execProvider];
+    if (available.length > 0 && !available.includes(execModel)) {
+      setExecModel(available[0] ?? "");
     }
   }, [execProvider]);
 
