@@ -126,7 +126,7 @@ export function AgentsList({ workspaceId }: Props) {
     }
   }
 
-  if (loading) return <p className="loading">Loading agents…</p>;
+  if (loading) return null;
 
   return (
     <div className="agents-list">

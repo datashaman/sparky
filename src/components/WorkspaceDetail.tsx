@@ -6,6 +6,8 @@ import {
 } from "../data/repos";
 import { addRepoToWorkspace, removeRepoFromWorkspace } from "../data/workspaceRepos";
 import { fetchRepo, listUserRepos, listRepoOpenIssues, type GitHubRepo, type GitHubIssue } from "../github";
+import { listAgentsForWorkspace } from "../data/agents";
+import { listSkillsForWorkspace } from "../data/skills";
 import { marked } from "marked";
 
 marked.setOptions({ gfm: true, breaks: true });
@@ -69,6 +71,8 @@ export function WorkspaceDetail({ workspaceId, onSwitchWorkspace, onDeleted, onW
   const [issuesByRepo, setIssuesByRepo] = useState<Array<{ full_name: string; issues: GitHubIssue[] }>>([]);
   const [issuesLoading, setIssuesLoading] = useState(false);
   const [issuesError, setIssuesError] = useState<string | null>(null);
+  const [agentCount, setAgentCount] = useState(0);
+  const [skillCount, setSkillCount] = useState(0);
   const [workspaceNameInput, setWorkspaceNameInput] = useState("");
   const [savingWorkspace, setSavingWorkspace] = useState(false);
   const [workspaceSaveError, setWorkspaceSaveError] = useState<string | null>(null);
@@ -139,9 +143,11 @@ export function WorkspaceDetail({ workspaceId, onSwitchWorkspace, onDeleted, onW
   async function load() {
     setLoading(true);
     try {
-      const [ws, repoList] = await Promise.all([
+      const [ws, repoList, agents, skills] = await Promise.all([
         getWorkspace(workspaceId),
         listReposForWorkspace(workspaceId),
+        listAgentsForWorkspace(workspaceId),
+        listSkillsForWorkspace(workspaceId),
       ]);
       setWorkspace(ws ?? null);
       setWorkspaceNameInput(ws?.name ?? "");
@@ -149,6 +155,8 @@ export function WorkspaceDetail({ workspaceId, onSwitchWorkspace, onDeleted, onW
         onWorkspaceNameChange(ws.name);
       }
       setRepos(repoList);
+      setAgentCount(agents.length);
+      setSkillCount(skills.length);
     } finally {
       setLoading(false);
     }
@@ -595,23 +603,73 @@ export function WorkspaceDetail({ workspaceId, onSwitchWorkspace, onDeleted, onW
           ) : page === "dashboard" ? (
             <div className="workspace-page workspace-page-dashboard">
               <div className="dashboard-metrics">
-                <div className="metric-card">
+                <div className="metric-card" onClick={() => setPage("settings")} role="button" tabIndex={0}>
                   <span className="metric-value">{repos.length}</span>
                   <span className="metric-label">Repos</span>
                 </div>
-                <div className="metric-card">
-                  <span className="metric-value">—</span>
-                  <span className="metric-label">Issues</span>
+                <div className="metric-card" role="button" tabIndex={0} onClick={() => { /* open issues panel */ onIssuesPanelAreaEnter(); }}>
+                  <span className="metric-value">{issuesByRepo.reduce((sum, g) => sum + g.issues.length, 0)}</span>
+                  <span className="metric-label">Open issues</span>
                 </div>
-                <div className="metric-card">
-                  <span className="metric-value">—</span>
+                <div className="metric-card" onClick={() => setPage("agents")} role="button" tabIndex={0}>
+                  <span className="metric-value">{agentCount}</span>
                   <span className="metric-label">Agents</span>
                 </div>
+                <div className="metric-card" onClick={() => setPage("skills")} role="button" tabIndex={0}>
+                  <span className="metric-value">{skillCount}</span>
+                  <span className="metric-label">Skills</span>
+                </div>
               </div>
-              <section className="dashboard-recent">
-                <h3>Recent events</h3>
-                <p className="empty-state">No recent events.</p>
-              </section>
+
+              {repos.length > 0 && (
+                <section className="dashboard-section">
+                  <h3>Repos</h3>
+                  <ul className="dashboard-repo-list">
+                    {repos.map((repo) => {
+                      const repoIssues = issuesByRepo.find((g) => g.full_name === repo.full_name);
+                      const issueCount = repoIssues?.issues.length ?? 0;
+                      return (
+                        <li key={repo.id} className="dashboard-repo-item">
+                          <a
+                            href={repo.url ?? `https://github.com/${repo.full_name}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="dashboard-repo-name"
+                          >
+                            {repo.full_name}
+                          </a>
+                          {issueCount > 0 && (
+                            <span className="dashboard-repo-issues">{issueCount} open</span>
+                          )}
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </section>
+              )}
+
+              {issuesByRepo.length > 0 && (
+                <section className="dashboard-section">
+                  <h3>Recent issues</h3>
+                  <ul className="dashboard-issues-list">
+                    {issuesByRepo.flatMap(({ full_name, issues }) =>
+                      issues.slice(0, 3).map((issue) => (
+                        <li key={issue.id} className="dashboard-issue-item">
+                          <button
+                            type="button"
+                            className="dashboard-issue-btn"
+                            onClick={() => setSelectedIssue({ ...issue, full_name })}
+                          >
+                            <span className="dashboard-issue-number">#{issue.number}</span>
+                            <span className="dashboard-issue-title">{issue.title}</span>
+                            <span className="dashboard-issue-repo">{full_name}</span>
+                          </button>
+                        </li>
+                      ))
+                    ).slice(0, 10)}
+                  </ul>
+                </section>
+              )}
             </div>
           ) : page === "agents" ? (
             <div className="workspace-page workspace-page-agents">

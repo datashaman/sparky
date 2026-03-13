@@ -108,7 +108,7 @@ export function SkillsList({ workspaceId }: Props) {
     }
   }
 
-  if (loading) return <p className="loading">Loading skills…</p>;
+  if (loading) return null;
 
   return (
     <div className="skills-list">

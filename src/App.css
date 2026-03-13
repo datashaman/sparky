@@ -1747,34 +1747,141 @@ button.user-code:focus-visible {
 
 .dashboard-metrics {
   display: flex;
-  gap: 1rem;
-  margin-bottom: 2rem;
+  gap: 0.75rem;
+  margin-bottom: 1.5rem;
   flex-wrap: wrap;
 }
 
 .metric-card {
-  background: #e8e8e8;
-  border-radius: 8px;
-  padding: 1rem 1.25rem;
-  min-width: 100px;
+  background: #fff;
+  border-radius: 10px;
+  padding: 0.85rem 1rem;
+  min-width: 0;
+  flex: 1;
+  border: 1.5px solid rgba(0, 0, 0, 0.06);
+  cursor: pointer;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.metric-card:hover {
+  border-color: rgba(0, 0, 0, 0.15);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
 }
 
 .metric-value {
   display: block;
-  font-size: 1.5rem;
-  font-weight: 600;
-  color: #333;
+  font-size: 1.35rem;
+  font-weight: 700;
+  color: #1a1a1a;
+  line-height: 1.2;
 }
 
 .metric-label {
-  font-size: 0.85rem;
-  color: #555;
+  font-size: 0.75rem;
+  color: #888;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  margin-top: 0.15rem;
 }
 
-.dashboard-recent h3 {
-  font-size: 1rem;
-  margin: 0 0 0.75rem;
-  color: #555;
+/* Dashboard sections */
+.dashboard-section {
+  margin-bottom: 1.5rem;
+}
+
+.dashboard-section h3 {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #888;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin: 0 0 0.5rem;
+}
+
+.dashboard-repo-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.dashboard-repo-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.5rem 0.75rem;
+  background: #fff;
+  border-radius: 8px;
+  margin-bottom: 0.25rem;
+  border: 1.5px solid rgba(0, 0, 0, 0.06);
+}
+
+.dashboard-repo-name {
+  color: #0969da;
+  text-decoration: none;
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
+.dashboard-repo-name:hover {
+  text-decoration: underline;
+}
+
+.dashboard-repo-issues {
+  font-size: 0.75rem;
+  color: #888;
+  white-space: nowrap;
+}
+
+.dashboard-issues-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.dashboard-issue-item {
+  margin-bottom: 0.25rem;
+}
+
+.dashboard-issue-btn {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  width: 100%;
+  padding: 0.5rem 0.75rem;
+  background: #fff;
+  border: 1.5px solid rgba(0, 0, 0, 0.06);
+  border-radius: 8px;
+  cursor: pointer;
+  text-align: left;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.dashboard-issue-btn:hover {
+  border-color: rgba(0, 0, 0, 0.15);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+}
+
+.dashboard-issue-number {
+  font-size: 0.8rem;
+  color: #888;
+  flex-shrink: 0;
+  font-weight: 500;
+}
+
+.dashboard-issue-title {
+  font-size: 0.875rem;
+  color: #333;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dashboard-issue-repo {
+  font-size: 0.725rem;
+  color: #aaa;
+  flex-shrink: 0;
 }
 
 .workspace-detail-header {
