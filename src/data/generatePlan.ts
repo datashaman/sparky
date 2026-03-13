@@ -3,12 +3,15 @@ import { getDb } from "../db";
 import type { ExecutionPlan, AnalysisResult, Agent, Skill } from "./types";
 import type { GitHubIssue } from "../github";
 import { callLLM } from "./llm";
+import { TOOLS } from "./tools";
 
 const PLAN_SYSTEM_PROMPT = `You are a senior software engineering project manager. Given a GitHub issue analysis, available agents, and their skills, create a concrete step-by-step execution plan to resolve the issue.
 
 Each step must be delegated to a specific agent. Steps can depend on other steps. Be practical and direct — no filler.
 
-The plan should be minimal: only include steps that are necessary to resolve the issue. Prefer fewer, well-scoped steps over many granular ones.`;
+The plan should be minimal: only include steps that are necessary to resolve the issue. Prefer fewer, well-scoped steps over many granular ones.
+
+Agents have access to sandboxed tools for interacting with issue worktrees. Available tools: ${TOOLS.map((t) => `${t.name} (${t.description}${t.dangerous ? " — dangerous" : ""})`).join(", ")}. When specifying tool_names for a step, choose the minimal set of tools needed. Read-only steps need only Read/Glob/Grep. Steps that modify code need Write/Edit. Steps that run commands need Bash.`;
 
 const PLAN_SCHEMA = {
   type: "object" as const,
@@ -28,6 +31,11 @@ const PLAN_SCHEMA = {
             items: { type: "string" as const },
             description: "Skills the agent should use for this step",
           },
+          tool_names: {
+            type: "array" as const,
+            items: { type: "string" as const, enum: TOOLS.map((t) => t.id) },
+            description: "Tool IDs the agent needs for this step (e.g. read, write, edit, glob, grep, bash)",
+          },
           expected_output: { type: "string" as const, description: "What this step should produce" },
           depends_on: {
             type: "array" as const,
@@ -35,7 +43,7 @@ const PLAN_SCHEMA = {
             description: "Order numbers of prerequisite steps",
           },
         },
-        required: ["order", "title", "description", "agent_name", "skill_names", "expected_output", "depends_on"],
+        required: ["order", "title", "description", "agent_name", "skill_names", "tool_names", "expected_output", "depends_on"],
         additionalProperties: false,
       },
       description: "Ordered execution steps",

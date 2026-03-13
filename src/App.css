@@ -4334,6 +4334,12 @@ button.user-code:focus-visible {
   border-radius: 4px;
 }
 
+.pv-tool-pill {
+  background: #fef3c7;
+  color: #92400e;
+  border-color: #fcd34d;
+}
+
 .pv-step-output {
   font-size: 0.8rem;
   color: #64748b;
@@ -4396,6 +4402,12 @@ button.user-code:focus-visible {
     background: #1e293b;
     color: #94a3b8;
     border-color: #334155;
+  }
+
+  .pv-tool-pill {
+    background: #422006;
+    color: #fbbf24;
+    border-color: #78350f;
   }
 
   .pv-step-output {
