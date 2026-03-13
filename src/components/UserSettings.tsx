@@ -107,9 +107,10 @@ export function UserSettings({ open, onClose }: Props) {
   useEffect(() => {
     try { localStorage.setItem(DEFAULT_PROVIDER_KEY, provider); } catch { /* ignore */ }
     // Reset model if provider changes and current model isn't in new list
+    // Skip for free-text providers (empty model list)
     if (provider) {
       const available = AGENT_MODELS[provider];
-      if (!available.includes(model)) {
+      if (available.length > 0 && !available.includes(model)) {
         setModel(available[0] ?? "");
       }
     } else {
@@ -123,9 +124,10 @@ export function UserSettings({ open, onClose }: Props) {
 
   useEffect(() => {
     try { localStorage.setItem(EXEC_PROVIDER_KEY, execProvider); } catch { /* ignore */ }
+    // Skip for free-text providers (empty model list)
     if (execProvider) {
       const available = AGENT_MODELS[execProvider];
-      if (!available.includes(execModel)) {
+      if (available.length > 0 && !available.includes(execModel)) {
         setExecModel(available[0] ?? "");
       }
     } else {

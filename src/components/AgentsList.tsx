@@ -70,7 +70,7 @@ export function AgentsList({ workspaceId, onSelectAgent }: Props) {
   }, [workspaceId]);
 
   useEffect(() => {
-    setFormModel(models[0] ?? "");
+    if (models.length > 0) setFormModel(models[0] ?? "");
   }, [formProvider]);
 
   function resetForm() {

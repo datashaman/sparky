@@ -101,7 +101,7 @@ export function AgentDetail({ agentId, workspaceId, onBack, onDeleted }: AgentDe
   useEffect(() => {
     if (!agent) return;
     // Only auto-reset when provider actually changes away from the agent's saved provider
-    if (formProvider !== agent.provider) {
+    if (formProvider !== agent.provider && AGENT_MODELS[formProvider].length > 0) {
       setFormModel(AGENT_MODELS[formProvider][0] ?? "");
     }
   }, [formProvider]);
