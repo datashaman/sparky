@@ -4426,6 +4426,122 @@ button.user-code:focus-visible {
   word-break: break-word;
 }
 
+/* Critic review section */
+.pv-critic {
+  border-radius: 8px;
+  padding: 0;
+  margin-bottom: 0.75rem;
+  overflow: hidden;
+}
+
+.pv-critic-pass {
+  border: 1px solid #bbf7d0;
+  background: #f0fdf4;
+}
+
+.pv-critic-fail {
+  border: 1px solid #fde68a;
+  background: #fffbeb;
+}
+
+.pv-critic-header {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.6rem 0.75rem;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 0.85rem;
+  text-align: left;
+}
+
+.pv-critic-badge {
+  font-size: 0.7rem;
+  font-weight: 700;
+  padding: 0.15rem 0.5rem;
+  border-radius: 4px;
+  white-space: nowrap;
+}
+
+.pv-badge-pass {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.pv-badge-fail {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.pv-critic-summary {
+  flex: 1;
+  color: #475569;
+}
+
+.pv-critic-toggle {
+  color: #94a3b8;
+  font-size: 0.75rem;
+}
+
+.pv-critic-issues {
+  list-style: none;
+  margin: 0;
+  padding: 0 0.75rem 0.6rem;
+}
+
+.pv-critic-issue {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  align-items: baseline;
+  padding: 0.35rem 0;
+  font-size: 0.8rem;
+  border-top: 1px solid rgba(0, 0, 0, 0.06);
+}
+
+.pv-critic-severity {
+  font-weight: 700;
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  padding: 0.1rem 0.35rem;
+  border-radius: 3px;
+}
+
+.pv-critic-error .pv-critic-severity {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.pv-critic-warning .pv-critic-severity {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.pv-critic-info .pv-critic-severity {
+  background: #e0f2fe;
+  color: #075985;
+}
+
+.pv-critic-step-ref {
+  font-weight: 600;
+  color: #6366f1;
+  font-size: 0.75rem;
+}
+
+.pv-critic-desc {
+  color: #334155;
+}
+
+.pv-critic-suggestion {
+  width: 100%;
+  font-size: 0.75rem;
+  color: #64748b;
+  font-style: italic;
+  padding-left: 0.5rem;
+}
+
 .pv-execute {
   margin-top: 1rem;
   display: flex;
@@ -4551,6 +4667,42 @@ button.user-code:focus-visible {
     background: #450a0a;
     border-color: #7f1d1d;
     color: #fca5a5;
+  }
+
+  .pv-critic-pass {
+    background: #052e16;
+    border-color: #166534;
+  }
+
+  .pv-critic-fail {
+    background: #451a03;
+    border-color: #92400e;
+  }
+
+  .pv-critic-summary {
+    color: #cbd5e1;
+  }
+
+  .pv-badge-pass {
+    background: #166534;
+    color: #bbf7d0;
+  }
+
+  .pv-badge-fail {
+    background: #78350f;
+    color: #fde68a;
+  }
+
+  .pv-critic-issue {
+    border-top-color: rgba(255, 255, 255, 0.06);
+  }
+
+  .pv-critic-desc {
+    color: #e2e8f0;
+  }
+
+  .pv-critic-suggestion {
+    color: #94a3b8;
   }
 }
 

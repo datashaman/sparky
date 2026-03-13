@@ -97,6 +97,25 @@ export interface ExecutionPlanResult {
   goal: string;
   steps: ExecutionPlanStep[];
   success_criteria: string;
+  critic_review?: CriticReview;
+}
+
+export interface CriticIssue {
+  severity: "error" | "warning" | "info";
+  step_order: number | null;
+  description: string;
+  suggestion: string;
+}
+
+export interface CriticReview {
+  verdict: "pass" | "fail";
+  issues: CriticIssue[];
+  summary: string;
+}
+
+export interface ReplanCheck {
+  decision: "continue" | "replan";
+  reason: string;
 }
 
 export type PlanStatus = "pending" | "running" | "done" | "error";

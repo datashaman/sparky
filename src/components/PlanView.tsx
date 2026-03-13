@@ -1,8 +1,9 @@
 import { useState } from "react";
-import type { ExecutionPlanResult, StepExecutionStatus } from "../data/types";
+import type { ExecutionPlanResult, StepExecutionStatus, CriticReview } from "../data/types";
 
 interface PlanViewProps {
   result: ExecutionPlanResult;
+  criticReview?: CriticReview;
   stepStatuses?: Map<number, StepExecutionStatus>;
   executing?: boolean;
   executionError?: string | null;
@@ -22,7 +23,42 @@ function StepStatusBadge({ status }: { status: StepExecutionStatus }) {
   }
 }
 
-export function PlanView({ result, stepStatuses, executing, executionError, onExecute }: PlanViewProps) {
+function CriticReviewSection({ review }: { review: CriticReview }) {
+  const [expanded, setExpanded] = useState(false);
+  const isPassing = review.verdict === "pass";
+
+  return (
+    <div className={`pv-critic ${isPassing ? "pv-critic-pass" : "pv-critic-fail"}`}>
+      <button
+        type="button"
+        className="pv-critic-header"
+        onClick={() => setExpanded(!expanded)}
+      >
+        <span className={`pv-critic-badge ${isPassing ? "pv-badge-pass" : "pv-badge-fail"}`}>
+          {isPassing ? "✓ Pass" : "⚠ Issues"}
+        </span>
+        <span className="pv-critic-summary">{review.summary}</span>
+        <span className="pv-critic-toggle">{expanded ? "▾" : "▸"}</span>
+      </button>
+      {expanded && review.issues.length > 0 && (
+        <ul className="pv-critic-issues">
+          {review.issues.map((issue, i) => (
+            <li key={i} className={`pv-critic-issue pv-critic-${issue.severity}`}>
+              <span className="pv-critic-severity">{issue.severity}</span>
+              {issue.step_order !== null && (
+                <span className="pv-critic-step-ref">Step {issue.step_order}</span>
+              )}
+              <span className="pv-critic-desc">{issue.description}</span>
+              <span className="pv-critic-suggestion">{issue.suggestion}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+export function PlanView({ result, criticReview, stepStatuses, executing, executionError, onExecute }: PlanViewProps) {
   const [expandedSteps, setExpandedSteps] = useState<Set<number>>(new Set());
 
   const toggleExpanded = (order: number) => {
@@ -40,6 +76,8 @@ export function PlanView({ result, stepStatuses, executing, executionError, onEx
         <h3 className="pv-goal-label">Goal</h3>
         <p className="pv-goal-text">{result.goal}</p>
       </div>
+
+      {criticReview && <CriticReviewSection review={criticReview} />}
 
       <div className="pv-steps">
         {result.steps.map((step) => {

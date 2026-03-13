@@ -1,9 +1,10 @@
 import { getDefaultProvider, getDefaultModel, getApiKey } from "../components/UserSettings";
 import { getDb } from "../db";
-import type { ExecutionPlan, AnalysisResult, Agent, Skill } from "./types";
+import type { ExecutionPlan, ExecutionPlanResult, AnalysisResult, Agent, Skill } from "./types";
 import type { GitHubIssue } from "../github";
 import { callLLM } from "./llm";
 import { TOOLS } from "./tools";
+import { reviewPlan, refinePlan } from "./criticPlan";
 
 const PLAN_SYSTEM_PROMPT = `You are a senior software engineering project manager. Given a GitHub issue analysis, available agents, and their skills, create a concrete step-by-step execution plan to resolve the issue.
 
@@ -18,7 +19,7 @@ For each step:
 - Only assign an agent_name when a specialized agent would do the step better than the issue LLM working alone.
 - skill_names can reference skills the issue LLM should load for context on that step, regardless of whether an agent is assigned.`;
 
-const PLAN_SCHEMA = {
+export const PLAN_SCHEMA = {
   type: "object" as const,
   properties: {
     goal: { type: "string" as const, description: "One-sentence goal statement for the plan" },
@@ -54,7 +55,7 @@ const PLAN_SCHEMA = {
   additionalProperties: false,
 };
 
-function buildPlanPrompt(
+export function buildPlanPrompt(
   issue: GitHubIssue & { full_name: string },
   analysisResult: AnalysisResult,
   agents: Agent[],
@@ -168,10 +169,33 @@ export async function runPlanGeneration(
     });
     console.log("[plan] success, response length:", text.length);
 
-    const parsed = JSON.parse(text);
+    let parsed: ExecutionPlanResult = JSON.parse(text);
     if (!parsed.goal || !parsed.steps || !parsed.success_criteria) {
       throw new Error("Invalid plan response: missing required fields");
     }
+
+    // Critic review: validate the generated plan
+    console.log("[plan] running critic review");
+    const criticReview = await reviewPlan(parsed, issue, analysisResult, provider, modelId, apiKey);
+
+    if (criticReview.verdict === "fail") {
+      console.log("[plan] critic failed plan, refining (1 cycle)");
+      parsed = await refinePlan(
+        parsed,
+        criticReview,
+        issue,
+        analysisResult,
+        agents,
+        skills,
+        PLAN_SCHEMA,
+        buildPlanPrompt,
+        provider,
+        modelId,
+        apiKey,
+      );
+    }
+
+    parsed.critic_review = criticReview;
     const result = JSON.stringify(parsed);
 
     await updatePlan(plan.id, { status: "done", result });

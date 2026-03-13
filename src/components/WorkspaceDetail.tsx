@@ -13,7 +13,7 @@ import { getPlanForIssue, createPlan, deletePlansForIssue } from "../data/execut
 import { getWorktreeForIssue, removeWorktree } from "../data/issueWorktrees";
 import { runAnalysis } from "../data/analyseIssue";
 import { runPlanGeneration } from "../data/generatePlan";
-import type { IssueAnalysis, AnalysisResult, ExecutionPlan, ExecutionPlanResult, IssueWorktree, StepExecutionStatus } from "../data/types";
+import type { IssueAnalysis, AnalysisResult, ExecutionPlan, ExecutionPlanResult, IssueWorktree, StepExecutionStatus, CriticReview } from "../data/types";
 import { executePlan } from "../data/executePlan";
 import { marked } from "marked";
 import { AnalysisView } from "./AnalysisView";
@@ -825,9 +825,11 @@ export function WorkspaceDetail({ workspaceId, onSwitchWorkspace, onDeleted, onW
                   {plan?.status === "done" && plan.result && (() => {
                     try {
                       const parsed: ExecutionPlanResult = JSON.parse(plan.result);
+                      const criticReview: CriticReview | undefined = parsed.critic_review;
                       return (
                         <PlanView
                           result={parsed}
+                          criticReview={criticReview}
                           stepStatuses={stepStatuses}
                           executing={executing}
                           executionError={executionError}
@@ -848,6 +850,7 @@ export function WorkspaceDetail({ workspaceId, onSwitchWorkspace, onDeleted, onW
                                 });
                               },
                               onWorktreeUpdate: setWorktree,
+                              onPlanUpdate: (updated) => setPlan(prev => prev ? { ...prev, result: JSON.stringify(updated) } : prev),
                             })
                               .catch((e) => {
                                 const msg = e instanceof Error ? e.message : String(e);

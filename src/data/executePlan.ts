@@ -1,4 +1,4 @@
-import { getDefaultProvider, getDefaultModel, getApiKey } from "../components/UserSettings";
+import { getDefaultProvider, getDefaultModel, getExecProvider, getExecModel, getApiKey } from "../components/UserSettings";
 import { listAgentsForWorkspace, getToolIdsForAgent, getSkillIdsForAgent } from "./agents";
 import { listSkillsForWorkspace } from "./skills";
 import { ensureWorktree } from "./issueWorktrees";
@@ -11,6 +11,7 @@ import type {
   Skill,
   IssueWorktree,
 } from "./types";
+import { checkNeedReplan, regenerateRemainingSteps } from "./replanCheck";
 import type { GitHubIssue } from "../github";
 
 export interface ExecutePlanOpts {
@@ -19,10 +20,11 @@ export interface ExecutePlanOpts {
   issue: GitHubIssue & { full_name: string };
   onStepUpdate: (stepOrder: number, status: StepExecutionStatus) => void;
   onWorktreeUpdate: (wt: IssueWorktree) => void;
+  onPlanUpdate?: (updatedPlan: ExecutionPlanResult) => void;
 }
 
 export async function executePlan(opts: ExecutePlanOpts): Promise<void> {
-  const { planResult, workspaceId, issue, onStepUpdate, onWorktreeUpdate } = opts;
+  const { planResult, workspaceId, issue, onStepUpdate, onWorktreeUpdate, onPlanUpdate } = opts;
 
   // Validate provider/model/key
   const defaultProvider = getDefaultProvider();
@@ -33,6 +35,14 @@ export async function executePlan(opts: ExecutePlanOpts): Promise<void> {
   const defaultApiKey = getApiKey(defaultProvider);
   if (!defaultApiKey) {
     throw new Error(`No API key configured for ${defaultProvider}. Add one in Settings.`);
+  }
+
+  // Resolve execution-specific provider/model (cheaper/faster for step execution)
+  const execProviderVal = getExecProvider() || defaultProvider;
+  const execModelVal = getExecModel() || defaultModel;
+  const execApiKey = execProviderVal !== defaultProvider ? getApiKey(execProviderVal) : defaultApiKey;
+  if (!execApiKey) {
+    throw new Error(`No API key configured for exec provider ${execProviderVal}. Add one in Settings.`);
   }
 
   // Ensure worktree exists
@@ -64,13 +74,22 @@ export async function executePlan(opts: ExecutePlanOpts): Promise<void> {
   // Track step outputs for context passing
   const stepOutputs = new Map<number, string>();
 
+  // Mutable steps array for replan support
+  let steps = [...planResult.steps];
+
+  // Build issue context string for replan checks
+  const issueContext = `${issue.title} (#${issue.number}) in ${issue.full_name}${issue.body ? `\n${issue.body}` : ""}`;
+
   // Mark all steps as pending
-  for (const step of planResult.steps) {
+  for (const step of steps) {
     onStepUpdate(step.order, { status: "pending" });
   }
 
-  // Execute steps in order, respecting dependencies
-  for (const step of planResult.steps) {
+  // Execute steps using index (steps array may change via replan)
+  let stepIdx = 0;
+  while (stepIdx < steps.length) {
+    const step = steps[stepIdx];
+
     // Verify dependencies completed
     for (const dep of step.depends_on) {
       if (!stepOutputs.has(dep)) {
@@ -85,9 +104,9 @@ export async function executePlan(opts: ExecutePlanOpts): Promise<void> {
     try {
       // Resolve agent if specified
       let agent: Agent | undefined;
-      let provider = defaultProvider;
-      let modelId = defaultModel;
-      let apiKey = defaultApiKey;
+      let provider = execProviderVal;
+      let modelId = execModelVal;
+      let apiKey = execApiKey;
       let toolSchemas = TOOL_SCHEMAS;
       let agentContent = "";
 
@@ -133,7 +152,7 @@ export async function executePlan(opts: ExecutePlanOpts): Promise<void> {
       const depsContext = step.depends_on
         .map((dep) => {
           const output = stepOutputs.get(dep);
-          const depStep = planResult.steps.find((s) => s.order === dep);
+          const depStep = steps.find((s) => s.order === dep);
           return output ? `## Output from step ${dep} (${depStep?.title ?? ""})\n${output}` : null;
         })
         .filter(Boolean)
@@ -191,11 +210,65 @@ export async function executePlan(opts: ExecutePlanOpts): Promise<void> {
       stepOutputs.set(step.order, output);
       onStepUpdate(step.order, { status: "done", output });
       console.log(`[execute] step ${step.order} done, output length: ${output.length}`);
+
+      // Adaptive re-planning: check if remaining steps are still valid
+      const remainingSteps = steps.slice(stepIdx + 1);
+      if (remainingSteps.length > 0) {
+        try {
+          const replanResult = await checkNeedReplan(
+            output,
+            step,
+            remainingSteps,
+            planResult.goal,
+            issueContext,
+            execProviderVal,
+            execModelVal,
+            execApiKey,
+          );
+
+          if (replanResult.decision === "replan") {
+            console.log("[execute] replanning:", replanResult.reason);
+            const completedSteps = steps.slice(0, stepIdx + 1);
+            const nextOrder = step.order + 1;
+
+            // Use planning model (reasoning task) for step regeneration
+            const newSteps = await regenerateRemainingSteps(
+              completedSteps,
+              stepOutputs,
+              planResult.goal,
+              issueContext,
+              replanResult.reason,
+              nextOrder,
+              defaultProvider,
+              defaultModel,
+              defaultApiKey,
+            );
+
+            // Replace remaining steps
+            steps = [...completedSteps, ...newSteps];
+
+            // Mark new steps as pending
+            for (const ns of newSteps) {
+              onStepUpdate(ns.order, { status: "pending" });
+            }
+
+            // Notify UI of plan update
+            if (onPlanUpdate) {
+              onPlanUpdate({ ...planResult, steps });
+            }
+          }
+        } catch (replanErr) {
+          // Replan check failure is non-fatal — continue with existing plan
+          console.warn("[execute] replan check failed, continuing:", replanErr);
+        }
+      }
     } catch (e) {
       const error = e instanceof Error ? e.message : String(e);
       console.error(`[execute] step ${step.order} error:`, error);
       onStepUpdate(step.order, { status: "error", error });
       throw e;
     }
+
+    stepIdx++;
   }
 }
