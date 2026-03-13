@@ -9,10 +9,13 @@ import { fetchRepo, listUserRepos, listRepoOpenIssues, type GitHubRepo, type Git
 import { listAgentsForWorkspace } from "../data/agents";
 import { listSkillsForWorkspace } from "../data/skills";
 import { getAnalysisForIssue, createAnalysis } from "../data/issueAnalyses";
+import { getPlanForIssue, createPlan } from "../data/executionPlans";
 import { runAnalysis } from "../data/analyseIssue";
-import type { IssueAnalysis, AnalysisResult } from "../data/types";
+import { runPlanGeneration } from "../data/generatePlan";
+import type { IssueAnalysis, AnalysisResult, ExecutionPlan, ExecutionPlanResult } from "../data/types";
 import { marked } from "marked";
 import { AnalysisView } from "./AnalysisView";
+import { PlanView } from "./PlanView";
 import { SkillDetail } from "./SkillDetail";
 import { AgentDetail } from "./AgentDetail";
 
@@ -85,7 +88,10 @@ export function WorkspaceDetail({ workspaceId, onSwitchWorkspace, onDeleted, onW
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [analysis, setAnalysis] = useState<IssueAnalysis | null>(null);
   const [analysisLoading, setAnalysisLoading] = useState(false);
-  const [issueTab, setIssueTab] = useState<"issue" | "analysis">("issue");
+  const [issueTab, setIssueTab] = useState<"issue" | "analysis" | "plan">("issue");
+  const [plan, setPlan] = useState<ExecutionPlan | null>(null);
+  const [planLoading, setPlanLoading] = useState(false);
+  const [allCreated, setAllCreated] = useState(false);
   const [selectedSkillId, setSelectedSkillId] = useState<string | null>(null);
   const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
 
@@ -97,15 +103,33 @@ export function WorkspaceDetail({ workspaceId, onSwitchWorkspace, onDeleted, onW
   useEffect(() => {
     if (!selectedIssue) {
       setAnalysis(null);
+      setPlan(null);
+      setAllCreated(false);
       setIssueTab("issue");
       return;
     }
     let cancelled = false;
     setAnalysisLoading(true);
-    getAnalysisForIssue(workspaceId, selectedIssue.full_name, selectedIssue.number)
-      .then((a) => { if (!cancelled) setAnalysis(a); })
-      .catch(() => { if (!cancelled) setAnalysis(null); })
-      .finally(() => { if (!cancelled) setAnalysisLoading(false); });
+    setPlanLoading(true);
+    Promise.all([
+      getAnalysisForIssue(workspaceId, selectedIssue.full_name, selectedIssue.number),
+      getPlanForIssue(workspaceId, selectedIssue.full_name, selectedIssue.number),
+    ])
+      .then(([a, p]) => {
+        if (cancelled) return;
+        setAnalysis(a);
+        setPlan(p);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setAnalysis(null);
+        setPlan(null);
+      })
+      .finally(() => {
+        if (cancelled) return;
+        setAnalysisLoading(false);
+        setPlanLoading(false);
+      });
     return () => { cancelled = true; };
   }, [selectedIssue, workspaceId]);
 
@@ -186,6 +210,24 @@ export function WorkspaceDetail({ workspaceId, onSwitchWorkspace, onDeleted, onW
       setSkillCount(skills.length);
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function triggerPlanGeneration() {
+    if (!selectedIssue || !analysis?.result) return;
+    setPlanLoading(true);
+    try {
+      const analysisResult: AnalysisResult = JSON.parse(analysis.result);
+      const [agents, skills] = await Promise.all([
+        listAgentsForWorkspace(workspaceId),
+        listSkillsForWorkspace(workspaceId),
+      ]);
+      const p = await createPlan(workspaceId, selectedIssue.full_name, selectedIssue.number);
+      setPlan(p);
+      setIssueTab("plan");
+      runPlanGeneration(p, selectedIssue, analysisResult, agents, skills, setPlan);
+    } finally {
+      setPlanLoading(false);
     }
   }
 
@@ -634,19 +676,51 @@ export function WorkspaceDetail({ workspaceId, onSwitchWorkspace, onDeleted, onW
                     <span className={`issue-tab-dot issue-tab-dot-${analysis.status}`} />
                   )}
                 </button>
-                {analysis?.status === "done" && (
+                {(analysis?.status === "done" && (allCreated || plan)) && (
                   <button
                     type="button"
-                    className="analyse-btn analyse-btn-inline"
-                    onClick={async () => {
-                      const a = await createAnalysis(workspaceId, selectedIssue.full_name, selectedIssue.number);
-                      setAnalysis(a);
-                      setIssueTab("analysis");
-                      runAnalysis(a, selectedIssue, setAnalysis);
+                    className={`issue-tab ${issueTab === "plan" ? "issue-tab-active" : ""}`}
+                    onClick={() => {
+                      setIssueTab("plan");
+                      if (!plan && !planLoading) {
+                        triggerPlanGeneration();
+                      }
                     }}
                   >
-                    Re-analyse
+                    Plan
+                    {plan && (
+                      <span className={`issue-tab-dot issue-tab-dot-${plan.status}`} />
+                    )}
                   </button>
+                )}
+                {(analysis?.status === "done" || plan?.status === "done") && (
+                  <div className="issue-tabs-actions">
+                    {analysis?.status === "done" && (
+                      <button
+                        type="button"
+                        className="analyse-btn analyse-btn-inline"
+                        onClick={async () => {
+                          const a = await createAnalysis(workspaceId, selectedIssue.full_name, selectedIssue.number);
+                          setAnalysis(a);
+                          setPlan(null);
+                          setAllCreated(false);
+                          setIssueTab("analysis");
+                          runAnalysis(a, selectedIssue, setAnalysis);
+                        }}
+                      >
+                        Re-analyse
+                      </button>
+                    )}
+                    {plan?.status === "done" && (
+                      <button
+                        type="button"
+                        className="analyse-btn analyse-btn-inline"
+                        onClick={() => triggerPlanGeneration()}
+                      >
+                        Re-plan
+                      </button>
+                    )}
+                  </div>
                 )}
               </div>
               {issueTab === "issue" ? (
@@ -658,7 +732,7 @@ export function WorkspaceDetail({ workspaceId, onSwitchWorkspace, onDeleted, onW
                 ) : (
                   <p className="empty-state">No description.</p>
                 )
-              ) : (
+              ) : issueTab === "analysis" ? (
                 <div className="issue-analysis-tab">
                   {analysis?.status === "running" && (
                     <p className="analysis-running">Analysing...</p>
@@ -666,9 +740,8 @@ export function WorkspaceDetail({ workspaceId, onSwitchWorkspace, onDeleted, onW
                   {analysis?.status === "done" && analysis.result && (() => {
                     try {
                       const parsed: AnalysisResult = JSON.parse(analysis.result);
-                      return <AnalysisView result={parsed} workspaceId={workspaceId} />;
+                      return <AnalysisView result={parsed} workspaceId={workspaceId} onAllCreated={() => setAllCreated(true)} />;
                     } catch {
-                      // Legacy markdown result — fall back to raw rendering
                       return (
                         <div
                           className="analysis-result markdown-body"
@@ -692,6 +765,35 @@ export function WorkspaceDetail({ workspaceId, onSwitchWorkspace, onDeleted, onW
                         Retry
                       </button>
                     </div>
+                  )}
+                </div>
+              ) : (
+                <div className="issue-plan-tab">
+                  {(plan?.status === "pending" || plan?.status === "running") && (
+                    <p className="analysis-running">Generating plan...</p>
+                  )}
+                  {plan?.status === "done" && plan.result && (() => {
+                    try {
+                      const parsed: ExecutionPlanResult = JSON.parse(plan.result);
+                      return <PlanView result={parsed} />;
+                    } catch {
+                      return <p className="empty-state">Failed to parse plan result.</p>;
+                    }
+                  })()}
+                  {plan?.status === "error" && (
+                    <div className="analysis-error">
+                      <p>{plan.error}</p>
+                      <button
+                        type="button"
+                        className="analyse-btn"
+                        onClick={() => triggerPlanGeneration()}
+                      >
+                        Retry
+                      </button>
+                    </div>
+                  )}
+                  {!plan && (
+                    <p className="empty-state">No plan generated yet.</p>
                   )}
                 </div>
               )}

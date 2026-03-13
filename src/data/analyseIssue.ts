@@ -1,9 +1,10 @@
 import { getDefaultProvider, getDefaultModel, getApiKey } from "../components/UserSettings";
 import { getDb } from "../db";
-import type { IssueAnalysis, AgentProvider, Skill, Agent } from "./types";
+import type { IssueAnalysis, Skill, Agent } from "./types";
 import type { GitHubIssue } from "../github";
 import { listSkillsForWorkspace } from "./skills";
 import { listAgentsForWorkspace } from "./agents";
+import { callLLM } from "./llm";
 
 const SYSTEM_PROMPT = `You are a senior software engineer analysing a GitHub issue. Provide a concise, structured analysis. Be direct and practical. No filler.
 
@@ -100,95 +101,6 @@ function buildPrompt(
   return parts.join("\n");
 }
 
-async function callLLM(provider: AgentProvider, modelId: string, apiKey: string, prompt: string): Promise<string> {
-  switch (provider) {
-    case "anthropic": {
-      const res = await fetch("https://api.anthropic.com/v1/messages", {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-          "x-api-key": apiKey,
-          "anthropic-version": "2023-06-01",
-          "anthropic-dangerous-direct-browser-access": "true",
-        },
-        body: JSON.stringify({
-          model: modelId,
-          max_tokens: 1024,
-          system: SYSTEM_PROMPT,
-          messages: [{ role: "user", content: prompt }],
-          output_config: {
-            format: {
-              type: "json_schema",
-              schema: ANALYSIS_SCHEMA,
-            },
-          },
-        }),
-      });
-      if (!res.ok) {
-        const body = await res.text();
-        throw new Error(`Anthropic API ${res.status}: ${body}`);
-      }
-      const data = await res.json();
-      return data.content?.map((b: { text: string }) => b.text).join("") ?? "";
-    }
-
-    case "openai": {
-      const res = await fetch("https://api.openai.com/v1/chat/completions", {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-          "authorization": `Bearer ${apiKey}`,
-        },
-        body: JSON.stringify({
-          model: modelId,
-          max_tokens: 1024,
-          response_format: {
-            type: "json_schema",
-            json_schema: {
-              name: "issue_analysis",
-              strict: true,
-              schema: ANALYSIS_SCHEMA,
-            },
-          },
-          messages: [
-            { role: "system", content: SYSTEM_PROMPT },
-            { role: "user", content: prompt },
-          ],
-        }),
-      });
-      if (!res.ok) {
-        const body = await res.text();
-        throw new Error(`OpenAI API ${res.status}: ${body}`);
-      }
-      const data = await res.json();
-      return data.choices?.[0]?.message?.content ?? "";
-    }
-
-    case "gemini": {
-      const res = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/${modelId}:generateContent?key=${apiKey}`,
-        {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({
-            systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] },
-            contents: [{ parts: [{ text: prompt }] }],
-            generationConfig: {
-              responseMimeType: "application/json",
-              responseSchema: ANALYSIS_SCHEMA,
-            },
-          }),
-        },
-      );
-      if (!res.ok) {
-        const body = await res.text();
-        throw new Error(`Gemini API ${res.status}: ${body}`);
-      }
-      const data = await res.json();
-      return data.candidates?.[0]?.content?.parts?.map((p: { text: string }) => p.text).join("") ?? "";
-    }
-  }
-}
 
 async function updateAnalysis(id: string, updates: Partial<IssueAnalysis>): Promise<void> {
   const db = await getDb();
@@ -245,7 +157,15 @@ export async function runAnalysis(
     const prompt = buildPrompt(issue, existingSkills, existingAgents);
     console.log("[analyse] calling", provider, modelId, "prompt length:", prompt.length);
 
-    const text = await callLLM(provider, modelId, apiKey, prompt);
+    const text = await callLLM({
+      provider,
+      modelId,
+      apiKey,
+      systemPrompt: SYSTEM_PROMPT,
+      userPrompt: prompt,
+      schema: ANALYSIS_SCHEMA,
+      schemaName: "issue_analysis",
+    });
     console.log("[analyse] success, response length:", text.length);
 
     // Structured outputs guarantee valid JSON, but validate anyway

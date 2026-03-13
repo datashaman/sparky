@@ -1613,9 +1613,35 @@ button.user-code:focus-visible {
 /* Issue tabs */
 .issue-tabs {
   display: flex;
+  align-items: center;
   gap: 0;
   margin-top: 0.25rem;
   border-bottom: 1.5px solid #e5e7eb;
+}
+
+.issue-tabs-actions {
+  display: flex;
+  gap: 0;
+  margin-left: auto;
+}
+
+.issue-tabs-actions .analyse-btn-inline {
+  border-radius: 0;
+  border-right: none;
+}
+
+.issue-tabs-actions .analyse-btn-inline:first-child {
+  border-radius: 6px 0 0 6px;
+}
+
+.issue-tabs-actions .analyse-btn-inline:last-child {
+  border-radius: 0 6px 6px 0;
+  border-right: 1px solid #d1d5db;
+}
+
+.issue-tabs-actions .analyse-btn-inline:only-child {
+  border-radius: 6px;
+  border-right: 1px solid #d1d5db;
 }
 
 .issue-tab {
@@ -4178,5 +4204,196 @@ button.user-code:focus-visible {
     background: #450a0a;
     border-color: #7f1d1d;
     color: #f87171;
+  }
+}
+
+/* ─── PlanView ─── */
+.pv-root {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  padding: 0.5rem 0;
+}
+
+.pv-goal,
+.pv-criteria {
+  background: #f0f4ff;
+  border: 1px solid #c7d2fe;
+  border-radius: 8px;
+  padding: 0.75rem 1rem;
+}
+
+.pv-goal-label,
+.pv-criteria-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #4338ca;
+  margin: 0 0 0.25rem;
+}
+
+.pv-goal-text,
+.pv-criteria-text {
+  margin: 0;
+  font-size: 0.95rem;
+  line-height: 1.5;
+  color: #1e293b;
+}
+
+.pv-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.pv-step {
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 0.75rem 1rem;
+  transition: border-color 0.15s;
+}
+
+.pv-step:hover {
+  border-color: #a5b4fc;
+}
+
+.pv-step-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.pv-step-number {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  border-radius: 50%;
+  background: #4338ca;
+  color: #fff;
+  font-size: 0.75rem;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.pv-step-title {
+  font-weight: 600;
+  font-size: 0.9rem;
+  color: #1e293b;
+  flex: 1;
+}
+
+.pv-step-agent {
+  font-size: 0.75rem;
+  font-weight: 500;
+  background: #e0e7ff;
+  color: #3730a3;
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
+.pv-step-description {
+  margin: 0 0 0.5rem;
+  font-size: 0.85rem;
+  line-height: 1.5;
+  color: #475569;
+}
+
+.pv-step-skills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-bottom: 0.5rem;
+}
+
+.pv-skill-pill {
+  font-size: 0.7rem;
+  font-weight: 500;
+  background: #f1f5f9;
+  color: #475569;
+  border: 1px solid #cbd5e1;
+  padding: 0.1rem 0.4rem;
+  border-radius: 4px;
+}
+
+.pv-step-output {
+  font-size: 0.8rem;
+  color: #64748b;
+  line-height: 1.4;
+}
+
+.pv-step-output-label {
+  font-weight: 600;
+  color: #475569;
+}
+
+.pv-step-deps {
+  margin-top: 0.35rem;
+  font-size: 0.75rem;
+  color: #94a3b8;
+  font-style: italic;
+}
+
+/* PlanView dark mode */
+@media (prefers-color-scheme: dark) {
+  .pv-goal,
+  .pv-criteria {
+    background: #1e1b4b;
+    border-color: #3730a3;
+  }
+
+  .pv-goal-label,
+  .pv-criteria-label {
+    color: #a5b4fc;
+  }
+
+  .pv-goal-text,
+  .pv-criteria-text {
+    color: #e2e8f0;
+  }
+
+  .pv-step {
+    background: #1e1e2e;
+    border-color: #334155;
+  }
+
+  .pv-step:hover {
+    border-color: #6366f1;
+  }
+
+  .pv-step-title {
+    color: #e2e8f0;
+  }
+
+  .pv-step-agent {
+    background: #312e81;
+    color: #a5b4fc;
+  }
+
+  .pv-step-description {
+    color: #94a3b8;
+  }
+
+  .pv-skill-pill {
+    background: #1e293b;
+    color: #94a3b8;
+    border-color: #334155;
+  }
+
+  .pv-step-output {
+    color: #94a3b8;
+  }
+
+  .pv-step-output-label {
+    color: #cbd5e1;
+  }
+
+  .pv-step-deps {
+    color: #64748b;
   }
 }

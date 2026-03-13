@@ -8,6 +8,7 @@ import { marked } from "marked";
 interface AnalysisViewProps {
   result: AnalysisResult;
   workspaceId: string;
+  onAllCreated?: () => void;
 }
 
 const typeBadgeClass: Record<AnalysisResult["type"], string> = {
@@ -24,7 +25,7 @@ const complexityBadgeClass: Record<AnalysisResult["complexity"], string> = {
   high: "av-complexity-high",
 };
 
-export function AnalysisView({ result, workspaceId }: AnalysisViewProps) {
+export function AnalysisView({ result, workspaceId, onAllCreated }: AnalysisViewProps) {
   const [selectedSkills, setSelectedSkills] = useState<Set<string>>(new Set());
   const [selectedAgents, setSelectedAgents] = useState<Set<string>>(new Set());
   const [existingSkills, setExistingSkills] = useState<Set<string>>(new Set());
@@ -48,6 +49,13 @@ export function AnalysisView({ result, workspaceId }: AnalysisViewProps) {
       setSelectedSkills(new Set(result.skills.map((s) => s.name).filter((n) => !skillNames.has(n))));
       setSelectedAgents(new Set(result.agents.map((a) => a.name).filter((n) => !agentNames.has(n))));
       setLoaded(true);
+
+      // If all already exist on load, notify parent immediately
+      const allExistOnLoad = result.skills.every((s) => skillNames.has(s.name))
+        && result.agents.every((a) => agentNames.has(a.name));
+      if (allExistOnLoad && onAllCreated) {
+        onAllCreated();
+      }
     }
     load();
     return () => { cancelled = true; };
@@ -120,10 +128,19 @@ export function AnalysisView({ result, workspaceId }: AnalysisViewProps) {
       }
 
       // Refresh existing sets so pills show as already created
-      setExistingSkills((prev) => new Set([...prev, ...selectedSkills]));
-      setExistingAgents((prev) => new Set([...prev, ...selectedAgents]));
+      const newExistingSkills = new Set([...existingSkills, ...selectedSkills]);
+      const newExistingAgents = new Set([...existingAgents, ...selectedAgents]);
+      setExistingSkills(newExistingSkills);
+      setExistingAgents(newExistingAgents);
       setSelectedSkills(new Set());
       setSelectedAgents(new Set());
+
+      // Notify parent if all recommended skills/agents now exist
+      const allNowExist = result.skills.every((s) => newExistingSkills.has(s.name))
+        && result.agents.every((a) => newExistingAgents.has(a.name));
+      if (allNowExist && onAllCreated) {
+        onAllCreated();
+      }
     } finally {
       setCreating(false);
     }
