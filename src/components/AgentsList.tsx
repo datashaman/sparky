@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
   listAgentsForWorkspace,
   createAgent,
@@ -73,14 +73,22 @@ export function AgentsList({ workspaceId, onSelectAgent }: Props) {
     load();
   }, [workspaceId]);
 
+  const providerRef = useRef(formProvider);
+  providerRef.current = formProvider;
+
   useEffect(() => {
-    if (formProvider === "ollama") {
+    const current = formProvider;
+    if (current === "ollama") {
+      setFormModel("");
       fetchOllamaModels().then((m) => {
+        if (providerRef.current !== current) return;
         setOllamaModels(m);
         if (m.length > 0) setFormModel(m[0]);
       });
-    } else if (formProvider === "openrouter") {
+    } else if (current === "openrouter") {
+      setFormModel("");
       fetchOpenRouterModels().then((m) => {
+        if (providerRef.current !== current) return;
         setOpenrouterModels(m);
         if (m.length > 0) setFormModel(m[0]);
       });

@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
   getAgent,
   updateAgent,
@@ -101,22 +101,29 @@ export function AgentDetail({ agentId, workspaceId, onBack, onDeleted }: AgentDe
 
   const [ollamaModels, setOllamaModels] = useState<string[]>([]);
   const [openrouterModels, setOpenrouterModels] = useState<string[]>([]);
+  const providerRef = useRef(formProvider);
+  providerRef.current = formProvider;
 
   // When provider changes, reset model to first available for that provider
   useEffect(() => {
     if (!agent) return;
-    if (formProvider === "ollama") {
+    const current = formProvider;
+    if (current === "ollama") {
+      if (current !== agent.provider) setFormModel("");
       fetchOllamaModels().then((m) => {
+        if (providerRef.current !== current) return;
         setOllamaModels(m);
-        if (formProvider !== agent.provider && m.length > 0) setFormModel(m[0]);
+        if (current !== agent.provider && m.length > 0) setFormModel(m[0]);
       });
-    } else if (formProvider === "openrouter") {
+    } else if (current === "openrouter") {
+      if (current !== agent.provider) setFormModel("");
       fetchOpenRouterModels().then((m) => {
+        if (providerRef.current !== current) return;
         setOpenrouterModels(m);
-        if (formProvider !== agent.provider && m.length > 0) setFormModel(m[0]);
+        if (current !== agent.provider && m.length > 0) setFormModel(m[0]);
       });
-    } else if (formProvider !== agent.provider && AGENT_MODELS[formProvider].length > 0) {
-      setFormModel(AGENT_MODELS[formProvider][0] ?? "");
+    } else if (current !== agent.provider && AGENT_MODELS[current].length > 0) {
+      setFormModel(AGENT_MODELS[current][0] ?? "");
     }
   }, [formProvider]);
 

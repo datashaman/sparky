@@ -11,7 +11,10 @@ export async function fetchOllamaModels(): Promise<string[]> {
       cachedModels = await invoke<string[]>("ollama_list_models");
     } else {
       const res = await fetch("http://localhost:11434/api/tags");
-      if (!res.ok) return [];
+      if (!res.ok) {
+        cachedModels = [];
+        return cachedModels;
+      }
       const data = await res.json();
       cachedModels = (data.models ?? []).map((m: { name: string }) => m.name);
     }

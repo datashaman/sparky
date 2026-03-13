@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { listSkillsForWorkspace, createSkill, deleteSkill } from "../data/skills";
 import { AGENT_PROVIDERS, AGENT_MODELS } from "../data/agents";
 import { fetchOllamaModels } from "../data/ollamaModels";
@@ -45,11 +45,25 @@ export function SkillsList({ workspaceId, onSelectSkill }: Props) {
   const [ollamaModels, setOllamaModels] = useState<string[]>([]);
   const [openrouterModels, setOpenrouterModels] = useState<string[]>([]);
 
+  const providerRef = useRef(formProvider);
+  providerRef.current = formProvider;
+
   useEffect(() => {
-    if (formProvider === "ollama") {
-      fetchOllamaModels().then(setOllamaModels);
-    } else if (formProvider === "openrouter") {
-      fetchOpenRouterModels().then(setOpenrouterModels);
+    const current = formProvider;
+    if (current === "ollama") {
+      setFormModel("");
+      fetchOllamaModels().then((m) => {
+        if (providerRef.current !== current) return;
+        setOllamaModels(m);
+        if (m.length > 0) setFormModel(m[0]);
+      });
+    } else if (current === "openrouter") {
+      setFormModel("");
+      fetchOpenRouterModels().then((m) => {
+        if (providerRef.current !== current) return;
+        setOpenrouterModels(m);
+        if (m.length > 0) setFormModel(m[0]);
+      });
     }
   }, [formProvider]);
 
