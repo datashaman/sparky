@@ -15,13 +15,15 @@ interface WorkspaceDetailProps {
   onSwitchWorkspace: (id: string) => void;
   onDeleted: () => void;
   onWorkspaceNameChange?: (name: string) => void;
+  /** When in multi-window mode: go back to the workspaces list window. */
+  onBackToWorkspaces?: () => void;
 }
 
 type WorkspacePage = "workspaces" | "dashboard" | "agents" | "skills" | "issues" | "settings";
 
 const TOOLBAR_COMPACT_KEY = "sparky_toolbar_compact";
 
-export function WorkspaceDetail({ workspaceId, onSwitchWorkspace, onDeleted, onWorkspaceNameChange }: WorkspaceDetailProps) {
+export function WorkspaceDetail({ workspaceId, onSwitchWorkspace, onDeleted, onWorkspaceNameChange, onBackToWorkspaces }: WorkspaceDetailProps) {
   const [page, setPage] = useState<WorkspacePage>("dashboard");
   const [toolbarCompact, setToolbarCompact] = useState(() => {
     try {
@@ -56,6 +58,7 @@ export function WorkspaceDetail({ workspaceId, onSwitchWorkspace, onDeleted, onW
   const [workspaceNameInput, setWorkspaceNameInput] = useState("");
   const [savingWorkspace, setSavingWorkspace] = useState(false);
   const [workspaceSaveError, setWorkspaceSaveError] = useState<string | null>(null);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
 
   useEffect(() => {
     load();
@@ -205,7 +208,14 @@ export function WorkspaceDetail({ workspaceId, onSwitchWorkspace, onDeleted, onW
   }
 
   async function handleDeleteWorkspace() {
-    if (!workspace || !confirm(`Delete workspace "${workspace.name}"?`)) return;
+    if (!workspace) return;
+
+    // First click: show inline confirmation state instead of relying on window.confirm
+    if (!confirmingDelete) {
+      setConfirmingDelete(true);
+      return;
+    }
+
     await deleteWorkspace(workspaceId);
     onDeleted();
   }
@@ -329,7 +339,7 @@ export function WorkspaceDetail({ workspaceId, onSwitchWorkspace, onDeleted, onW
       <div className="workspace-detail">
         <div className="workspace-detail-body">
           <nav className={`workspace-toolbar ${toolbarCompact ? "compact" : "expanded"}`} aria-label="Workspace navigation">
-            <button type="button" className="workspace-toolbar-btn" onClick={() => { setSelectedIssue(null); setPage("workspaces"); }} title="All Workspaces">
+            <button type="button" className="workspace-toolbar-btn" onClick={() => { setSelectedIssue(null); onBackToWorkspaces ? onBackToWorkspaces() : setPage("workspaces"); }} title="All Workspaces">
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
                 <rect width="8" height="4" x="2" y="4" rx="1" />
                 <path d="M10 4h12" />
@@ -365,7 +375,7 @@ export function WorkspaceDetail({ workspaceId, onSwitchWorkspace, onDeleted, onW
           <button
             type="button"
             className={`workspace-toolbar-btn ${page === "workspaces" && !selectedIssue ? "active" : ""}`}
-            onClick={() => { setSelectedIssue(null); setPage("workspaces"); }}
+            onClick={() => { setSelectedIssue(null); onBackToWorkspaces ? onBackToWorkspaces() : setPage("workspaces"); }}
             title="All Workspaces"
           >
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
@@ -712,17 +722,29 @@ export function WorkspaceDetail({ workspaceId, onSwitchWorkspace, onDeleted, onW
         )}
       </div>
 
-      <section className="settings-danger-zone">
+      <section className={`settings-danger-zone ${confirmingDelete ? "settings-danger-zone-confirming" : ""}`}>
         <h3>Danger Zone</h3>
         <div className="danger-zone-content">
-          <p className="danger-zone-desc">Permanently delete this workspace and remove all associated data. This action cannot be undone.</p>
+          <p className="danger-zone-desc">
+            {confirmingDelete
+              ? `Really delete workspace "${workspace.name}"? This cannot be undone.`
+              : "Permanently delete this workspace and remove all associated data. This action cannot be undone."}
+          </p>
           <button
             type="button"
             onClick={handleDeleteWorkspace}
             className="delete-workspace-btn"
           >
-            Delete workspace
+            {confirmingDelete ? "Confirm delete" : "Delete workspace"}
           </button>
+          {confirmingDelete && (
+            <button
+              type="button"
+              onClick={() => setConfirmingDelete(false)}
+            >
+              Cancel
+            </button>
+          )}
         </div>
       </section>
           </div>

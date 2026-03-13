@@ -10,11 +10,12 @@
     "tauri": "dotenv -e .env -- tauri"
   },
   "dependencies": {
-    "react": "^18.3.1",
-    "react-dom": "^18.3.1",
     "@tauri-apps/api": "^2",
     "@tauri-apps/plugin-opener": "^2",
-    "@tauri-apps/plugin-sql": "^2"
+    "@tauri-apps/plugin-process": "^2.3.1",
+    "@tauri-apps/plugin-sql": "^2",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
   },
   "devDependencies": {
     "@types/react": "^18.3.1",

@@ -12,12 +12,34 @@
   "app": {
     "windows": [
       {
-        "title": "sparky",
+        "label": "login",
+        "title": "Sparky",
         "width": 400,
         "height": 280,
         "minWidth": 360,
         "minHeight": 240,
-        "resizable": true
+        "resizable": true,
+        "visible": false
+      },
+      {
+        "label": "workspaces",
+        "title": "Sparky",
+        "width": 680,
+        "height": 560,
+        "minWidth": 600,
+        "minHeight": 400,
+        "resizable": true,
+        "visible": false
+      },
+      {
+        "label": "detail",
+        "title": "Sparky",
+        "width": 840,
+        "height": 640,
+        "minWidth": 720,
+        "minHeight": 500,
+        "resizable": true,
+        "visible": false
       }
     ],
     "security": {

@@ -13,6 +13,7 @@ export function WorkspaceList({ onSelectWorkspace }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [newName, setNewName] = useState("");
   const [creating, setCreating] = useState(false);
+  const [confirmingDeleteId, setConfirmingDeleteId] = useState<string | null>(null);
 
   async function load() {
     setLoading(true);
@@ -56,10 +57,17 @@ export function WorkspaceList({ onSelectWorkspace }: Props) {
 
   async function handleDelete(id: string, e: React.MouseEvent) {
     e.stopPropagation();
-    if (!confirm("Delete this workspace?")) return;
+
+    // First click: arm delete for this workspace only
+    if (confirmingDeleteId !== id) {
+      setConfirmingDeleteId(id);
+      return;
+    }
+
     setError(null);
     try {
       await deleteWorkspace(id);
+      setConfirmingDeleteId(null);
       await load();
     } catch (e) {
       setError(String(e));
@@ -91,7 +99,7 @@ export function WorkspaceList({ onSelectWorkspace }: Props) {
           {workspaces.map((w) => (
             <li
               key={w.id}
-              className="workspace-item"
+              className={`workspace-item ${confirmingDeleteId === w.id ? "workspace-item-confirming-delete" : ""}`}
               role="button"
               tabIndex={0}
               onClick={() => onSelectWorkspace(w.id)}
@@ -103,10 +111,22 @@ export function WorkspaceList({ onSelectWorkspace }: Props) {
                 type="button"
                 className="workspace-delete"
                 onClick={(e) => handleDelete(w.id, e)}
-                aria-label={`Delete ${w.name}`}
+                aria-label={confirmingDeleteId === w.id ? `Confirm delete ${w.name}` : `Delete ${w.name}`}
               >
-                ×
+                {confirmingDeleteId === w.id ? "!" : "×"}
               </button>
+              {confirmingDeleteId === w.id && (
+                <button
+                  type="button"
+                  className="workspace-delete-cancel"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setConfirmingDeleteId(null);
+                  }}
+                >
+                  Cancel
+                </button>
+              )}
             </li>
           ))}
         </ul>

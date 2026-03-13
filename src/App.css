@@ -544,6 +544,11 @@ button.user-code:focus-visible {
   border: 2px solid transparent;
 }
 
+.workspace-item-confirming-delete {
+  border-color: #f97373;
+  background: #fee2e2;
+}
+
 .workspace-item:hover {
   background: #ddd;
 }
@@ -1054,6 +1059,11 @@ button.user-code:focus-visible {
   color: #555;
 }
 
+.settings-danger-zone-confirming .danger-zone-desc {
+  color: #b91c1c;
+  font-weight: 500;
+}
+
 .add-repo-row {
   display: flex;
   gap: 0.5rem;
@@ -1326,6 +1336,12 @@ button.user-code:focus-visible {
   min-width: 2rem;
   font-size: 1.25em;
   line-height: 1;
+}
+
+.workspace-delete-cancel {
+  margin-left: 0.5rem;
+  font-size: 0.85rem;
+  padding: 0.25rem 0.6rem;
 }
 
 .empty-state {

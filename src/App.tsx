@@ -1,10 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { invoke, isTauri } from "@tauri-apps/api/core";
-import {
-  getCurrentWindow,
-  LogicalSize,
-  LogicalPosition,
-} from "@tauri-apps/api/window";
+import { getCurrentWindow, LogicalSize, LogicalPosition } from "@tauri-apps/api/window";
+import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { getWorkspace } from "./data/workspaces";
 import { WorkspaceList } from "./components/WorkspaceList";
 import { WorkspaceDetail } from "./components/WorkspaceDetail";
@@ -12,6 +9,7 @@ import { ErrorMessage } from "./components/ErrorMessage";
 import "./App.css";
 
 const DETAIL_WINDOW_STATE_KEY = "sparky_detail_window_state";
+const DETAIL_WORKSPACE_ID_KEY = "sparky_detail_workspace_id";
 
 interface DetailWindowState {
   width: number;
@@ -45,7 +43,8 @@ function getStoredDetailWindowState(): DetailWindowState | null {
       return null;
     }
     return parsed;
-  } catch {
+  } catch (e) {
+    console.error("Failed to read detail window state from localStorage", e);
     return null;
   }
 }
@@ -53,8 +52,17 @@ function getStoredDetailWindowState(): DetailWindowState | null {
 function storeDetailWindowState(state: DetailWindowState): void {
   try {
     localStorage.setItem(DETAIL_WINDOW_STATE_KEY, JSON.stringify(state));
+  } catch (e) {
+    console.error("Failed to store detail window state to localStorage", e);
+  }
+}
+
+function getStoredDetailWorkspaceId(): string | null {
+  try {
+    const id = localStorage.getItem(DETAIL_WORKSPACE_ID_KEY);
+    return id && id.length > 0 ? id : null;
   } catch {
-    // ignore
+    return null;
   }
 }
 
@@ -67,66 +75,129 @@ function App() {
   const [workspaceName, setWorkspaceName] = useState<string | null>(null);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const userMenuRef = useRef<HTMLDivElement | null>(null);
+  const [windowLabel, setWindowLabel] = useState<string | null>(() =>
+    isTauri() ? getCurrentWindow().label : null
+  );
 
   useEffect(() => {
     if (!isTauri()) {
       setUser({ login: "preview", id: 0 });
+      setWindowLabel("web");
       return;
     }
+
+    const win = getCurrentWindow();
+    setWindowLabel(win.label);
+
     const stored = localStorage.getItem("github_user");
     if (stored) {
       try {
-        setUser(JSON.parse(stored));
-      } catch {
+        const parsed = JSON.parse(stored) as GitHubUser;
+        setUser(parsed);
+
+        if (win.label === "login") {
+          (async () => {
+            try {
+              const existing = await WebviewWindow.getByLabel("workspaces");
+              const workspacesWindow = existing ?? new WebviewWindow("workspaces");
+              await workspacesWindow.show();
+            } catch (e) {
+              console.error("Failed to show or create workspaces window on startup", e);
+            }
+            try {
+              await win.close();
+            } catch (e) {
+              console.error("Failed to close login window on startup", e);
+            }
+          })();
+        } else if (win.label === "workspaces") {
+          (async () => {
+            try {
+              await win.show();
+            } catch (e) {
+              console.error("Failed to show workspaces window on startup", e);
+            }
+          })();
+        }
+      } catch (e) {
+        console.error("Failed to parse stored github_user", e);
         localStorage.removeItem("github_user");
       }
+    } else {
+      if (win.label === "login") {
+        (async () => {
+          try {
+            await win.show();
+          } catch (e) {
+            console.error("Failed to show login window on startup", e);
+          }
+        })();
+      }
+    }
+
+    // Workspaces window: listen for github_user changes (login sets it then shows us)
+    if (win.label === "workspaces") {
+      const onStorage = (e: StorageEvent) => {
+        if (e.key === "github_user" && e.newValue) {
+          try {
+            setUser(JSON.parse(e.newValue) as GitHubUser);
+          } catch (err) {
+            console.error("Failed to parse github_user from storage event", err);
+          }
+        }
+      };
+      window.addEventListener("storage", onStorage);
+      return () => window.removeEventListener("storage", onStorage);
     }
   }, []);
 
-  const fullSize = { width: 680, height: 560 };
-  const signInSize = { width: 400, height: 280 };
-
-  // Window size: sign-in compact; list view full; detail view restore saved or default
+  // Detail window: read workspace id from localStorage and react to storage events
   useEffect(() => {
-    if (!isTauri()) return;
+    if (windowLabel !== "detail") return;
+    const id = getStoredDetailWorkspaceId();
+    setSelectedWorkspaceId(id);
+
+    function onStorage(e: StorageEvent) {
+      if (e.key === DETAIL_WORKSPACE_ID_KEY && e.newValue) {
+        setSelectedWorkspaceId(e.newValue);
+      }
+    }
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
+  }, [windowLabel]);
+
+  // Restore detail window size/position (detail window only)
+  useEffect(() => {
+    if (!isTauri() || windowLabel !== "detail") return;
     const win = getCurrentWindow();
+    let cancelled = false;
 
-    if (!user) {
-      win.setSize(new LogicalSize(signInSize.width, signInSize.height)).catch(() => {});
-      return;
-    }
-
-    if (view === "workspaces") {
-      win.setSize(new LogicalSize(fullSize.width, fullSize.height)).catch(() => {});
-      return;
-    }
-
-    if (view === "detail") {
-      let cancelled = false;
-      (async () => {
-        const saved = getStoredDetailWindowState();
+    (async () => {
+      const saved = getStoredDetailWindowState();
+      try {
         if (cancelled) return;
         if (saved) {
-          await win.setSize(new LogicalSize(saved.width, saved.height)).catch(() => {});
-          await win.setPosition(new LogicalPosition(saved.x, saved.y)).catch(() => {});
+          await win.setSize(new LogicalSize(saved.width, saved.height));
+          await win.setPosition(new LogicalPosition(saved.x, saved.y));
           if (saved.fullscreen) {
-            await win.setFullscreen(true).catch(() => {});
+            await win.setFullscreen(true);
           } else if (saved.maximized) {
-            await win.setMaximized(true).catch(() => {});
+            await win.setMaximized(true);
           }
-        } else {
-          await win.setSize(new LogicalSize(fullSize.width, fullSize.height)).catch(() => {});
         }
-      })();
-      return () => {
-        cancelled = true;
-      };
-    }
-  }, [user, view]);
+      } catch (e) {
+        console.error("Failed to restore detail window state", e);
+      }
+    })();
 
-  // Persist detail window size/position/maximized/fullscreen when on detail view
+    return () => {
+      cancelled = true;
+    };
+  }, [windowLabel]);
+
+  // Persist detail window size/position (detail window only)
   useEffect(() => {
-    if (!isTauri() || !user || view !== "detail") return;
+    if (!isTauri() || windowLabel !== "detail") return;
     const win = getCurrentWindow();
     let saveTimeout: ReturnType<typeof setTimeout> | null = null;
 
@@ -149,8 +220,8 @@ function App() {
           maximized,
           fullscreen,
         });
-      } catch {
-        // ignore
+      } catch (e) {
+        console.error("Failed to persist detail window state", e);
       }
     }
 
@@ -162,16 +233,75 @@ function App() {
       }, 200);
     }
 
-    const unlistenPromises = [
-      win.onResized(() => debouncedSave()),
-      win.onMoved(() => debouncedSave()),
-    ];
+    const unlistenPromises = [win.onResized(debouncedSave), win.onMoved(debouncedSave)];
 
     return () => {
       if (saveTimeout) clearTimeout(saveTimeout);
-      void Promise.all(unlistenPromises).then((fns) => fns.forEach((fn) => fn()));
+      void Promise.all(unlistenPromises).then((fns) =>
+        fns.forEach((fn) => {
+          try {
+            fn();
+          } catch (e) {
+            console.error("Failed to unlisten window resize/move", e);
+          }
+        }),
+      );
     };
-  }, [user, view]);
+  }, [windowLabel]);
+
+  // Workspaces window: when user closes via X, exit app only if no other visible window (detail)
+  useEffect(() => {
+    if (!isTauri() || windowLabel !== "workspaces") return;
+    const win = getCurrentWindow();
+    let unlisten: (() => void) | undefined;
+    win
+      .onCloseRequested(async () => {
+        try {
+          const { isVisible } = await import("@tauri-apps/api/webviewWindow");
+          const detail = await WebviewWindow.getByLabel("detail");
+          const detailVisible = detail ? await detail.isVisible() : false;
+          if (!detailVisible) {
+            const { exit } = await import("@tauri-apps/plugin-process");
+            await exit(0);
+          }
+        } catch (e) {
+          console.error("Failed to handle workspaces close", e);
+        }
+      })
+      .then((fn) => {
+        unlisten = fn;
+      });
+    return () => {
+      unlisten?.();
+    };
+  }, [windowLabel]);
+
+  // Detail window: when user closes via X, go back to workspaces instead of closing
+  useEffect(() => {
+    if (!isTauri() || windowLabel !== "detail") return;
+    const win = getCurrentWindow();
+    let unlisten: (() => void) | undefined;
+    win
+      .onCloseRequested((event) => {
+        event.preventDefault();
+        unlisten?.();
+        (async () => {
+          try {
+            const ws = await WebviewWindow.getByLabel("workspaces");
+            if (ws) await ws.show();
+            await win.hide();
+          } catch (e) {
+            console.error("Failed to switch to workspaces on detail close", e);
+          }
+        })();
+      })
+      .then((fn) => {
+        unlisten = fn;
+      });
+    return () => {
+      unlisten?.();
+    };
+  }, [windowLabel]);
 
   useEffect(() => {
     if (!userMenuOpen) return;
@@ -206,7 +336,8 @@ function App() {
         if (!cancelled) {
           setWorkspaceName(ws?.name ?? null);
         }
-      } catch {
+      } catch (e) {
+        console.error("Failed to load workspace name", e);
         if (!cancelled) {
           setWorkspaceName(null);
         }
@@ -218,21 +349,37 @@ function App() {
   }, [selectedWorkspaceId]);
 
   async function handleGitHubLogin() {
-    if (!isTauri()) {
-      setError("Sign in requires the Sparky desktop app.");
-      return;
-    }
     setError(null);
     setLoading(true);
 
     try {
-      const token = await invoke<string>("github_login_web");
-      const userResult = await invoke<GitHubUser>("github_get_user", {
-        accessToken: token,
-      });
-      setUser(userResult);
-      localStorage.setItem("github_token", token);
-      localStorage.setItem("github_user", JSON.stringify(userResult));
+      if (isTauri()) {
+        const token = await invoke<string>("github_login_web");
+        const userResult = await invoke<GitHubUser>("github_get_user", {
+          accessToken: token,
+        });
+        setUser(userResult);
+        localStorage.setItem("github_token", token);
+        localStorage.setItem("github_user", JSON.stringify(userResult));
+
+        if (windowLabel === "login") {
+          const current = getCurrentWindow();
+          try {
+            const existing = await WebviewWindow.getByLabel("workspaces");
+            const workspacesWindow = existing ?? new WebviewWindow("workspaces");
+            await workspacesWindow.show();
+          } catch (e) {
+            console.error("Failed to show or create workspaces window", e);
+          }
+          try {
+            await current.close();
+          } catch (e) {
+            console.error("Failed to close login window", e);
+          }
+        }
+      } else {
+        setError("Sign in requires the Sparky desktop app.");
+      }
     } catch (e) {
       setError(String(e));
     } finally {
@@ -247,6 +394,173 @@ function App() {
     setUserMenuOpen(false);
   }
 
+  async function goBackToWorkspacesWindow() {
+    if (!isTauri() || windowLabel !== "detail") return;
+    const current = getCurrentWindow();
+    try {
+      const ws = await WebviewWindow.getByLabel("workspaces");
+      if (ws) await ws.show();
+      await current.hide();
+    } catch (e) {
+      console.error("Failed to go back to workspaces window", e);
+    }
+  }
+
+  // --- Dedicated login window ---
+  if (windowLabel === "login") {
+    return (
+      <main className="container">
+        <h1>Welcome to Sparky</h1>
+        <div className="sign-in-content">
+          {error && <ErrorMessage message={error} />}
+          <button
+            onClick={handleGitHubLogin}
+            disabled={loading}
+            className="github-btn"
+            type="button"
+          >
+            <svg className="github-logo" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+              <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z" />
+            </svg>
+            <span>{loading ? "Opening browser…" : "Sign in with GitHub"}</span>
+          </button>
+        </div>
+      </main>
+    );
+  }
+
+  // --- Dedicated workspaces window (list only) ---
+  if (windowLabel === "workspaces" && user) {
+    return (
+      <main className="container app-layout">
+        <div className="app-content">
+          <header className="app-header">
+            <h1 className="app-title">Sparky</h1>
+            <div className="user-card header-user" ref={userMenuRef}>
+              <button
+                type="button"
+                className="header-avatar-button"
+                onClick={() => setUserMenuOpen((open) => !open)}
+                aria-label="Account menu"
+              >
+                {user.avatar_url && (
+                  <img
+                    src={user.avatar_url}
+                    alt={user.login}
+                    className="avatar"
+                    width={28}
+                    height={28}
+                  />
+                )}
+              </button>
+              {userMenuOpen && (
+                <div className="header-user-menu" role="menu">
+                  <button
+                    type="button"
+                    className="header-user-menu-item"
+                    onClick={() => setUserMenuOpen(false)}
+                  >
+                    Settings
+                  </button>
+                  <button
+                    type="button"
+                    className="header-user-menu-item header-user-menu-item-danger"
+                    onClick={handleLogout}
+                  >
+                    Sign out
+                  </button>
+                </div>
+              )}
+            </div>
+          </header>
+          <WorkspaceList
+            onSelectWorkspace={async (id) => {
+              try {
+                localStorage.setItem(DETAIL_WORKSPACE_ID_KEY, id);
+                const existing = await WebviewWindow.getByLabel("detail");
+                const detailWindow = existing ?? new WebviewWindow("detail");
+                await detailWindow.show();
+                const current = getCurrentWindow();
+                await current.hide();
+              } catch (e) {
+                console.error("Failed to open detail window", e);
+              }
+            }}
+          />
+        </div>
+      </main>
+    );
+  }
+
+  // --- Dedicated detail window (workspace detail only) ---
+  if (windowLabel === "detail" && user && selectedWorkspaceId) {
+    return (
+      <main className="container app-layout app-layout-detail">
+        <div className="app-content app-content-detail">
+          <header className="app-header">
+            <h1 className="app-title">{workspaceName ?? "Sparky"}</h1>
+            <div className="user-card header-user" ref={userMenuRef}>
+              <button
+                type="button"
+                className="header-avatar-button"
+                onClick={() => setUserMenuOpen((open) => !open)}
+                aria-label="Account menu"
+              >
+                {user.avatar_url && (
+                  <img
+                    src={user.avatar_url}
+                    alt={user.login}
+                    className="avatar"
+                    width={28}
+                    height={28}
+                  />
+                )}
+              </button>
+              {userMenuOpen && (
+                <div className="header-user-menu" role="menu">
+                  <button
+                    type="button"
+                    className="header-user-menu-item"
+                    onClick={() => setUserMenuOpen(false)}
+                  >
+                    Settings
+                  </button>
+                  <button
+                    type="button"
+                    className="header-user-menu-item header-user-menu-item-danger"
+                    onClick={handleLogout}
+                  >
+                    Sign out
+                  </button>
+                </div>
+              )}
+            </div>
+          </header>
+          <WorkspaceDetail
+            workspaceId={selectedWorkspaceId}
+            onSwitchWorkspace={(id) => {
+              setSelectedWorkspaceId(id);
+              localStorage.setItem(DETAIL_WORKSPACE_ID_KEY, id);
+            }}
+            onDeleted={goBackToWorkspacesWindow}
+            onWorkspaceNameChange={setWorkspaceName}
+            onBackToWorkspaces={goBackToWorkspacesWindow}
+          />
+        </div>
+      </main>
+    );
+  }
+
+  // --- Detail window but no workspace selected yet (shouldn't normally show) ---
+  if (windowLabel === "detail") {
+    return (
+      <main className="container">
+        <p className="loading">No workspace selected.</p>
+      </main>
+    );
+  }
+
+  // --- Web preview: combined workspaces + detail with view state ---
   if (user) {
     return (
       <main className={`container app-layout ${view === "detail" ? "app-layout-detail" : ""}`}>
@@ -277,7 +591,6 @@ function App() {
                   <button
                     type="button"
                     className="header-user-menu-item"
-                    // Placeholder for future app-level settings
                     onClick={() => setUserMenuOpen(false)}
                   >
                     Settings
@@ -293,7 +606,6 @@ function App() {
               )}
             </div>
           </header>
-
           {view === "workspaces" ? (
             <WorkspaceList
               onSelectWorkspace={(id) => {
@@ -318,13 +630,12 @@ function App() {
     );
   }
 
+  // --- Web preview: login ---
   return (
     <main className="container">
       <h1>Welcome to Sparky</h1>
-
       <div className="sign-in-content">
         {error && <ErrorMessage message={error} />}
-
         <button
           onClick={handleGitHubLogin}
           disabled={loading}
