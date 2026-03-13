@@ -14,6 +14,8 @@ import {
 const DISPLAY_MODE_KEY = "sparky_display_mode";
 const DEFAULT_PROVIDER_KEY = "sparky_default_provider";
 const DEFAULT_MODEL_KEY = "sparky_default_model";
+const EXEC_PROVIDER_KEY = "sparky_exec_provider";
+const EXEC_MODEL_KEY = "sparky_exec_model";
 const API_KEY_PREFIX = "sparky_api_key_";
 
 export type DisplayMode = "light" | "dark" | "system";
@@ -37,6 +39,20 @@ export function getDefaultProvider(): AgentProvider | "" {
 export function getDefaultModel(): string {
   try {
     return localStorage.getItem(DEFAULT_MODEL_KEY) ?? "";
+  } catch { return ""; }
+}
+
+export function getExecProvider(): AgentProvider | "" {
+  try {
+    const stored = localStorage.getItem(EXEC_PROVIDER_KEY);
+    if (stored === "openai" || stored === "anthropic" || stored === "gemini") return stored;
+  } catch { /* ignore */ }
+  return "";
+}
+
+export function getExecModel(): string {
+  try {
+    return localStorage.getItem(EXEC_MODEL_KEY) ?? "";
   } catch { return ""; }
 }
 
@@ -71,6 +87,8 @@ export function UserSettings({ open, onClose }: Props) {
   const [displayMode, setDisplayMode] = useState<DisplayMode>(getDisplayMode);
   const [provider, setProvider] = useState<AgentProvider | "">(getDefaultProvider);
   const [model, setModel] = useState(getDefaultModel);
+  const [execProvider, setExecProvider] = useState<AgentProvider | "">(getExecProvider);
+  const [execModel, setExecModel] = useState(getExecModel);
 
   const [apiKeys, setApiKeys] = useState<Record<string, string>>(() => {
     const keys: Record<string, string> = {};
@@ -79,6 +97,7 @@ export function UserSettings({ open, onClose }: Props) {
   });
 
   const models = provider ? AGENT_MODELS[provider] : [];
+  const execModels = execProvider ? AGENT_MODELS[execProvider] : [];
 
   useEffect(() => {
     applyDisplayMode(displayMode);
@@ -101,6 +120,22 @@ export function UserSettings({ open, onClose }: Props) {
   useEffect(() => {
     try { localStorage.setItem(DEFAULT_MODEL_KEY, model); } catch { /* ignore */ }
   }, [model]);
+
+  useEffect(() => {
+    try { localStorage.setItem(EXEC_PROVIDER_KEY, execProvider); } catch { /* ignore */ }
+    if (execProvider) {
+      const available = AGENT_MODELS[execProvider];
+      if (!available.includes(execModel)) {
+        setExecModel(available[0] ?? "");
+      }
+    } else {
+      setExecModel("");
+    }
+  }, [execProvider]);
+
+  useEffect(() => {
+    try { localStorage.setItem(EXEC_MODEL_KEY, execModel); } catch { /* ignore */ }
+  }, [execModel]);
 
   return (
     <div
@@ -141,7 +176,7 @@ export function UserSettings({ open, onClose }: Props) {
           </section>
 
           <section className="settings-card">
-            <h3 className="settings-card-title">Defaults</h3>
+            <h3 className="settings-card-title">Analysis / Planning</h3>
             <div className="settings-card-body">
               <div className="flex gap-3">
                 <div className="flex flex-col gap-1.5 flex-1 min-w-0">
@@ -172,7 +207,44 @@ export function UserSettings({ open, onClose }: Props) {
                 </div>
               </div>
               <p className="user-settings-hint">
-                Used as defaults when creating new agents and skills.
+                Used for issue analysis, plan generation, and new agent/skill defaults.
+              </p>
+            </div>
+          </section>
+
+          <section className="settings-card">
+            <h3 className="settings-card-title">Execution</h3>
+            <div className="settings-card-body">
+              <div className="flex gap-3">
+                <div className="flex flex-col gap-1.5 flex-1 min-w-0">
+                  <Label>Provider</Label>
+                  <Select value={execProvider} onValueChange={(v) => setExecProvider(v as AgentProvider)}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="None" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {AGENT_PROVIDERS.map((p) => (
+                        <SelectItem key={p} value={p}>{p}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="flex flex-col gap-1.5 flex-1 min-w-0">
+                  <Label>Model</Label>
+                  <Select value={execModel} onValueChange={setExecModel} disabled={!execProvider}>
+                    <SelectTrigger>
+                      <SelectValue placeholder={execProvider ? "Select model" : "Pick provider first"} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {execModels.map((m) => (
+                        <SelectItem key={m} value={m}>{m}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <p className="user-settings-hint">
+                Used by the issue LLM when executing plan steps. Falls back to analysis model if not set.
               </p>
             </div>
           </section>

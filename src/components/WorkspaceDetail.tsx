@@ -6,14 +6,15 @@ import {
 } from "../data/repos";
 import { addRepoToWorkspace, removeRepoFromWorkspace } from "../data/workspaceRepos";
 import { fetchRepo, listUserRepos, listRepoOpenIssues, type GitHubRepo, type GitHubIssue } from "../github";
-import { listAgentsForWorkspace } from "../data/agents";
-import { listSkillsForWorkspace } from "../data/skills";
-import { getAnalysisForIssue, createAnalysis } from "../data/issueAnalyses";
-import { getPlanForIssue, createPlan } from "../data/executionPlans";
-import { getWorktreeForIssue } from "../data/issueWorktrees";
+import { listAgentsForWorkspace, deleteAgent } from "../data/agents";
+import { listSkillsForWorkspace, deleteSkill } from "../data/skills";
+import { getAnalysisForIssue, createAnalysis, deleteAnalysesForIssue } from "../data/issueAnalyses";
+import { getPlanForIssue, createPlan, deletePlansForIssue } from "../data/executionPlans";
+import { getWorktreeForIssue, removeWorktree } from "../data/issueWorktrees";
 import { runAnalysis } from "../data/analyseIssue";
 import { runPlanGeneration } from "../data/generatePlan";
-import type { IssueAnalysis, AnalysisResult, ExecutionPlan, ExecutionPlanResult, IssueWorktree } from "../data/types";
+import type { IssueAnalysis, AnalysisResult, ExecutionPlan, ExecutionPlanResult, IssueWorktree, StepExecutionStatus, CriticReview } from "../data/types";
+import { executePlan } from "../data/executePlan";
 import { marked } from "marked";
 import { AnalysisView } from "./AnalysisView";
 import { PlanView } from "./PlanView";
@@ -96,6 +97,9 @@ export function WorkspaceDetail({ workspaceId, onSwitchWorkspace, onDeleted, onW
   const [_worktree, setWorktree] = useState<IssueWorktree | null>(null);
   const [selectedSkillId, setSelectedSkillId] = useState<string | null>(null);
   const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
+  const [executing, setExecuting] = useState(false);
+  const [stepStatuses, setStepStatuses] = useState<Map<number, StepExecutionStatus>>(new Map());
+  const [executionError, setExecutionError] = useState<string | null>(null);
 
   useEffect(() => {
     load();
@@ -713,6 +717,7 @@ export function WorkspaceDetail({ workspaceId, onSwitchWorkspace, onDeleted, onW
                           setIssueTab("analysis");
                           runAnalysis(a, selectedIssue, setAnalysis);
                         }}
+                        disabled={executing}
                       >
                         Re-analyse
                       </button>
@@ -722,10 +727,52 @@ export function WorkspaceDetail({ workspaceId, onSwitchWorkspace, onDeleted, onW
                         type="button"
                         className="analyse-btn analyse-btn-inline"
                         onClick={() => triggerPlanGeneration()}
+                        disabled={executing}
                       >
                         Re-plan
                       </button>
                     )}
+                    <button
+                      type="button"
+                      className="analyse-btn analyse-btn-inline analyse-btn-danger"
+                      disabled={executing}
+                      onClick={async () => {
+                        const { full_name, number } = selectedIssue;
+                        const wt = _worktree;
+                        if (wt && wt.status === "ready") {
+                          try { await removeWorktree(wt, setWorktree); } catch { /* best-effort */ }
+                        }
+
+                        // Delete skills and agents that were created from this analysis
+                        if (analysis?.result) {
+                          try {
+                            const parsed: AnalysisResult = JSON.parse(analysis.result);
+                            const recommendedSkillNames = new Set(parsed.skills.map((s) => s.name));
+                            const recommendedAgentNames = new Set(parsed.agents.map((a) => a.name));
+                            const [wsSkills, wsAgents] = await Promise.all([
+                              listSkillsForWorkspace(workspaceId),
+                              listAgentsForWorkspace(workspaceId),
+                            ]);
+                            await Promise.all([
+                              ...wsSkills.filter((s) => recommendedSkillNames.has(s.name)).map((s) => deleteSkill(s.id)),
+                              ...wsAgents.filter((a) => recommendedAgentNames.has(a.name)).map((a) => deleteAgent(a.id)),
+                            ]);
+                          } catch { /* best-effort */ }
+                        }
+
+                        await Promise.all([
+                          deleteAnalysesForIssue(workspaceId, full_name, number),
+                          deletePlansForIssue(workspaceId, full_name, number),
+                        ]);
+                        setAnalysis(null);
+                        setPlan(null);
+                        setWorktree(null);
+                        setAllCreated(false);
+                        setIssueTab("issue");
+                      }}
+                    >
+                      Reset
+                    </button>
                   </div>
                 )}
               </div>
@@ -781,7 +828,42 @@ export function WorkspaceDetail({ workspaceId, onSwitchWorkspace, onDeleted, onW
                   {plan?.status === "done" && plan.result && (() => {
                     try {
                       const parsed: ExecutionPlanResult = JSON.parse(plan.result);
-                      return <PlanView result={parsed} />;
+                      const criticReview: CriticReview | undefined = parsed.critic_review;
+                      return (
+                        <PlanView
+                          result={parsed}
+                          criticReview={criticReview}
+                          stepStatuses={stepStatuses}
+                          executing={executing}
+                          executionError={executionError}
+                          onExecute={() => {
+                            if (executing || !selectedIssue) return;
+                            setExecuting(true);
+                            setStepStatuses(new Map());
+                            setExecutionError(null);
+                            executePlan({
+                              planResult: parsed,
+                              workspaceId,
+                              issue: selectedIssue,
+                              onStepUpdate: (order, status) => {
+                                setStepStatuses((prev) => {
+                                  const next = new Map(prev);
+                                  next.set(order, status);
+                                  return next;
+                                });
+                              },
+                              onWorktreeUpdate: setWorktree,
+                              onPlanUpdate: (updated) => setPlan(prev => prev ? { ...prev, result: JSON.stringify(updated) } : prev),
+                            })
+                              .catch((e) => {
+                                const msg = e instanceof Error ? e.message : String(e);
+                                console.error("[execute] failed:", msg);
+                                setExecutionError(msg);
+                              })
+                              .finally(() => setExecuting(false));
+                          }}
+                        />
+                      );
                     } catch {
                       return <p className="empty-state">Failed to parse plan result.</p>;
                     }

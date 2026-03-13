@@ -61,12 +61,15 @@ export interface IssueAnalysis {
 export interface AnalysisResultSkill {
   name: string;
   description: string;
+  content: string;
 }
 
 export interface AnalysisResultAgent {
   name: string;
   description: string;
+  content: string;
   skill_names: string[];
+  tool_names: string[];
 }
 
 export interface AnalysisResult {
@@ -84,7 +87,7 @@ export interface ExecutionPlanStep {
   order: number;
   title: string;
   description: string;
-  agent_name: string;
+  agent_name: string | null;
   skill_names: string[];
   expected_output: string;
   depends_on: number[];
@@ -94,6 +97,25 @@ export interface ExecutionPlanResult {
   goal: string;
   steps: ExecutionPlanStep[];
   success_criteria: string;
+  critic_review?: CriticReview;
+}
+
+export interface CriticIssue {
+  severity: "error" | "warning" | "info";
+  step_order: number | null;
+  description: string;
+  suggestion: string;
+}
+
+export interface CriticReview {
+  verdict: "pass" | "fail";
+  issues: CriticIssue[];
+  summary: string;
+}
+
+export interface ReplanCheck {
+  decision: "continue" | "replan";
+  reason: string;
 }
 
 export type PlanStatus = "pending" | "running" | "done" | "error";
@@ -108,6 +130,18 @@ export interface ExecutionPlan {
   error: string | null;
   created_at: string;
   updated_at: string;
+}
+
+export interface StepExecutionStatus {
+  status: "pending" | "running" | "done" | "error";
+  error?: string;
+  output?: string;
+}
+
+export interface LLMToolDef {
+  name: string;
+  description: string;
+  parameters: Record<string, unknown>;
 }
 
 export type WorktreeStatus = "creating" | "ready" | "error" | "removing";

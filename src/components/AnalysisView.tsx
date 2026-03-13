@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import type { AnalysisResult } from "../data/types";
 import { createSkill, listSkillsForWorkspace } from "../data/skills";
-import { createAgent, listAgentsForWorkspace, setSkillIdsForAgent, type CreateAgentParams } from "../data/agents";
+import { createAgent, listAgentsForWorkspace, setSkillIdsForAgent, setToolIdsForAgent, type CreateAgentParams } from "../data/agents";
 import { getDefaultProvider, getDefaultModel } from "./UserSettings";
 import { marked } from "marked";
 
@@ -96,6 +96,7 @@ export function AnalysisView({ result, workspaceId, onAllCreated }: AnalysisView
           workspaceId,
           name: skill.name,
           description: skill.description,
+          content: skill.content ?? null,
           provider: provider || null,
           model: model || null,
         });
@@ -111,6 +112,7 @@ export function AnalysisView({ result, workspaceId, onAllCreated }: AnalysisView
           workspaceId,
           name: agent.name,
           description: agent.description,
+          content: agent.content ?? null,
           provider: provider || "anthropic",
           model: model || "claude-sonnet-4-6",
         };
@@ -124,6 +126,11 @@ export function AnalysisView({ result, workspaceId, onAllCreated }: AnalysisView
           if (skillIds.length > 0) {
             await setSkillIdsForAgent(created.id, skillIds);
           }
+        }
+
+        // Wire up tool associations
+        if (agent.tool_names?.length) {
+          await setToolIdsForAgent(created.id, agent.tool_names);
         }
       }
 
@@ -228,12 +235,15 @@ export function AnalysisView({ result, workspaceId, onAllCreated }: AnalysisView
                     const skillsLabel = a.skill_names?.length
                       ? `\nSkills: ${a.skill_names.join(", ")}`
                       : "";
+                    const toolsLabel = a.tool_names?.length
+                      ? `\nTools: ${a.tool_names.join(", ")}`
+                      : "";
                     return (
                       <span key={a.name} className="av-agent-pill-wrap">
                         <button
                           type="button"
                           className={`av-pill ${selected ? "av-pill-selected" : ""} ${exists ? "av-pill-exists" : ""}`}
-                          title={`${exists ? "(already created) " : ""}${a.description}${skillsLabel}`}
+                          title={`${exists ? "(already created) " : ""}${a.description}${skillsLabel}${toolsLabel}`}
                           onClick={() => toggleAgent(a.name)}
                           disabled={exists}
                         >
@@ -243,6 +253,11 @@ export function AnalysisView({ result, workspaceId, onAllCreated }: AnalysisView
                         {a.skill_names?.length > 0 && (
                           <span className="av-agent-skills-hint">
                             {a.skill_names.join(", ")}
+                          </span>
+                        )}
+                        {a.tool_names?.length > 0 && (
+                          <span className="av-agent-skills-hint">
+                            {a.tool_names.join(", ")}
                           </span>
                         )}
                       </span>

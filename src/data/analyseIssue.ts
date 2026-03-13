@@ -5,19 +5,26 @@ import type { GitHubIssue } from "../github";
 import { listSkillsForWorkspace } from "./skills";
 import { listAgentsForWorkspace } from "./agents";
 import { callLLM } from "./llm";
+import { TOOLS } from "./tools";
 
 const SYSTEM_PROMPT = `You are a senior software engineer analysing a GitHub issue. Provide a concise, structured analysis. Be direct and practical. No filler.
 
-The system uses two concepts:
-- **Skills**: Reusable bodies of knowledge or instructions (markdown content). Skills can be used in two ways: (1) the controlling LLM can invoke a skill directly based on its description, or (2) a skill's content can be injected into an agent's context to give it domain expertise.
-- **Agents**: Autonomous AI workers that tackle specific tasks. Each agent can have skills injected into its context. The agent's skill_names list determines which skills are pre-loaded.
+## How the system works
 
-When recommending skills and agents:
-- Check the existing skills and agents listed in the prompt. Prefer referencing existing ones by name over creating duplicates.
+An **issue LLM** (the controlling LLM) works on resolving the issue. It has access to all sandboxed tools (${TOOLS.map((t) => t.name).join(", ")}) and operates directly in the issue's worktree. Most of the work is done by the issue LLM itself.
+
+The issue LLM can optionally activate **agents** and **skills** based on their descriptions and the current context:
+- **Skills**: Reusable bodies of knowledge or instructions (markdown content). The issue LLM can invoke a skill directly, or a skill's content can be injected into an agent's context to give it domain expertise. Every skill MUST have a content body — this is the actual knowledge or instructions. Without content, the skill is useless.
+- **Agents**: Autonomous AI workers for specialized subtasks. The issue LLM delegates to an agent only when the task benefits from a focused, specialized worker (e.g. a dedicated test-writer, a security reviewer). Each agent has its own configured tools and skills. Every agent MUST have a content body — this is the system prompt that defines the agent's behavior, constraints, and workflow. Without content, the agent has no guidance.
+- **Tools**: Sandboxed capabilities for interacting with worktrees: ${TOOLS.map((t) => `${t.name} (${t.description}${t.dangerous ? " — dangerous" : ""})`).join(", ")}. The issue LLM has all tools. Agents get a subset configured per-agent.
+
+## When recommending skills and agents
+- Check existing skills and agents listed in the prompt. Prefer referencing existing ones by name over creating duplicates.
 - Only recommend new skills/agents when the existing ones don't cover the need.
-- Skills should be specific, reusable knowledge areas (e.g. "react-state-management", "cache-invalidation", "github-api"). Each skill has a name and a description of when to use it.
-- Agents should be task-oriented workers (e.g. "bug-triager", "fix-proposer", "test-writer"). Each agent has a name, a description of when to delegate to it, and a list of skill names to inject into its context.
-- An agent's skill_names should reference skills from the skills list you recommend (or existing skills). Not every skill needs to be attached to an agent — some are useful on their own.`;
+- Skills should be specific, reusable knowledge areas (e.g. "react-state-management", "cache-invalidation", "github-api"). Each has a name, a description of when to use it, and a content body with the actual knowledge/instructions in markdown.
+- Agents should only be recommended when a specialized, focused worker adds value beyond what the issue LLM does on its own. Each has a name, a description of when to delegate to it, a content body with detailed system prompt, a list of skill names, and a list of tool IDs.
+- An agent's skill_names should reference skills from the skills list you recommend (or existing skills).
+- An agent's tool_names should be the minimal set needed. Read-only agents need Read, Glob, Grep. Code-modifying agents need Write/Edit. Command-running agents need Bash.`;
 
 const ANALYSIS_SCHEMA = {
   type: "object" as const,
@@ -34,9 +41,10 @@ const ANALYSIS_SCHEMA = {
         type: "object" as const,
         properties: {
           name: { type: "string" as const, description: "Short slug-style skill name" },
-          description: { type: "string" as const, description: "One-line description" },
+          description: { type: "string" as const, description: "One-line description of when to use this skill" },
+          content: { type: "string" as const, description: "Markdown body with the actual knowledge, instructions, patterns, or guidelines this skill provides. Be thorough — this is what gets injected into agent context." },
         },
-        required: ["name", "description"],
+        required: ["name", "description", "content"],
         additionalProperties: false,
       },
       description: "1-3 specialist skills useful for resolving this issue",
@@ -48,13 +56,19 @@ const ANALYSIS_SCHEMA = {
         properties: {
           name: { type: "string" as const, description: "Short slug-style agent name" },
           description: { type: "string" as const, description: "One-line description of agent role and goal" },
+          content: { type: "string" as const, description: "Markdown body with the agent's system prompt: its role, behavior, constraints, workflow steps, and output format. Be thorough — this defines how the agent operates." },
           skill_names: {
             type: "array" as const,
             items: { type: "string" as const },
             description: "Names of recommended skills to inject into this agent's context",
           },
+          tool_names: {
+            type: "array" as const,
+            items: { type: "string" as const, enum: TOOLS.map((t) => t.id) },
+            description: "Tool IDs this agent should have access to (e.g. read, write, edit, glob, grep, bash)",
+          },
         },
-        required: ["name", "description", "skill_names"],
+        required: ["name", "description", "content", "skill_names", "tool_names"],
         additionalProperties: false,
       },
       description: "1-3 autonomous agents that would help",
@@ -165,6 +179,7 @@ export async function runAnalysis(
       userPrompt: prompt,
       schema: ANALYSIS_SCHEMA,
       schemaName: "issue_analysis",
+      maxTokens: 4096,
     });
     console.log("[analyse] success, response length:", text.length);
 

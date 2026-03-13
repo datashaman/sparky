@@ -1,16 +1,25 @@
 import { getDefaultProvider, getDefaultModel, getApiKey } from "../components/UserSettings";
 import { getDb } from "../db";
-import type { ExecutionPlan, AnalysisResult, Agent, Skill } from "./types";
+import type { ExecutionPlan, ExecutionPlanResult, AnalysisResult, Agent, Skill } from "./types";
 import type { GitHubIssue } from "../github";
 import { callLLM } from "./llm";
+import { TOOLS } from "./tools";
+import { reviewPlan, refinePlan } from "./criticPlan";
 
 const PLAN_SYSTEM_PROMPT = `You are a senior software engineering project manager. Given a GitHub issue analysis, available agents, and their skills, create a concrete step-by-step execution plan to resolve the issue.
 
-Each step must be delegated to a specific agent. Steps can depend on other steps. Be practical and direct — no filler.
+The plan is executed by an **issue LLM** (the controlling LLM) that has access to all sandboxed tools (${TOOLS.map((t) => t.name).join(", ")}) and works directly in the issue's worktree. The issue LLM does most of the work itself. It can optionally delegate specific steps to specialized agents when their focused expertise adds value.
 
-The plan should be minimal: only include steps that are necessary to resolve the issue. Prefer fewer, well-scoped steps over many granular ones.`;
+Steps can depend on other steps. Be practical and direct — no filler.
 
-const PLAN_SCHEMA = {
+The plan should be minimal: only include steps that are necessary to resolve the issue. Prefer fewer, well-scoped steps over many granular ones.
+
+For each step:
+- Most steps should be done by the issue LLM directly (leave agent_name null).
+- Only assign an agent_name when a specialized agent would do the step better than the issue LLM working alone.
+- skill_names can reference skills the issue LLM should load for context on that step, regardless of whether an agent is assigned.`;
+
+export const PLAN_SCHEMA = {
   type: "object" as const,
   properties: {
     goal: { type: "string" as const, description: "One-sentence goal statement for the plan" },
@@ -21,12 +30,12 @@ const PLAN_SCHEMA = {
         properties: {
           order: { type: "number" as const, description: "Step number (1-based)" },
           title: { type: "string" as const, description: "Short step title" },
-          description: { type: "string" as const, description: "What the agent should do in this step" },
-          agent_name: { type: "string" as const, description: "Name of the agent to delegate to" },
+          description: { type: "string" as const, description: "What should be done in this step" },
+          agent_name: { type: ["string", "null"] as const, description: "Name of a specialized agent to delegate to, or null if the issue LLM handles this step directly" },
           skill_names: {
             type: "array" as const,
             items: { type: "string" as const },
-            description: "Skills the agent should use for this step",
+            description: "Skills to load for context on this step (used by the issue LLM or the assigned agent)",
           },
           expected_output: { type: "string" as const, description: "What this step should produce" },
           depends_on: {
@@ -46,7 +55,7 @@ const PLAN_SCHEMA = {
   additionalProperties: false,
 };
 
-function buildPlanPrompt(
+export function buildPlanPrompt(
   issue: GitHubIssue & { full_name: string },
   analysisResult: AnalysisResult,
   agents: Agent[],
@@ -91,7 +100,7 @@ function buildPlanPrompt(
 
   parts.push(
     "",
-    "Create an execution plan using the available agents and skills. Each step must reference an agent by name. Only reference skills and agents that exist above.",
+    "Create an execution plan. Most steps should be handled directly by the issue LLM (agent_name: null). Only delegate to a named agent when its specialization adds clear value. Only reference skills and agents that exist above.",
   );
 
   return parts.join("\n");
@@ -160,10 +169,36 @@ export async function runPlanGeneration(
     });
     console.log("[plan] success, response length:", text.length);
 
-    const parsed = JSON.parse(text);
+    let parsed: ExecutionPlanResult = JSON.parse(text);
     if (!parsed.goal || !parsed.steps || !parsed.success_criteria) {
       throw new Error("Invalid plan response: missing required fields");
     }
+
+    // Critic review: validate the generated plan
+    console.log("[plan] running critic review");
+    let criticReview = await reviewPlan(parsed, issue, analysisResult, provider, modelId, apiKey);
+
+    if (criticReview.verdict === "fail") {
+      console.log("[plan] critic failed plan, refining (1 cycle)");
+      parsed = await refinePlan(
+        parsed,
+        criticReview,
+        issue,
+        analysisResult,
+        agents,
+        skills,
+        PLAN_SCHEMA,
+        buildPlanPrompt,
+        provider,
+        modelId,
+        apiKey,
+      );
+      // Re-review the refined plan so the stored verdict reflects the final state
+      criticReview = await reviewPlan(parsed, issue, analysisResult, provider, modelId, apiKey);
+      console.log("[plan] post-refinement critic verdict:", criticReview.verdict);
+    }
+
+    parsed.critic_review = criticReview;
     const result = JSON.stringify(parsed);
 
     await updatePlan(plan.id, { status: "done", result });
