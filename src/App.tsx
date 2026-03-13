@@ -6,6 +6,7 @@ import { getWorkspace } from "./data/workspaces";
 import { WorkspaceList } from "./components/WorkspaceList";
 import { WorkspaceDetail } from "./components/WorkspaceDetail";
 import { ErrorMessage } from "./components/ErrorMessage";
+import { UserSettings } from "./components/UserSettings";
 import "./App.css";
 
 const DETAIL_WINDOW_STATE_KEY = "sparky_detail_window_state";
@@ -75,6 +76,7 @@ function App() {
   const [workspaceName, setWorkspaceName] = useState<string | null>(null);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [createDrawerOpen, setCreateDrawerOpen] = useState(false);
+  const [userSettingsOpen, setUserSettingsOpen] = useState(false);
   const userMenuRef = useRef<HTMLDivElement | null>(null);
   const workspacesShownRef = useRef(false);
   const [windowLabel, setWindowLabel] = useState<string | null>(() =>
@@ -430,6 +432,7 @@ function App() {
             <span>{loading ? "Opening browser…" : "Sign in with GitHub"}</span>
           </button>
         </div>
+        <UserSettings open={userSettingsOpen} onClose={() => setUserSettingsOpen(false)} />
       </main>
     );
   }
@@ -472,7 +475,7 @@ function App() {
                     <button
                       type="button"
                       className="header-user-menu-item"
-                      onClick={() => setUserMenuOpen(false)}
+                      onClick={() => { setUserMenuOpen(false); setUserSettingsOpen(true); }}
                     >
                       Settings
                     </button>
@@ -506,6 +509,7 @@ function App() {
             }}
           />
         </div>
+        <UserSettings open={userSettingsOpen} onClose={() => setUserSettingsOpen(false)} />
       </main>
     );
   }
@@ -565,6 +569,7 @@ function App() {
             onBackToWorkspaces={goBackToWorkspacesWindow}
           />
         </div>
+        <UserSettings open={userSettingsOpen} onClose={() => setUserSettingsOpen(false)} />
       </main>
     );
   }
@@ -632,7 +637,7 @@ function App() {
                     <button
                       type="button"
                       className="header-user-menu-item"
-                      onClick={() => setUserMenuOpen(false)}
+                      onClick={() => { setUserMenuOpen(false); setUserSettingsOpen(true); }}
                     >
                       Settings
                     </button>
@@ -670,6 +675,7 @@ function App() {
             />
           ) : null}
         </div>
+        <UserSettings open={userSettingsOpen} onClose={() => setUserSettingsOpen(false)} />
       </main>
     );
   }
