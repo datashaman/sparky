@@ -264,8 +264,8 @@ export function WorkspaceList({ onSelectWorkspace, createDrawerOpen = false, onC
             }}
           >
             <div className="create-workspace-body">
-            <div className="create-workspace-field">
-              <label htmlFor="create-workspace-name">Name</label>
+            <div className="form-field">
+              <label htmlFor="create-workspace-name">Name <span className="required">*</span></label>
               <input
                 id="create-workspace-name"
                 type="text"
@@ -275,7 +275,7 @@ export function WorkspaceList({ onSelectWorkspace, createDrawerOpen = false, onC
                 disabled={creating}
               />
             </div>
-            <div className="create-workspace-field create-workspace-repos">
+            <div className="form-field create-workspace-repos">
               <div className="create-workspace-repos-panel">
                 {loadingRepos ? (
                   <p className="create-workspace-repos-loading">Loading your repos…</p>
