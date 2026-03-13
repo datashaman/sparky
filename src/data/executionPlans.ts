@@ -14,6 +14,18 @@ export async function getPlanForIssue(
   return rows[0] ?? null;
 }
 
+export async function deletePlansForIssue(
+  workspaceId: string,
+  repoFullName: string,
+  issueNumber: number,
+): Promise<void> {
+  const db = await getDb();
+  await db.execute(
+    "DELETE FROM execution_plans WHERE workspace_id = ? AND repo_full_name = ? AND issue_number = ?",
+    [workspaceId, repoFullName, issueNumber],
+  );
+}
+
 export async function createPlan(
   workspaceId: string,
   repoFullName: string,
