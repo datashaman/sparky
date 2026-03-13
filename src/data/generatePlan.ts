@@ -176,7 +176,7 @@ export async function runPlanGeneration(
 
     // Critic review: validate the generated plan
     console.log("[plan] running critic review");
-    const criticReview = await reviewPlan(parsed, issue, analysisResult, provider, modelId, apiKey);
+    let criticReview = await reviewPlan(parsed, issue, analysisResult, provider, modelId, apiKey);
 
     if (criticReview.verdict === "fail") {
       console.log("[plan] critic failed plan, refining (1 cycle)");
@@ -193,6 +193,9 @@ export async function runPlanGeneration(
         modelId,
         apiKey,
       );
+      // Re-review the refined plan so the stored verdict reflects the final state
+      criticReview = await reviewPlan(parsed, issue, analysisResult, provider, modelId, apiKey);
+      console.log("[plan] post-refinement critic verdict:", criticReview.verdict);
     }
 
     parsed.critic_review = criticReview;

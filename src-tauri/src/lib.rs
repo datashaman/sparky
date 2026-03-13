@@ -1,4 +1,5 @@
 mod agent_tools;
+mod execution_log;
 mod git_ops;
 mod github_auth;
 
@@ -50,6 +51,8 @@ pub fn run() {
             agent_tools::tool_glob,
             agent_tools::tool_grep,
             agent_tools::tool_bash,
+            execution_log::append_execution_log,
+            execution_log::get_execution_log_path,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

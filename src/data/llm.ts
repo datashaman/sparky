@@ -270,7 +270,17 @@ async function openaiToolLoop(opts: {
 
     // Execute tool calls
     for (const tc of msg.tool_calls) {
-      const args = JSON.parse(tc.function.arguments);
+      let args: Record<string, unknown>;
+      try {
+        args = JSON.parse(tc.function.arguments);
+      } catch {
+        messages.push({
+          role: "tool",
+          tool_call_id: tc.id,
+          content: `Error: invalid JSON in tool arguments: ${tc.function.arguments}`,
+        });
+        continue;
+      }
       const result = await onToolCall(tc.function.name, args);
       messages.push({
         role: "tool",

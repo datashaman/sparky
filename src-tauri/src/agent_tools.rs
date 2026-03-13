@@ -2,6 +2,8 @@ use serde::Serialize;
 use std::path::{Path, PathBuf};
 
 /// Resolve a relative path within a sandbox root, ensuring no escape.
+/// For non-existent paths, walks up to the nearest existing ancestor
+/// and validates that it's inside the sandbox, allowing writes to new subdirs.
 fn sandbox_resolve(root: &Path, relative: &str) -> Result<PathBuf, String> {
     let root = root
         .canonicalize()
@@ -9,23 +11,40 @@ fn sandbox_resolve(root: &Path, relative: &str) -> Result<PathBuf, String> {
 
     let target = root.join(relative);
 
-    // Canonicalize the target — for existing paths this resolves symlinks.
-    // For non-existing paths, canonicalize the parent and append the filename.
-    let resolved = if target.exists() {
-        target
+    if target.exists() {
+        let resolved = target
             .canonicalize()
-            .map_err(|e| format!("Cannot canonicalize path: {}", e))?
-    } else {
-        let parent = target
+            .map_err(|e| format!("Cannot canonicalize path: {}", e))?;
+        if !resolved.starts_with(&root) {
+            return Err("Path escapes sandbox".into());
+        }
+        return Ok(resolved);
+    }
+
+    // For non-existent paths, find the nearest existing ancestor and
+    // canonicalize it, then re-append the remaining components.
+    let mut existing = target.clone();
+    let mut tail = Vec::new();
+    while !existing.exists() {
+        tail.push(
+            existing
+                .file_name()
+                .ok_or_else(|| "Invalid path".to_string())?
+                .to_os_string(),
+        );
+        existing = existing
             .parent()
             .ok_or_else(|| "Invalid path".to_string())?
-            .canonicalize()
-            .map_err(|e| format!("Parent directory does not exist: {}", e))?;
-        parent.join(target.file_name().ok_or_else(|| "Invalid filename".to_string())?)
-    };
-
+            .to_path_buf();
+    }
+    let mut resolved = existing
+        .canonicalize()
+        .map_err(|e| format!("Cannot canonicalize ancestor: {}", e))?;
     if !resolved.starts_with(&root) {
         return Err("Path escapes sandbox".into());
+    }
+    for component in tail.into_iter().rev() {
+        resolved.push(component);
     }
 
     Ok(resolved)
@@ -128,11 +147,12 @@ pub async fn tool_grep(
         .canonicalize()
         .map_err(|e| format!("Cannot canonicalize root: {}", e))?;
 
-    let mut args = vec!["-rn", "--no-color"];
+    let mut args = vec!["-rn"];
     if let Some(ref g) = glob_filter {
         args.push("--include");
         args.push(g.as_str());
     }
+    args.push("-e");
     args.push(&pattern);
     args.push(".");
 
@@ -178,16 +198,43 @@ pub struct BashResult {
     pub exit_code: i32,
 }
 
+/// Commands allowed in the sandbox bash tool.
+const ALLOWED_BASH_COMMANDS: &[&str] = &[
+    "ls", "find", "cat", "head", "tail", "wc", "sort", "uniq", "diff",
+    "mkdir", "cp", "mv", "rm", "touch",
+    "git", "npm", "npx", "node", "cargo", "rustc",
+    "python", "python3", "pip", "pip3",
+    "make", "cmake",
+    "echo", "printf", "test", "true", "false",
+    "sed", "awk", "cut", "tr", "xargs",
+    "which", "env", "pwd", "date",
+    "tsc", "eslint", "prettier",
+];
+
 #[tauri::command]
 pub async fn tool_bash(worktree_path: String, command: String) -> Result<BashResult, String> {
     let root = Path::new(&worktree_path)
         .canonicalize()
         .map_err(|e| format!("Cannot canonicalize root: {}", e))?;
 
+    // Validate the command starts with an allowed program
+    let first_word = command.split_whitespace().next().unwrap_or("");
+    // Strip any path prefix to get the base command name
+    let base_cmd = first_word.rsplit('/').next().unwrap_or(first_word);
+    if !ALLOWED_BASH_COMMANDS.contains(&base_cmd) {
+        return Err(format!(
+            "Command '{}' is not in the allowed list. Allowed: {}",
+            base_cmd,
+            ALLOWED_BASH_COMMANDS.join(", ")
+        ));
+    }
+
     let output = std::process::Command::new("sh")
         .arg("-c")
         .arg(&command)
         .current_dir(&root)
+        .env("HOME", &root)
+        .env("PATH", "/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin")
         .output()
         .map_err(|e| format!("bash failed to start: {}", e))?;
 

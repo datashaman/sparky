@@ -717,6 +717,7 @@ export function WorkspaceDetail({ workspaceId, onSwitchWorkspace, onDeleted, onW
                           setIssueTab("analysis");
                           runAnalysis(a, selectedIssue, setAnalysis);
                         }}
+                        disabled={executing}
                       >
                         Re-analyse
                       </button>
@@ -726,6 +727,7 @@ export function WorkspaceDetail({ workspaceId, onSwitchWorkspace, onDeleted, onW
                         type="button"
                         className="analyse-btn analyse-btn-inline"
                         onClick={() => triggerPlanGeneration()}
+                        disabled={executing}
                       >
                         Re-plan
                       </button>
@@ -733,6 +735,7 @@ export function WorkspaceDetail({ workspaceId, onSwitchWorkspace, onDeleted, onW
                     <button
                       type="button"
                       className="analyse-btn analyse-btn-inline analyse-btn-danger"
+                      disabled={executing}
                       onClick={async () => {
                         const { full_name, number } = selectedIssue;
                         const wt = _worktree;

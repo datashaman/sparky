@@ -96,7 +96,7 @@ export function AnalysisView({ result, workspaceId, onAllCreated }: AnalysisView
           workspaceId,
           name: skill.name,
           description: skill.description,
-          content: skill.content || null,
+          content: skill.content ?? null,
           provider: provider || null,
           model: model || null,
         });
@@ -112,7 +112,7 @@ export function AnalysisView({ result, workspaceId, onAllCreated }: AnalysisView
           workspaceId,
           name: agent.name,
           description: agent.description,
-          content: agent.content || null,
+          content: agent.content ?? null,
           provider: provider || "anthropic",
           model: model || "claude-sonnet-4-6",
         };

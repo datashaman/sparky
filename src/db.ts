@@ -131,6 +131,19 @@ CREATE TABLE IF NOT EXISTS agent_tools (
 );
 
 CREATE INDEX IF NOT EXISTS idx_agent_tools_agent ON agent_tools(agent_id);
+
+CREATE TABLE IF NOT EXISTS execution_step_results (
+  plan_id TEXT NOT NULL,
+  step_order INTEGER NOT NULL,
+  status TEXT NOT NULL,
+  output TEXT,
+  error TEXT,
+  updated_at TEXT NOT NULL,
+  PRIMARY KEY (plan_id, step_order),
+  FOREIGN KEY (plan_id) REFERENCES execution_plans(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_step_results_plan ON execution_step_results(plan_id);
 `;
 
 /** Standard location: AppConfig (e.g. ~/Library/Application Support/{bundle-id}/ on macOS) */

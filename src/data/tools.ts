@@ -184,7 +184,7 @@ export function createToolCallHandler(worktreePath: string): (name: string, inpu
           return `Unknown tool: ${name}`;
       }
     } catch (e) {
-      return `Error: ${e}`;
+      return `Error: ${e instanceof Error ? e.message : String(e)}`;
     }
   };
 }

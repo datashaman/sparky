@@ -110,19 +110,27 @@ export async function executePlan(opts: ExecutePlanOpts): Promise<void> {
       let toolSchemas = TOOL_SCHEMAS;
       let agentContent = "";
 
+      // Build effective skill names list (without mutating the plan model)
+      const effectiveSkillNames = [...step.skill_names];
+
       if (step.agent_name) {
         agent = agentsByName.get(step.agent_name);
         if (agent) {
           provider = agent.provider;
           modelId = agent.model;
           const agentKey = getApiKey(agent.provider);
-          if (agentKey) apiKey = agentKey;
+          if (!agentKey) {
+            throw new Error(`No API key configured for agent provider ${agent.provider} (agent: ${agent.name}). Add one in Settings.`);
+          }
+          apiKey = agentKey;
           if (agent.content) agentContent = agent.content;
 
-          // Filter tools to agent's configured set
+          // Filter tools to agent's configured set (empty = safe default of read-only tools)
           const agentToolIds = await getToolIdsForAgent(agent.id);
           if (agentToolIds.length > 0) {
             toolSchemas = filterToolSchemas(agentToolIds);
+          } else {
+            toolSchemas = filterToolSchemas(["read", "glob", "grep"]);
           }
 
           // Load agent's skills too
@@ -130,17 +138,16 @@ export async function executePlan(opts: ExecutePlanOpts): Promise<void> {
           const agentSkills = agentSkillIds
             .map((id) => wsSkills.find((s) => s.id === id))
             .filter((s): s is Skill => !!s);
-          // Include agent skill content if not already in step skill_names
           for (const s of agentSkills) {
-            if (!step.skill_names.includes(s.name) && s.content) {
-              step.skill_names.push(s.name);
+            if (!effectiveSkillNames.includes(s.name) && s.content) {
+              effectiveSkillNames.push(s.name);
             }
           }
         }
       }
 
       // Gather skill content
-      const skillContext = step.skill_names
+      const skillContext = effectiveSkillNames
         .map((name) => {
           const skill = skillsByName.get(name);
           return skill?.content ? `## Skill: ${skill.name}\n${skill.content}` : null;

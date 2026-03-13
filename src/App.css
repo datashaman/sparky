@@ -4545,7 +4545,8 @@ button.user-code:focus-visible {
 .pv-execute {
   margin-top: 1rem;
   display: flex;
-  justify-content: center;
+  flex-direction: column;
+  align-items: center;
 }
 
 .pv-execute-btn {
