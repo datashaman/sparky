@@ -79,3 +79,33 @@ export interface AnalysisResult {
   skills: AnalysisResultSkill[];
   agents: AnalysisResultAgent[];
 }
+
+export interface ExecutionPlanStep {
+  order: number;
+  title: string;
+  description: string;
+  agent_name: string;
+  skill_names: string[];
+  expected_output: string;
+  depends_on: number[];
+}
+
+export interface ExecutionPlanResult {
+  goal: string;
+  steps: ExecutionPlanStep[];
+  success_criteria: string;
+}
+
+export type PlanStatus = "pending" | "running" | "done" | "error";
+
+export interface ExecutionPlan {
+  id: string;
+  workspace_id: string;
+  repo_full_name: string;
+  issue_number: number;
+  status: PlanStatus;
+  result: string | null;
+  error: string | null;
+  created_at: string;
+  updated_at: string;
+}
