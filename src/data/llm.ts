@@ -151,6 +151,7 @@ async function anthropicToolLoop(opts: {
   const messages: any[] = [{ role: "user", content: opts.userPrompt }];
 
   for (let turn = 0; turn < maxTurns; turn++) {
+    const isLastTurn = turn === maxTurns - 1;
     const res = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: {
@@ -162,9 +163,11 @@ async function anthropicToolLoop(opts: {
       body: JSON.stringify({
         model: modelId,
         max_tokens: 4096,
-        system: systemPrompt,
+        system: isLastTurn
+          ? systemPrompt + "\n\nYou have reached the tool-use limit. Summarize what you accomplished and what remains."
+          : systemPrompt,
         messages,
-        tools: anthropicTools,
+        ...(isLastTurn ? {} : { tools: anthropicTools }),
       }),
     });
 
@@ -181,7 +184,7 @@ async function anthropicToolLoop(opts: {
 
     // Check if there are tool uses
     const toolUses = content.filter((b: any) => b.type === "tool_use");
-    if (toolUses.length === 0 || data.stop_reason === "end_turn") {
+    if (toolUses.length === 0 || data.stop_reason === "end_turn" || isLastTurn) {
       // Extract final text
       return content
         .filter((b: any) => b.type === "text")
@@ -202,7 +205,7 @@ async function anthropicToolLoop(opts: {
     messages.push({ role: "user", content: toolResults });
   }
 
-  throw new Error(`Exceeded max turns (${maxTurns})`);
+  return "(max turns reached)";
 }
 
 // ── OpenAI ──
@@ -229,6 +232,12 @@ async function openaiToolLoop(opts: {
   ];
 
   for (let turn = 0; turn < maxTurns; turn++) {
+    const isLastTurn = turn === maxTurns - 1;
+
+    if (isLastTurn) {
+      messages.push({ role: "user", content: "You have reached the tool-use limit. Summarize what you accomplished and what remains." });
+    }
+
     const res = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
       headers: {
@@ -239,7 +248,7 @@ async function openaiToolLoop(opts: {
         model: modelId,
         max_tokens: 4096,
         messages,
-        tools: openaiTools,
+        ...(isLastTurn ? {} : { tools: openaiTools }),
       }),
     });
 
@@ -255,7 +264,7 @@ async function openaiToolLoop(opts: {
     const msg = choice.message;
     messages.push(msg);
 
-    if (choice.finish_reason !== "tool_calls" || !msg.tool_calls?.length) {
+    if (choice.finish_reason !== "tool_calls" || !msg.tool_calls?.length || isLastTurn) {
       return msg.content ?? "";
     }
 
@@ -271,7 +280,7 @@ async function openaiToolLoop(opts: {
     }
   }
 
-  throw new Error(`Exceeded max turns (${maxTurns})`);
+  return "(max turns reached)";
 }
 
 // ── Gemini ──
@@ -297,6 +306,12 @@ async function geminiToolLoop(opts: {
   const contents: any[] = [{ role: "user", parts: [{ text: opts.userPrompt }] }];
 
   for (let turn = 0; turn < maxTurns; turn++) {
+    const isLastTurn = turn === maxTurns - 1;
+
+    if (isLastTurn) {
+      contents.push({ role: "user", parts: [{ text: "You have reached the tool-use limit. Summarize what you accomplished and what remains." }] });
+    }
+
     const res = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/${modelId}:generateContent?key=${apiKey}`,
       {
@@ -305,7 +320,7 @@ async function geminiToolLoop(opts: {
         body: JSON.stringify({
           systemInstruction: { parts: [{ text: systemPrompt }] },
           contents,
-          tools: [{ functionDeclarations: declarations }],
+          ...(isLastTurn ? {} : { tools: [{ functionDeclarations: declarations }] }),
         }),
       },
     );
@@ -323,7 +338,7 @@ async function geminiToolLoop(opts: {
 
     // Check for function calls
     const fnCalls = parts.filter((p: any) => p.functionCall);
-    if (fnCalls.length === 0) {
+    if (fnCalls.length === 0 || isLastTurn) {
       // Extract text
       return parts
         .filter((p: any) => p.text)
@@ -345,5 +360,5 @@ async function geminiToolLoop(opts: {
     contents.push({ role: "user", parts: responseParts });
   }
 
-  throw new Error(`Exceeded max turns (${maxTurns})`);
+  return "(max turns reached)";
 }
