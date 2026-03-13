@@ -106,6 +106,22 @@ CREATE TABLE IF NOT EXISTS execution_plans (
 );
 
 CREATE INDEX IF NOT EXISTS idx_execution_plans_lookup ON execution_plans(workspace_id, repo_full_name, issue_number);
+
+CREATE TABLE IF NOT EXISTS issue_worktrees (
+  id TEXT PRIMARY KEY,
+  workspace_id TEXT NOT NULL,
+  repo_full_name TEXT NOT NULL,
+  issue_number INTEGER NOT NULL,
+  branch_name TEXT NOT NULL,
+  path TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'creating',
+  error TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  FOREIGN KEY (workspace_id) REFERENCES workspaces(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_issue_worktrees_lookup ON issue_worktrees(workspace_id, repo_full_name, issue_number);
 `;
 
 /** Standard location: AppConfig (e.g. ~/Library/Application Support/{bundle-id}/ on macOS) */

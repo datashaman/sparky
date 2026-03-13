@@ -109,3 +109,18 @@ export interface ExecutionPlan {
   created_at: string;
   updated_at: string;
 }
+
+export type WorktreeStatus = "creating" | "ready" | "error" | "removing";
+
+export interface IssueWorktree {
+  id: string;
+  workspace_id: string;
+  repo_full_name: string;
+  issue_number: number;
+  branch_name: string;
+  path: string;
+  status: WorktreeStatus;
+  error: string | null;
+  created_at: string;
+  updated_at: string;
+}
