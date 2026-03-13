@@ -168,6 +168,38 @@ export async function getSkillIdsForAgent(agentId: string): Promise<string[]> {
   return rows.map((r) => r.skill_id);
 }
 
+// ─── Agent–Tool associations ───
+
+let mockAgentTools: { agent_id: string; tool_id: string }[] = [];
+
+export async function getToolIdsForAgent(agentId: string): Promise<string[]> {
+  if (!isTauri()) return mockAgentTools.filter((r) => r.agent_id === agentId).map((r) => r.tool_id);
+  const db = await getDb();
+  const rows = await db.select<{ tool_id: string }[]>(
+    "SELECT tool_id FROM agent_tools WHERE agent_id = $1",
+    [agentId]
+  );
+  return rows.map((r) => r.tool_id);
+}
+
+export async function setToolIdsForAgent(agentId: string, toolIds: string[]): Promise<void> {
+  if (!isTauri()) {
+    mockAgentTools = mockAgentTools.filter((r) => r.agent_id !== agentId);
+    for (const toolId of toolIds) {
+      mockAgentTools.push({ agent_id: agentId, tool_id: toolId });
+    }
+    return;
+  }
+  const db = await getDb();
+  await db.execute("DELETE FROM agent_tools WHERE agent_id = $1", [agentId]);
+  for (const toolId of toolIds) {
+    await db.execute(
+      "INSERT INTO agent_tools (agent_id, tool_id) VALUES ($1, $2)",
+      [agentId, toolId]
+    );
+  }
+}
+
 export async function setSkillIdsForAgent(agentId: string, skillIds: string[]): Promise<void> {
   if (!isTauri()) {
     mockAgentSkills = mockAgentSkills.filter((r) => r.agent_id !== agentId);

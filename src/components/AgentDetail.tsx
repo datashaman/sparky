@@ -5,10 +5,13 @@ import {
   deleteAgent,
   getSkillIdsForAgent,
   setSkillIdsForAgent,
+  getToolIdsForAgent,
+  setToolIdsForAgent,
   AGENT_PROVIDERS,
   AGENT_MODELS,
 } from "../data/agents";
 import { listSkillsForWorkspace } from "../data/skills";
+import { TOOLS } from "../data/tools";
 import type { Agent, AgentProvider, Skill } from "../data/types";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -50,6 +53,9 @@ export function AgentDetail({ agentId, workspaceId, onBack, onDeleted }: AgentDe
   const [selectedSkillIds, setSelectedSkillIds] = useState<Set<string>>(new Set());
   const [savedSkillIds, setSavedSkillIds] = useState<Set<string>>(new Set());
 
+  const [selectedToolIds, setSelectedToolIds] = useState<Set<string>>(new Set());
+  const [savedToolIds, setSavedToolIds] = useState<Set<string>>(new Set());
+
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
@@ -57,15 +63,19 @@ export function AgentDetail({ agentId, workspaceId, onBack, onDeleted }: AgentDe
     Promise.all([
       getAgent(agentId),
       getSkillIdsForAgent(agentId),
+      getToolIdsForAgent(agentId),
       listSkillsForWorkspace(workspaceId),
     ])
-      .then(([a, skillIds, skills]) => {
+      .then(([a, skillIds, toolIds, skills]) => {
         if (cancelled) return;
         setAgent(a);
         setAllSkills(skills);
         const ids = new Set(skillIds);
         setSelectedSkillIds(ids);
         setSavedSkillIds(new Set(ids));
+        const tIds = new Set(toolIds);
+        setSelectedToolIds(tIds);
+        setSavedToolIds(new Set(tIds));
         if (a) {
           setFormName(a.name);
           setFormDescription(a.description);
@@ -101,6 +111,9 @@ export function AgentDetail({ agentId, workspaceId, onBack, onDeleted }: AgentDe
   const skillsChanged = selectedSkillIds.size !== savedSkillIds.size ||
     [...selectedSkillIds].some((id) => !savedSkillIds.has(id));
 
+  const toolsChanged = selectedToolIds.size !== savedToolIds.size ||
+    [...selectedToolIds].some((id) => !savedToolIds.has(id));
+
   const hasChanges =
     agent !== null &&
     (formName.trim() !== agent.name ||
@@ -110,7 +123,8 @@ export function AgentDetail({ agentId, workspaceId, onBack, onDeleted }: AgentDe
       formModel !== agent.model ||
       formMaxTurns !== (agent.max_turns != null ? String(agent.max_turns) : "") ||
       formBackground !== agent.background ||
-      skillsChanged);
+      skillsChanged ||
+      toolsChanged);
 
   async function handleSave(e: React.FormEvent) {
     e.preventDefault();
@@ -131,6 +145,10 @@ export function AgentDetail({ agentId, workspaceId, onBack, onDeleted }: AgentDe
       if (skillsChanged) {
         await setSkillIdsForAgent(agent.id, [...selectedSkillIds]);
         setSavedSkillIds(new Set(selectedSkillIds));
+      }
+      if (toolsChanged) {
+        await setToolIdsForAgent(agent.id, [...selectedToolIds]);
+        setSavedToolIds(new Set(selectedToolIds));
       }
     } catch (e) {
       setError(String(e));
@@ -245,6 +263,32 @@ export function AgentDetail({ agentId, workspaceId, onBack, onDeleted }: AgentDe
             </div>
           </div>
         )}
+
+        <div className="detail-field">
+          <Label>Tools</Label>
+          <span className="detail-hint">Capabilities available to this agent during execution.</span>
+          <div className="detail-skills-picker">
+            {TOOLS.map((t) => (
+              <button
+                key={t.id}
+                type="button"
+                className={`av-pill ${selectedToolIds.has(t.id) ? (t.dangerous ? "av-pill-dangerous" : "av-pill-selected") : ""}`}
+                title={t.description}
+                disabled={saving}
+                onClick={() => {
+                  setSelectedToolIds((prev) => {
+                    const next = new Set(prev);
+                    if (next.has(t.id)) next.delete(t.id);
+                    else next.add(t.id);
+                    return next;
+                  });
+                }}
+              >
+                {t.name}
+              </button>
+            ))}
+          </div>
+        </div>
 
         <div className="detail-field">
           <div className="flex gap-3">

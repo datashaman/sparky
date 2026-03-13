@@ -122,6 +122,15 @@ CREATE TABLE IF NOT EXISTS issue_worktrees (
 );
 
 CREATE INDEX IF NOT EXISTS idx_issue_worktrees_lookup ON issue_worktrees(workspace_id, repo_full_name, issue_number);
+
+CREATE TABLE IF NOT EXISTS agent_tools (
+  agent_id TEXT NOT NULL,
+  tool_id TEXT NOT NULL,
+  PRIMARY KEY (agent_id, tool_id),
+  FOREIGN KEY (agent_id) REFERENCES agents(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_agent_tools_agent ON agent_tools(agent_id);
 `;
 
 /** Standard location: AppConfig (e.g. ~/Library/Application Support/{bundle-id}/ on macOS) */
