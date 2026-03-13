@@ -6,8 +6,8 @@ import {
 } from "../data/repos";
 import { addRepoToWorkspace, removeRepoFromWorkspace } from "../data/workspaceRepos";
 import { fetchRepo, listUserRepos, listRepoOpenIssues, type GitHubRepo, type GitHubIssue } from "../github";
-import { listAgentsForWorkspace } from "../data/agents";
-import { listSkillsForWorkspace } from "../data/skills";
+import { listAgentsForWorkspace, deleteAgent } from "../data/agents";
+import { listSkillsForWorkspace, deleteSkill } from "../data/skills";
 import { getAnalysisForIssue, createAnalysis, deleteAnalysesForIssue } from "../data/issueAnalyses";
 import { getPlanForIssue, createPlan, deletePlansForIssue } from "../data/executionPlans";
 import { getWorktreeForIssue, removeWorktree } from "../data/issueWorktrees";
@@ -735,6 +735,24 @@ export function WorkspaceDetail({ workspaceId, onSwitchWorkspace, onDeleted, onW
                         if (wt && wt.status === "ready") {
                           try { await removeWorktree(wt, setWorktree); } catch { /* best-effort */ }
                         }
+
+                        // Delete skills and agents that were created from this analysis
+                        if (analysis?.result) {
+                          try {
+                            const parsed: AnalysisResult = JSON.parse(analysis.result);
+                            const recommendedSkillNames = new Set(parsed.skills.map((s) => s.name));
+                            const recommendedAgentNames = new Set(parsed.agents.map((a) => a.name));
+                            const [wsSkills, wsAgents] = await Promise.all([
+                              listSkillsForWorkspace(workspaceId),
+                              listAgentsForWorkspace(workspaceId),
+                            ]);
+                            await Promise.all([
+                              ...wsSkills.filter((s) => recommendedSkillNames.has(s.name)).map((s) => deleteSkill(s.id)),
+                              ...wsAgents.filter((a) => recommendedAgentNames.has(a.name)).map((a) => deleteAgent(a.id)),
+                            ]);
+                          } catch { /* best-effort */ }
+                        }
+
                         await Promise.all([
                           deleteAnalysesForIssue(workspaceId, full_name, number),
                           deletePlansForIssue(workspaceId, full_name, number),
