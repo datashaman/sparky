@@ -31,7 +31,7 @@ export function getDisplayMode(): DisplayMode {
 export function getDefaultProvider(): AgentProvider | "" {
   try {
     const stored = localStorage.getItem(DEFAULT_PROVIDER_KEY);
-    if (stored === "openai" || stored === "anthropic" || stored === "gemini") return stored;
+    if (stored === "openai" || stored === "anthropic" || stored === "gemini" || stored === "ollama") return stored;
   } catch { /* ignore */ }
   return "";
 }
@@ -45,7 +45,7 @@ export function getDefaultModel(): string {
 export function getExecProvider(): AgentProvider | "" {
   try {
     const stored = localStorage.getItem(EXEC_PROVIDER_KEY);
-    if (stored === "openai" || stored === "anthropic" || stored === "gemini") return stored;
+    if (stored === "openai" || stored === "anthropic" || stored === "gemini" || stored === "ollama") return stored;
   } catch { /* ignore */ }
   return "";
 }
@@ -194,16 +194,24 @@ export function UserSettings({ open, onClose }: Props) {
                 </div>
                 <div className="flex flex-col gap-1.5 flex-1 min-w-0">
                   <Label>Model</Label>
-                  <Select value={model} onValueChange={setModel} disabled={!provider}>
-                    <SelectTrigger>
-                      <SelectValue placeholder={provider ? "Select model" : "Pick provider first"} />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {models.map((m) => (
-                        <SelectItem key={m} value={m}>{m}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  {provider === "ollama" ? (
+                    <Input
+                      placeholder="e.g. qwen2.5:3b"
+                      value={model}
+                      onChange={(e) => setModel(e.target.value)}
+                    />
+                  ) : (
+                    <Select value={model} onValueChange={setModel} disabled={!provider}>
+                      <SelectTrigger>
+                        <SelectValue placeholder={provider ? "Select model" : "Pick provider first"} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {models.map((m) => (
+                          <SelectItem key={m} value={m}>{m}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
                 </div>
               </div>
               <p className="user-settings-hint">
@@ -231,16 +239,24 @@ export function UserSettings({ open, onClose }: Props) {
                 </div>
                 <div className="flex flex-col gap-1.5 flex-1 min-w-0">
                   <Label>Model</Label>
-                  <Select value={execModel} onValueChange={setExecModel} disabled={!execProvider}>
-                    <SelectTrigger>
-                      <SelectValue placeholder={execProvider ? "Select model" : "Pick provider first"} />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {execModels.map((m) => (
-                        <SelectItem key={m} value={m}>{m}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  {execProvider === "ollama" ? (
+                    <Input
+                      placeholder="e.g. qwen2.5:3b"
+                      value={execModel}
+                      onChange={(e) => setExecModel(e.target.value)}
+                    />
+                  ) : (
+                    <Select value={execModel} onValueChange={setExecModel} disabled={!execProvider}>
+                      <SelectTrigger>
+                        <SelectValue placeholder={execProvider ? "Select model" : "Pick provider first"} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {execModels.map((m) => (
+                          <SelectItem key={m} value={m}>{m}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
                 </div>
               </div>
               <p className="user-settings-hint">

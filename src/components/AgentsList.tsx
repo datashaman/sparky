@@ -31,6 +31,7 @@ const PROVIDER_COLORS: Record<AgentProvider, string> = {
   openai: "#10a37f",
   anthropic: "#d4a27f",
   gemini: "#4285f4",
+  ollama: "#ffffff",
 };
 
 export function AgentsList({ workspaceId, onSelectAgent }: Props) {
