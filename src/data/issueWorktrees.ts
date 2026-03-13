@@ -135,6 +135,7 @@ export async function removeWorktree(
   } catch (e) {
     const error = String(e);
     await updateWorktreeRecord(wt.id, { status: "error", error });
+    onUpdate({ ...wt, status: "error", error });
     throw e;
   }
 }

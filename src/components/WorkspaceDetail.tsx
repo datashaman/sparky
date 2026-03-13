@@ -10,7 +10,7 @@ import { listAgentsForWorkspace } from "../data/agents";
 import { listSkillsForWorkspace } from "../data/skills";
 import { getAnalysisForIssue, createAnalysis } from "../data/issueAnalyses";
 import { getPlanForIssue, createPlan } from "../data/executionPlans";
-import { getWorktreeForIssue, ensureWorktree } from "../data/issueWorktrees";
+import { getWorktreeForIssue } from "../data/issueWorktrees";
 import { runAnalysis } from "../data/analyseIssue";
 import { runPlanGeneration } from "../data/generatePlan";
 import type { IssueAnalysis, AnalysisResult, ExecutionPlan, ExecutionPlanResult, IssueWorktree } from "../data/types";
@@ -93,7 +93,7 @@ export function WorkspaceDetail({ workspaceId, onSwitchWorkspace, onDeleted, onW
   const [plan, setPlan] = useState<ExecutionPlan | null>(null);
   const [planLoading, setPlanLoading] = useState(false);
   const [allCreated, setAllCreated] = useState(false);
-  const [worktree, setWorktree] = useState<IssueWorktree | null>(null);
+  const [_worktree, setWorktree] = useState<IssueWorktree | null>(null);
   const [selectedSkillId, setSelectedSkillId] = useState<string | null>(null);
   const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
 
