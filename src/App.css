@@ -1962,6 +1962,18 @@ button.user-code:focus-visible {
   padding: 0.35rem 0.75rem;
 }
 
+.workspace-page-agents,
+.workspace-page-settings,
+.workspace-page-dashboard,
+.workspace-page-workspaces,
+.workspace-page-skills,
+.workspace-page-issue {
+  max-width: 640px;
+  margin-left: auto;
+  margin-right: auto;
+  width: 100%;
+}
+
 .workspace-page-agents {
   display: flex;
   flex-direction: column;
@@ -1973,7 +1985,6 @@ button.user-code:focus-visible {
   display: flex;
   flex-direction: column;
   gap: 2rem;
-  max-width: 640px;
 }
 
 .workspace-settings-section h3 {
@@ -2054,7 +2065,6 @@ button.user-code:focus-visible {
   list-style: none;
   padding: 0;
   margin: 0;
-  max-width: 640px;
 }
 
 .agent-item {
