@@ -4366,6 +4366,93 @@ button.user-code:focus-visible {
   font-style: italic;
 }
 
+.pv-status {
+  font-size: 0.85rem;
+  line-height: 1;
+}
+
+.pv-status-pending { color: #94a3b8; }
+.pv-status-running { color: #f59e0b; animation: pv-pulse 1s infinite; }
+.pv-status-done { color: #22c55e; }
+.pv-status-error { color: #ef4444; }
+
+@keyframes pv-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+.pv-step-running {
+  border-color: #f59e0b;
+}
+
+.pv-step-done {
+  border-color: #22c55e;
+}
+
+.pv-step-error {
+  border-color: #ef4444;
+}
+
+.pv-step-error-text {
+  font-size: 0.8rem;
+  color: #ef4444;
+  margin-top: 0.35rem;
+}
+
+.pv-step-result {
+  margin-top: 0.5rem;
+}
+
+.pv-step-result-toggle {
+  font-size: 0.75rem;
+  color: #6366f1;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  text-decoration: underline;
+}
+
+.pv-step-result-content {
+  margin-top: 0.35rem;
+  font-size: 0.75rem;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 4px;
+  padding: 0.5rem;
+  max-height: 300px;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.pv-execute {
+  margin-top: 1rem;
+  display: flex;
+  justify-content: center;
+}
+
+.pv-execute-btn {
+  padding: 0.5rem 1.5rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #fff;
+  background: #6366f1;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.pv-execute-btn:hover:not(:disabled) {
+  background: #4f46e5;
+}
+
+.pv-execute-btn:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
 /* PlanView dark mode */
 @media (prefers-color-scheme: dark) {
   .pv-goal,
@@ -4428,6 +4515,24 @@ button.user-code:focus-visible {
 
   .pv-step-deps {
     color: #64748b;
+  }
+
+  .pv-step-result-content {
+    background: #0f172a;
+    border-color: #334155;
+    color: #e2e8f0;
+  }
+
+  .pv-step-result-toggle {
+    color: #818cf8;
+  }
+
+  .pv-execute-btn {
+    background: #4f46e5;
+  }
+
+  .pv-execute-btn:hover:not(:disabled) {
+    background: #6366f1;
   }
 }
 
