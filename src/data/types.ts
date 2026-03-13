@@ -67,6 +67,7 @@ export interface AnalysisResultAgent {
   name: string;
   description: string;
   skill_names: string[];
+  tool_names: string[];
 }
 
 export interface AnalysisResult {
@@ -86,6 +87,7 @@ export interface ExecutionPlanStep {
   description: string;
   agent_name: string;
   skill_names: string[];
+  tool_names: string[];
   expected_output: string;
   depends_on: number[];
 }

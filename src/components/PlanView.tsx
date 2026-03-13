@@ -28,6 +28,13 @@ export function PlanView({ result }: PlanViewProps) {
                 ))}
               </div>
             )}
+            {step.tool_names?.length > 0 && (
+              <div className="pv-step-skills">
+                {step.tool_names.map((t) => (
+                  <span key={t} className="pv-skill-pill pv-tool-pill">{t}</span>
+                ))}
+              </div>
+            )}
             <div className="pv-step-output">
               <span className="pv-step-output-label">Expected output:</span> {step.expected_output}
             </div>
