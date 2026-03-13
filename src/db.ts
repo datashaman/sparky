@@ -28,6 +28,21 @@ CREATE TABLE IF NOT EXISTS workspace_repos (
 
 CREATE INDEX IF NOT EXISTS idx_workspace_repos_workspace ON workspace_repos(workspace_id);
 CREATE INDEX IF NOT EXISTS idx_workspace_repos_repo ON workspace_repos(repo_id);
+
+CREATE TABLE IF NOT EXISTS agents (
+  id TEXT PRIMARY KEY,
+  workspace_id TEXT NOT NULL,
+  name TEXT NOT NULL,
+  description TEXT NOT NULL,
+  provider TEXT NOT NULL,
+  model TEXT NOT NULL,
+  max_turns INTEGER,
+  background INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL,
+  FOREIGN KEY (workspace_id) REFERENCES workspaces(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_agents_workspace ON agents(workspace_id);
 `;
 
 /** Standard location: AppConfig (e.g. ~/Library/Application Support/{bundle-id}/ on macOS) */

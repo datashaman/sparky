@@ -178,7 +178,7 @@ function App() {
           if (saved.fullscreen) {
             await win.setFullscreen(true);
           } else if (saved.maximized) {
-            await win.setMaximized(true);
+            await (win as any).setMaximized(true);
           }
         }
       } catch (e) {
@@ -253,7 +253,6 @@ function App() {
     win
       .onCloseRequested(async () => {
         try {
-          const { isVisible } = await import("@tauri-apps/api/webviewWindow");
           const detail = await WebviewWindow.getByLabel("detail");
           const detailVisible = detail ? await detail.isVisible() : false;
           if (!detailVisible) {
