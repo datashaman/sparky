@@ -1621,27 +1621,21 @@ button.user-code:focus-visible {
 
 .issue-tabs-actions {
   display: flex;
+  align-items: stretch;
   gap: 0;
   margin-left: auto;
+  border-radius: 6px;
+  overflow: hidden;
 }
 
 .issue-tabs-actions .analyse-btn-inline {
   border-radius: 0;
+  border: none;
+  border-right: 1px solid #d1d5db;
+}
+
+.issue-tabs-actions > :last-child {
   border-right: none;
-}
-
-.issue-tabs-actions .analyse-btn-inline:first-child {
-  border-radius: 6px 0 0 6px;
-}
-
-.issue-tabs-actions .analyse-btn-inline:last-child {
-  border-radius: 0 6px 6px 0;
-  border-right: 1px solid #d1d5db;
-}
-
-.issue-tabs-actions .analyse-btn-inline:only-child {
-  border-radius: 6px;
-  border-right: 1px solid #d1d5db;
 }
 
 .issue-tab {
@@ -4397,3 +4391,4 @@ button.user-code:focus-visible {
     color: #64748b;
   }
 }
+

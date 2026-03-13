@@ -10,9 +10,10 @@ import { listAgentsForWorkspace } from "../data/agents";
 import { listSkillsForWorkspace } from "../data/skills";
 import { getAnalysisForIssue, createAnalysis } from "../data/issueAnalyses";
 import { getPlanForIssue, createPlan } from "../data/executionPlans";
+import { getWorktreeForIssue, ensureWorktree } from "../data/issueWorktrees";
 import { runAnalysis } from "../data/analyseIssue";
 import { runPlanGeneration } from "../data/generatePlan";
-import type { IssueAnalysis, AnalysisResult, ExecutionPlan, ExecutionPlanResult } from "../data/types";
+import type { IssueAnalysis, AnalysisResult, ExecutionPlan, ExecutionPlanResult, IssueWorktree } from "../data/types";
 import { marked } from "marked";
 import { AnalysisView } from "./AnalysisView";
 import { PlanView } from "./PlanView";
@@ -92,6 +93,7 @@ export function WorkspaceDetail({ workspaceId, onSwitchWorkspace, onDeleted, onW
   const [plan, setPlan] = useState<ExecutionPlan | null>(null);
   const [planLoading, setPlanLoading] = useState(false);
   const [allCreated, setAllCreated] = useState(false);
+  const [worktree, setWorktree] = useState<IssueWorktree | null>(null);
   const [selectedSkillId, setSelectedSkillId] = useState<string | null>(null);
   const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
 
@@ -104,6 +106,7 @@ export function WorkspaceDetail({ workspaceId, onSwitchWorkspace, onDeleted, onW
     if (!selectedIssue) {
       setAnalysis(null);
       setPlan(null);
+      setWorktree(null);
       setAllCreated(false);
       setIssueTab("issue");
       return;
@@ -114,16 +117,19 @@ export function WorkspaceDetail({ workspaceId, onSwitchWorkspace, onDeleted, onW
     Promise.all([
       getAnalysisForIssue(workspaceId, selectedIssue.full_name, selectedIssue.number),
       getPlanForIssue(workspaceId, selectedIssue.full_name, selectedIssue.number),
+      getWorktreeForIssue(workspaceId, selectedIssue.full_name, selectedIssue.number),
     ])
-      .then(([a, p]) => {
+      .then(([a, p, wt]) => {
         if (cancelled) return;
         setAnalysis(a);
         setPlan(p);
+        setWorktree(wt);
       })
       .catch(() => {
         if (cancelled) return;
         setAnalysis(null);
         setPlan(null);
+        setWorktree(null);
       })
       .finally(() => {
         if (cancelled) return;

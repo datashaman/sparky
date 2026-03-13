@@ -1,3 +1,4 @@
+mod git_ops;
 mod github_auth;
 
 // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
@@ -38,6 +39,10 @@ pub fn run() {
             github_poll_token,
             github_login_web,
             github_get_user,
+            git_ops::git_clone_repo,
+            git_ops::git_create_worktree,
+            git_ops::git_remove_worktree,
+            git_ops::git_worktree_status,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
