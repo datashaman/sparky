@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { getSkill, updateSkill, deleteSkill } from "../data/skills";
 import { AGENT_PROVIDERS, AGENT_MODELS } from "../data/agents";
 import { fetchOllamaModels } from "../data/ollamaModels";
+import { fetchOpenRouterModels } from "../data/openrouterModels";
 import type { AgentProvider, Skill } from "../data/types";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -43,14 +44,17 @@ export function SkillDetail({ skillId, onBack, onDeleted }: SkillDetailProps) {
   const [formProvider, setFormProvider] = useState<AgentProvider | "">("");
   const [formModel, setFormModel] = useState("");
   const [ollamaModels, setOllamaModels] = useState<string[]>([]);
+  const [openrouterModels, setOpenrouterModels] = useState<string[]>([]);
 
   useEffect(() => {
     if (formProvider === "ollama") {
       fetchOllamaModels().then(setOllamaModels);
+    } else if (formProvider === "openrouter") {
+      fetchOpenRouterModels().then(setOpenrouterModels);
     }
   }, [formProvider]);
 
-  const models = formProvider === "ollama" ? ollamaModels : formProvider ? AGENT_MODELS[formProvider] : [];
+  const models = formProvider === "ollama" ? ollamaModels : formProvider === "openrouter" ? openrouterModels : formProvider ? AGENT_MODELS[formProvider] : [];
 
   useEffect(() => {
     let cancelled = false;
@@ -239,33 +243,24 @@ export function SkillDetail({ skillId, onBack, onDeleted }: SkillDetailProps) {
 
         <div className="detail-field">
           <Label>Model</Label>
-          {formProvider === "openrouter" ? (
-            <Input
-              placeholder="e.g. anthropic/claude-sonnet-4"
-              value={formModel}
-              onChange={(e) => setFormModel(e.target.value)}
-              disabled={saving}
-            />
-          ) : (
-            <Select
-              value={formModel}
-              onValueChange={setFormModel}
-              disabled={saving || !formProvider}
-            >
-              <SelectTrigger>
-                <SelectValue
-                  placeholder={formProvider ? "Select model" : "Pick provider first"}
-                />
-              </SelectTrigger>
-              <SelectContent>
-                {[...models].sort().map((m) => (
-                  <SelectItem key={m} value={m}>
-                    {m}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          )}
+          <Select
+            value={formModel}
+            onValueChange={setFormModel}
+            disabled={saving || !formProvider}
+          >
+            <SelectTrigger>
+              <SelectValue
+                placeholder={formProvider ? "Select model" : "Pick provider first"}
+              />
+            </SelectTrigger>
+            <SelectContent>
+              {[...models].sort().map((m) => (
+                <SelectItem key={m} value={m}>
+                  {m}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
 
         {error && <p className="skills-drawer-error">{error}</p>}

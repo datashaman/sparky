@@ -13,6 +13,7 @@ import {
 import { listSkillsForWorkspace } from "../data/skills";
 import { TOOLS } from "../data/tools";
 import { fetchOllamaModels } from "../data/ollamaModels";
+import { fetchOpenRouterModels } from "../data/openrouterModels";
 import type { Agent, AgentProvider, Skill } from "../data/types";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -99,6 +100,7 @@ export function AgentDetail({ agentId, workspaceId, onBack, onDeleted }: AgentDe
   }, [agentId, workspaceId]);
 
   const [ollamaModels, setOllamaModels] = useState<string[]>([]);
+  const [openrouterModels, setOpenrouterModels] = useState<string[]>([]);
 
   // When provider changes, reset model to first available for that provider
   useEffect(() => {
@@ -108,12 +110,17 @@ export function AgentDetail({ agentId, workspaceId, onBack, onDeleted }: AgentDe
         setOllamaModels(m);
         if (formProvider !== agent.provider && m.length > 0) setFormModel(m[0]);
       });
-    } else if (formProvider !== agent.provider && formProvider !== "openrouter" && AGENT_MODELS[formProvider].length > 0) {
+    } else if (formProvider === "openrouter") {
+      fetchOpenRouterModels().then((m) => {
+        setOpenrouterModels(m);
+        if (formProvider !== agent.provider && m.length > 0) setFormModel(m[0]);
+      });
+    } else if (formProvider !== agent.provider && AGENT_MODELS[formProvider].length > 0) {
       setFormModel(AGENT_MODELS[formProvider][0] ?? "");
     }
   }, [formProvider]);
 
-  const models = formProvider === "ollama" ? ollamaModels : (AGENT_MODELS[formProvider] ?? []);
+  const models = formProvider === "ollama" ? ollamaModels : formProvider === "openrouter" ? openrouterModels : (AGENT_MODELS[formProvider] ?? []);
 
   const skillsChanged = selectedSkillIds.size !== savedSkillIds.size ||
     [...selectedSkillIds].some((id) => !savedSkillIds.has(id));
@@ -318,29 +325,20 @@ export function AgentDetail({ agentId, workspaceId, onBack, onDeleted }: AgentDe
             </div>
             <div className="flex flex-col gap-1.5 flex-1 min-w-0">
               <Label>Model</Label>
-              {formProvider === "openrouter" ? (
-                <Input
-                  placeholder="e.g. anthropic/claude-sonnet-4"
-                  value={formModel}
-                  onChange={(e) => setFormModel(e.target.value)}
-                  disabled={saving}
-                />
-              ) : (
-                <Select
-                  value={formModel}
-                  onValueChange={setFormModel}
-                  disabled={saving}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {[...models].sort().map((m) => (
-                      <SelectItem key={m} value={m}>{m}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              )}
+              <Select
+                value={formModel}
+                onValueChange={setFormModel}
+                disabled={saving}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {[...models].sort().map((m) => (
+                    <SelectItem key={m} value={m}>{m}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
           </div>
         </div>

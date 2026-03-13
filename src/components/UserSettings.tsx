@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { AGENT_PROVIDERS, AGENT_MODELS } from "../data/agents";
 import { fetchOllamaModels } from "../data/ollamaModels";
+import { fetchOpenRouterModels } from "../data/openrouterModels";
 import type { AgentProvider } from "../data/types";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
@@ -98,16 +99,27 @@ export function UserSettings({ open, onClose }: Props) {
   });
 
   const [ollamaModels, setOllamaModels] = useState<string[]>([]);
+  const [openrouterModels, setOpenrouterModels] = useState<string[]>([]);
 
-  // Fetch Ollama models when either provider is set to ollama
+  // Fetch dynamic model lists when providers are selected
   useEffect(() => {
     if (provider === "ollama" || execProvider === "ollama") {
       fetchOllamaModels().then(setOllamaModels);
     }
+    if (provider === "openrouter" || execProvider === "openrouter") {
+      fetchOpenRouterModels().then(setOpenrouterModels);
+    }
   }, [provider, execProvider]);
 
-  const models = provider === "ollama" ? ollamaModels : provider ? AGENT_MODELS[provider] : [];
-  const execModels = execProvider === "ollama" ? ollamaModels : execProvider ? AGENT_MODELS[execProvider] : [];
+  function getModelsForProvider(p: AgentProvider | ""): string[] {
+    if (!p) return [];
+    if (p === "ollama") return ollamaModels;
+    if (p === "openrouter") return openrouterModels;
+    return AGENT_MODELS[p];
+  }
+
+  const models = getModelsForProvider(provider);
+  const execModels = getModelsForProvider(execProvider);
 
   useEffect(() => {
     applyDisplayMode(displayMode);
@@ -116,10 +128,9 @@ export function UserSettings({ open, onClose }: Props) {
 
   useEffect(() => {
     try { localStorage.setItem(DEFAULT_PROVIDER_KEY, provider); } catch { /* ignore */ }
-    // Reset model when provider changes to one with a fixed model list
-    // and the current model isn't in that list. Skip for openrouter (free-text)
-    // and ollama (async model list). Don't wipe on empty provider.
-    if (!provider || provider === "openrouter" || provider === "ollama") return;
+    // Reset model when provider changes to one with a fixed model list.
+    // Skip for ollama/openrouter (async model lists). Don't wipe on empty.
+    if (!provider || provider === "ollama" || provider === "openrouter") return;
     const available = AGENT_MODELS[provider];
     if (available.length > 0 && !available.includes(model)) {
       setModel(available[0] ?? "");
@@ -200,24 +211,16 @@ export function UserSettings({ open, onClose }: Props) {
                 </div>
                 <div className="flex flex-col gap-1.5 flex-1 min-w-0">
                   <Label>Model</Label>
-                  {provider === "openrouter" ? (
-                    <Input
-                      placeholder="e.g. anthropic/claude-sonnet-4"
-                      value={model}
-                      onChange={(e) => setModel(e.target.value)}
-                    />
-                  ) : (
-                    <Select value={model} onValueChange={setModel} disabled={!provider}>
-                      <SelectTrigger>
-                        <SelectValue placeholder={provider ? "Select model" : "Pick provider first"} />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {[...models].sort().map((m) => (
-                          <SelectItem key={m} value={m}>{m}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  )}
+                  <Select value={model} onValueChange={setModel} disabled={!provider}>
+                    <SelectTrigger>
+                      <SelectValue placeholder={provider ? "Select model" : "Pick provider first"} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {[...models].sort().map((m) => (
+                        <SelectItem key={m} value={m}>{m}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
               </div>
               <p className="user-settings-hint">
@@ -245,24 +248,16 @@ export function UserSettings({ open, onClose }: Props) {
                 </div>
                 <div className="flex flex-col gap-1.5 flex-1 min-w-0">
                   <Label>Model</Label>
-                  {execProvider === "openrouter" ? (
-                    <Input
-                      placeholder="e.g. anthropic/claude-sonnet-4"
-                      value={execModel}
-                      onChange={(e) => setExecModel(e.target.value)}
-                    />
-                  ) : (
-                    <Select value={execModel} onValueChange={setExecModel} disabled={!execProvider}>
-                      <SelectTrigger>
-                        <SelectValue placeholder={execProvider ? "Select model" : "Pick provider first"} />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {[...execModels].sort().map((m) => (
-                          <SelectItem key={m} value={m}>{m}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  )}
+                  <Select value={execModel} onValueChange={setExecModel} disabled={!execProvider}>
+                    <SelectTrigger>
+                      <SelectValue placeholder={execProvider ? "Select model" : "Pick provider first"} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {[...execModels].sort().map((m) => (
+                        <SelectItem key={m} value={m}>{m}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
               </div>
               <p className="user-settings-hint">

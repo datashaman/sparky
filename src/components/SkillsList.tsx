@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { listSkillsForWorkspace, createSkill, deleteSkill } from "../data/skills";
 import { AGENT_PROVIDERS, AGENT_MODELS } from "../data/agents";
 import { fetchOllamaModels } from "../data/ollamaModels";
+import { fetchOpenRouterModels } from "../data/openrouterModels";
 import type { AgentProvider } from "../data/types";
 import type { Skill } from "../data/types";
 import { Input } from "@/components/ui/input";
@@ -42,14 +43,17 @@ export function SkillsList({ workspaceId, onSelectSkill }: Props) {
   const [formProvider, setFormProvider] = useState<AgentProvider | "">("");
   const [formModel, setFormModel] = useState("");
   const [ollamaModels, setOllamaModels] = useState<string[]>([]);
+  const [openrouterModels, setOpenrouterModels] = useState<string[]>([]);
 
   useEffect(() => {
     if (formProvider === "ollama") {
       fetchOllamaModels().then(setOllamaModels);
+    } else if (formProvider === "openrouter") {
+      fetchOpenRouterModels().then(setOpenrouterModels);
     }
   }, [formProvider]);
 
-  const models = formProvider === "ollama" ? ollamaModels : formProvider ? AGENT_MODELS[formProvider] : [];
+  const models = formProvider === "ollama" ? ollamaModels : formProvider === "openrouter" ? openrouterModels : formProvider ? AGENT_MODELS[formProvider] : [];
 
   async function load() {
     setLoading(true);
@@ -267,29 +271,20 @@ export function SkillsList({ workspaceId, onSelectSkill }: Props) {
                 </div>
                 <div className="flex flex-col gap-1.5 flex-1 min-w-0">
                   <Label>Model</Label>
-                  {formProvider === "openrouter" ? (
-                    <Input
-                      placeholder="e.g. anthropic/claude-sonnet-4"
-                      value={formModel}
-                      onChange={(e) => setFormModel(e.target.value)}
-                      disabled={creating}
-                    />
-                  ) : (
-                    <Select
-                      value={formModel}
-                      onValueChange={setFormModel}
-                      disabled={creating || !formProvider}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder={formProvider ? "Select model" : "Pick provider first"} />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {[...models].sort().map((m) => (
-                          <SelectItem key={m} value={m}>{m}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  )}
+                  <Select
+                    value={formModel}
+                    onValueChange={setFormModel}
+                    disabled={creating || !formProvider}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder={formProvider ? "Select model" : "Pick provider first"} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {[...models].sort().map((m) => (
+                        <SelectItem key={m} value={m}>{m}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
               </div>
             </div>
