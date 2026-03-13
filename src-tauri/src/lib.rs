@@ -55,6 +55,7 @@ pub fn run() {
             execution_log::append_execution_log,
             execution_log::get_execution_log_path,
             ollama_proxy::ollama_chat,
+            ollama_proxy::ollama_list_models,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

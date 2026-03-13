@@ -6,6 +6,7 @@ import {
   AGENT_PROVIDERS,
   AGENT_MODELS,
 } from "../data/agents";
+import { fetchOllamaModels } from "../data/ollamaModels";
 import type { AgentProvider } from "../data/types";
 import type { Agent } from "../data/types";
 import { Input } from "@/components/ui/input";
@@ -49,8 +50,9 @@ export function AgentsList({ workspaceId, onSelectAgent }: Props) {
   const [formModel, setFormModel] = useState(AGENT_MODELS.openai[0]);
   const [formMaxTurns, setFormMaxTurns] = useState("");
   const [formBackground, setFormBackground] = useState(false);
+  const [ollamaModels, setOllamaModels] = useState<string[]>([]);
 
-  const models = AGENT_MODELS[formProvider];
+  const models = formProvider === "ollama" ? ollamaModels : AGENT_MODELS[formProvider];
 
   async function load() {
     setLoading(true);
@@ -70,7 +72,14 @@ export function AgentsList({ workspaceId, onSelectAgent }: Props) {
   }, [workspaceId]);
 
   useEffect(() => {
-    if (models.length > 0) setFormModel(models[0] ?? "");
+    if (formProvider === "ollama") {
+      fetchOllamaModels().then((m) => {
+        setOllamaModels(m);
+        if (m.length > 0) setFormModel(m[0]);
+      });
+    } else if (models.length > 0) {
+      setFormModel(models[0] ?? "");
+    }
   }, [formProvider]);
 
   function resetForm() {
@@ -280,9 +289,9 @@ export function AgentsList({ workspaceId, onSelectAgent }: Props) {
                 </div>
                 <div className="flex flex-col gap-1.5 flex-1 min-w-0">
                   <Label>Model</Label>
-                  {models.length === 0 ? (
+                  {formProvider === "openrouter" ? (
                     <Input
-                      placeholder="e.g. qwen2.5:3b"
+                      placeholder="e.g. anthropic/claude-sonnet-4"
                       value={formModel}
                       onChange={(e) => setFormModel(e.target.value)}
                       disabled={creating}
@@ -297,7 +306,7 @@ export function AgentsList({ workspaceId, onSelectAgent }: Props) {
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        {models.map((m) => (
+                        {[...models].sort().map((m) => (
                           <SelectItem key={m} value={m}>{m}</SelectItem>
                         ))}
                       </SelectContent>

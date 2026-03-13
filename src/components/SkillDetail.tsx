@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { getSkill, updateSkill, deleteSkill } from "../data/skills";
 import { AGENT_PROVIDERS, AGENT_MODELS } from "../data/agents";
+import { fetchOllamaModels } from "../data/ollamaModels";
 import type { AgentProvider, Skill } from "../data/types";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -41,8 +42,15 @@ export function SkillDetail({ skillId, onBack, onDeleted }: SkillDetailProps) {
   const [formContent, setFormContent] = useState("");
   const [formProvider, setFormProvider] = useState<AgentProvider | "">("");
   const [formModel, setFormModel] = useState("");
+  const [ollamaModels, setOllamaModels] = useState<string[]>([]);
 
-  const models = formProvider ? AGENT_MODELS[formProvider] : [];
+  useEffect(() => {
+    if (formProvider === "ollama") {
+      fetchOllamaModels().then(setOllamaModels);
+    }
+  }, [formProvider]);
+
+  const models = formProvider === "ollama" ? ollamaModels : formProvider ? AGENT_MODELS[formProvider] : [];
 
   useEffect(() => {
     let cancelled = false;
@@ -231,9 +239,9 @@ export function SkillDetail({ skillId, onBack, onDeleted }: SkillDetailProps) {
 
         <div className="detail-field">
           <Label>Model</Label>
-          {formProvider && models.length === 0 ? (
+          {formProvider === "openrouter" ? (
             <Input
-              placeholder="e.g. qwen2.5:3b"
+              placeholder="e.g. anthropic/claude-sonnet-4"
               value={formModel}
               onChange={(e) => setFormModel(e.target.value)}
               disabled={saving}
@@ -250,7 +258,7 @@ export function SkillDetail({ skillId, onBack, onDeleted }: SkillDetailProps) {
                 />
               </SelectTrigger>
               <SelectContent>
-                {models.map((m) => (
+                {[...models].sort().map((m) => (
                   <SelectItem key={m} value={m}>
                     {m}
                   </SelectItem>
