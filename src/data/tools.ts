@@ -1,3 +1,6 @@
+import { invoke } from "@tauri-apps/api/core";
+import type { LLMToolDef } from "./types";
+
 export interface ToolDef {
   id: string;
   name: string;
@@ -13,3 +16,175 @@ export const TOOLS: ToolDef[] = [
   { id: "grep", name: "Grep", description: "Search file contents with regex", dangerous: false },
   { id: "bash", name: "Bash", description: "Run a shell command", dangerous: true },
 ];
+
+/** LLM-facing tool definitions with parameter schemas for function calling. */
+export const TOOL_SCHEMAS: LLMToolDef[] = [
+  {
+    name: "read_file",
+    description: "Read a file's contents. Returns the file text.",
+    parameters: {
+      type: "object",
+      properties: {
+        file_path: { type: "string", description: "Path relative to worktree root" },
+      },
+      required: ["file_path"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "write_file",
+    description: "Create or overwrite a file with the given content.",
+    parameters: {
+      type: "object",
+      properties: {
+        file_path: { type: "string", description: "Path relative to worktree root" },
+        content: { type: "string", description: "File content to write" },
+      },
+      required: ["file_path", "content"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "edit_file",
+    description: "Find-and-replace text in a file. old_text must appear exactly once.",
+    parameters: {
+      type: "object",
+      properties: {
+        file_path: { type: "string", description: "Path relative to worktree root" },
+        old_text: { type: "string", description: "Exact text to find (must be unique in file)" },
+        new_text: { type: "string", description: "Replacement text" },
+      },
+      required: ["file_path", "old_text", "new_text"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "glob",
+    description: "Find files matching a glob pattern. Returns list of relative paths.",
+    parameters: {
+      type: "object",
+      properties: {
+        pattern: { type: "string", description: "Glob pattern (e.g. **/*.ts, src/**/*.rs)" },
+      },
+      required: ["pattern"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "grep",
+    description: "Search file contents with regex. Returns matching lines with file paths and line numbers.",
+    parameters: {
+      type: "object",
+      properties: {
+        pattern: { type: "string", description: "Regex pattern to search for" },
+        glob_filter: { type: "string", description: "Optional glob to filter files (e.g. *.ts)" },
+      },
+      required: ["pattern"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "bash",
+    description: "Run a shell command in the worktree directory. Returns stdout, stderr, and exit code.",
+    parameters: {
+      type: "object",
+      properties: {
+        command: { type: "string", description: "Shell command to run" },
+      },
+      required: ["command"],
+      additionalProperties: false,
+    },
+  },
+];
+
+/** Map tool IDs (read, write, etc.) to schema names (read_file, write_file, etc.) */
+const TOOL_ID_TO_SCHEMA_NAME: Record<string, string> = {
+  read: "read_file",
+  write: "write_file",
+  edit: "edit_file",
+  glob: "glob",
+  grep: "grep",
+  bash: "bash",
+};
+
+/** Filter TOOL_SCHEMAS to only those allowed by the given tool IDs. */
+export function filterToolSchemas(toolIds: string[]): LLMToolDef[] {
+  const allowedNames = new Set(toolIds.map((id) => TOOL_ID_TO_SCHEMA_NAME[id]).filter(Boolean));
+  return TOOL_SCHEMAS.filter((t) => allowedNames.has(t.name));
+}
+
+const MAX_RESULT_LENGTH = 10000;
+
+function truncate(s: string): string {
+  if (s.length <= MAX_RESULT_LENGTH) return s;
+  return s.slice(0, MAX_RESULT_LENGTH) + `\n... (truncated, ${s.length} chars total)`;
+}
+
+/**
+ * Create a tool call handler that bridges LLM tool calls to Tauri invoke commands.
+ * The handler takes a tool name and input, executes the corresponding Tauri command,
+ * and returns the result as a string.
+ */
+export function createToolCallHandler(worktreePath: string): (name: string, input: Record<string, unknown>) => Promise<string> {
+  return async (name: string, input: Record<string, unknown>): Promise<string> => {
+    try {
+      switch (name) {
+        case "read_file": {
+          const result = await invoke<string>("tool_read_file", {
+            worktreePath,
+            filePath: input.file_path as string,
+          });
+          return truncate(result);
+        }
+        case "write_file": {
+          await invoke<void>("tool_write_file", {
+            worktreePath,
+            filePath: input.file_path as string,
+            content: input.content as string,
+          });
+          return "File written successfully.";
+        }
+        case "edit_file": {
+          await invoke<void>("tool_edit_file", {
+            worktreePath,
+            filePath: input.file_path as string,
+            oldText: input.old_text as string,
+            newText: input.new_text as string,
+          });
+          return "Edit applied successfully.";
+        }
+        case "glob": {
+          const results = await invoke<string[]>("tool_glob", {
+            worktreePath,
+            pattern: input.pattern as string,
+          });
+          return truncate(results.join("\n"));
+        }
+        case "grep": {
+          const matches = await invoke<{ file: string; line: number; text: string }[]>("tool_grep", {
+            worktreePath,
+            pattern: input.pattern as string,
+            globFilter: (input.glob_filter as string) || null,
+          });
+          const formatted = matches.map((m) => `${m.file}:${m.line}:${m.text}`).join("\n");
+          return truncate(formatted || "No matches found.");
+        }
+        case "bash": {
+          const result = await invoke<{ stdout: string; stderr: string; exit_code: number }>("tool_bash", {
+            worktreePath,
+            command: input.command as string,
+          });
+          let output = "";
+          if (result.stdout) output += result.stdout;
+          if (result.stderr) output += (output ? "\n" : "") + "STDERR: " + result.stderr;
+          output += (output ? "\n" : "") + `Exit code: ${result.exit_code}`;
+          return truncate(output);
+        }
+        default:
+          return `Unknown tool: ${name}`;
+      }
+    } catch (e) {
+      return `Error: ${e}`;
+    }
+  };
+}

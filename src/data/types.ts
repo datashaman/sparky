@@ -113,6 +113,18 @@ export interface ExecutionPlan {
   updated_at: string;
 }
 
+export interface StepExecutionStatus {
+  status: "pending" | "running" | "done" | "error";
+  error?: string;
+  output?: string;
+}
+
+export interface LLMToolDef {
+  name: string;
+  description: string;
+  parameters: Record<string, unknown>;
+}
+
 export type WorktreeStatus = "creating" | "ready" | "error" | "removing";
 
 export interface IssueWorktree {

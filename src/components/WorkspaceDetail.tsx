@@ -13,7 +13,8 @@ import { getPlanForIssue, createPlan, deletePlansForIssue } from "../data/execut
 import { getWorktreeForIssue, removeWorktree } from "../data/issueWorktrees";
 import { runAnalysis } from "../data/analyseIssue";
 import { runPlanGeneration } from "../data/generatePlan";
-import type { IssueAnalysis, AnalysisResult, ExecutionPlan, ExecutionPlanResult, IssueWorktree } from "../data/types";
+import type { IssueAnalysis, AnalysisResult, ExecutionPlan, ExecutionPlanResult, IssueWorktree, StepExecutionStatus } from "../data/types";
+import { executePlan } from "../data/executePlan";
 import { marked } from "marked";
 import { AnalysisView } from "./AnalysisView";
 import { PlanView } from "./PlanView";
@@ -96,6 +97,8 @@ export function WorkspaceDetail({ workspaceId, onSwitchWorkspace, onDeleted, onW
   const [_worktree, setWorktree] = useState<IssueWorktree | null>(null);
   const [selectedSkillId, setSelectedSkillId] = useState<string | null>(null);
   const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
+  const [executing, setExecuting] = useState(false);
+  const [stepStatuses, setStepStatuses] = useState<Map<number, StepExecutionStatus>>(new Map());
 
   useEffect(() => {
     load();
@@ -821,7 +824,33 @@ export function WorkspaceDetail({ workspaceId, onSwitchWorkspace, onDeleted, onW
                   {plan?.status === "done" && plan.result && (() => {
                     try {
                       const parsed: ExecutionPlanResult = JSON.parse(plan.result);
-                      return <PlanView result={parsed} />;
+                      return (
+                        <PlanView
+                          result={parsed}
+                          stepStatuses={stepStatuses}
+                          executing={executing}
+                          onExecute={() => {
+                            if (executing || !selectedIssue) return;
+                            setExecuting(true);
+                            setStepStatuses(new Map());
+                            executePlan({
+                              planResult: parsed,
+                              workspaceId,
+                              issue: selectedIssue,
+                              onStepUpdate: (order, status) => {
+                                setStepStatuses((prev) => {
+                                  const next = new Map(prev);
+                                  next.set(order, status);
+                                  return next;
+                                });
+                              },
+                              onWorktreeUpdate: setWorktree,
+                            })
+                              .catch((e) => console.error("[execute] failed:", e))
+                              .finally(() => setExecuting(false));
+                          }}
+                        />
+                      );
                     } catch {
                       return <p className="empty-state">Failed to parse plan result.</p>;
                     }
