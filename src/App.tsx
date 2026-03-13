@@ -74,7 +74,9 @@ function App() {
   const [selectedWorkspaceId, setSelectedWorkspaceId] = useState<string | null>(null);
   const [workspaceName, setWorkspaceName] = useState<string | null>(null);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const [createDrawerOpen, setCreateDrawerOpen] = useState(false);
   const userMenuRef = useRef<HTMLDivElement | null>(null);
+  const workspacesShownRef = useRef(false);
   const [windowLabel, setWindowLabel] = useState<string | null>(() =>
     isTauri() ? getCurrentWindow().label : null
   );
@@ -98,11 +100,11 @@ function App() {
         if (win.label === "login") {
           (async () => {
             try {
+              // Ensure the workspaces window exists; it will show itself after content loads
               const existing = await WebviewWindow.getByLabel("workspaces");
-              const workspacesWindow = existing ?? new WebviewWindow("workspaces");
-              await workspacesWindow.show();
+              if (!existing) new WebviewWindow("workspaces");
             } catch (e) {
-              console.error("Failed to show or create workspaces window on startup", e);
+              console.error("Failed to create workspaces window on startup", e);
             }
             try {
               await win.close();
@@ -111,13 +113,7 @@ function App() {
             }
           })();
         } else if (win.label === "workspaces") {
-          (async () => {
-            try {
-              await win.show();
-            } catch (e) {
-              console.error("Failed to show workspaces window on startup", e);
-            }
-          })();
+          // Window will be shown after content loads via onReady → showWorkspacesWindow
         }
       } catch (e) {
         console.error("Failed to parse stored github_user", e);
@@ -365,11 +361,11 @@ function App() {
         if (windowLabel === "login") {
           const current = getCurrentWindow();
           try {
+            // Ensure the workspaces window exists; it will show itself after content loads
             const existing = await WebviewWindow.getByLabel("workspaces");
-            const workspacesWindow = existing ?? new WebviewWindow("workspaces");
-            await workspacesWindow.show();
+            if (!existing) new WebviewWindow("workspaces");
           } catch (e) {
-            console.error("Failed to show or create workspaces window", e);
+            console.error("Failed to create workspaces window", e);
           }
           try {
             await current.close();
@@ -392,6 +388,16 @@ function App() {
     localStorage.removeItem("github_token");
     localStorage.removeItem("github_user");
     setUserMenuOpen(false);
+  }
+
+  async function showWorkspacesWindow() {
+    if (!isTauri() || workspacesShownRef.current) return;
+    workspacesShownRef.current = true;
+    try {
+      await getCurrentWindow().show();
+    } catch (e) {
+      console.error("Failed to show workspaces window", e);
+    }
   }
 
   async function goBackToWorkspacesWindow() {
@@ -432,48 +438,61 @@ function App() {
   // --- Dedicated workspaces window (list only) ---
   if (windowLabel === "workspaces" && user) {
     return (
-      <main className="container app-layout">
-        <div className="app-content">
+      <main className="container app-layout app-layout-workspaces">
+        <div className="app-content app-content-workspaces">
           <header className="app-header">
             <h1 className="app-title">Sparky</h1>
-            <div className="user-card header-user" ref={userMenuRef}>
+            <div className="header-actions">
               <button
                 type="button"
-                className="header-avatar-button"
-                onClick={() => setUserMenuOpen((open) => !open)}
-                aria-label="Account menu"
+                className="header-btn header-btn-new"
+                onClick={() => setCreateDrawerOpen(true)}
+                aria-label="New workspace"
               >
-                {user.avatar_url && (
-                  <img
-                    src={user.avatar_url}
-                    alt={user.login}
-                    className="avatar"
-                    width={28}
-                    height={28}
-                  />
-                )}
+                + New
               </button>
-              {userMenuOpen && (
-                <div className="header-user-menu" role="menu">
-                  <button
-                    type="button"
-                    className="header-user-menu-item"
-                    onClick={() => setUserMenuOpen(false)}
-                  >
-                    Settings
-                  </button>
-                  <button
-                    type="button"
-                    className="header-user-menu-item header-user-menu-item-danger"
-                    onClick={handleLogout}
-                  >
-                    Sign out
-                  </button>
-                </div>
-              )}
+              <div className="user-card header-user" ref={userMenuRef}>
+                <button
+                  type="button"
+                  className="header-avatar-button"
+                  onClick={() => setUserMenuOpen((open) => !open)}
+                  aria-label="Account menu"
+                >
+                  {user.avatar_url && (
+                    <img
+                      src={user.avatar_url}
+                      alt={user.login}
+                      className="avatar"
+                      width={28}
+                      height={28}
+                    />
+                  )}
+                </button>
+                {userMenuOpen && (
+                  <div className="header-user-menu" role="menu">
+                    <button
+                      type="button"
+                      className="header-user-menu-item"
+                      onClick={() => setUserMenuOpen(false)}
+                    >
+                      Settings
+                    </button>
+                    <button
+                      type="button"
+                      className="header-user-menu-item header-user-menu-item-danger"
+                      onClick={handleLogout}
+                    >
+                      Sign out
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
           </header>
           <WorkspaceList
+            createDrawerOpen={createDrawerOpen}
+            onCloseCreateDrawer={() => setCreateDrawerOpen(false)}
+            onReady={showWorkspacesWindow}
             onSelectWorkspace={async (id) => {
               try {
                 localStorage.setItem(DETAIL_WORKSPACE_ID_KEY, id);
@@ -563,51 +582,77 @@ function App() {
   // --- Web preview: combined workspaces + detail with view state ---
   if (user) {
     return (
-      <main className={`container app-layout ${view === "detail" ? "app-layout-detail" : ""}`}>
-        <div className={view === "detail" ? "app-content app-content-detail" : "app-content"}>
+      <main
+        className={`container app-layout ${
+          view === "detail" ? "app-layout-detail" : view === "workspaces" ? "app-layout-workspaces" : ""
+        }`}
+      >
+        <div
+          className={
+            view === "detail"
+              ? "app-content app-content-detail"
+              : view === "workspaces"
+                ? "app-content app-content-workspaces"
+                : "app-content"
+          }
+        >
           <header className="app-header">
             <h1 className="app-title">
               {view === "detail" && workspaceName ? workspaceName : "Sparky"}
             </h1>
-            <div className="user-card header-user" ref={userMenuRef}>
-              <button
-                type="button"
-                className="header-avatar-button"
-                onClick={() => setUserMenuOpen((open) => !open)}
-                aria-label="Account menu"
-              >
-                {user.avatar_url && (
-                  <img
-                    src={user.avatar_url}
-                    alt={user.login}
-                    className="avatar"
-                    width={28}
-                    height={28}
-                  />
-                )}
-              </button>
-              {userMenuOpen && (
-                <div className="header-user-menu" role="menu">
-                  <button
-                    type="button"
-                    className="header-user-menu-item"
-                    onClick={() => setUserMenuOpen(false)}
-                  >
-                    Settings
-                  </button>
-                  <button
-                    type="button"
-                    className="header-user-menu-item header-user-menu-item-danger"
-                    onClick={handleLogout}
-                  >
-                    Sign out
-                  </button>
-                </div>
+            <div className="header-actions">
+              {view === "workspaces" && (
+                <button
+                  type="button"
+                  className="header-btn header-btn-new"
+                  onClick={() => setCreateDrawerOpen(true)}
+                  aria-label="New workspace"
+                >
+                  + New
+                </button>
               )}
+              <div className="user-card header-user" ref={userMenuRef}>
+                <button
+                  type="button"
+                  className="header-avatar-button"
+                  onClick={() => setUserMenuOpen((open) => !open)}
+                  aria-label="Account menu"
+                >
+                  {user.avatar_url && (
+                    <img
+                      src={user.avatar_url}
+                      alt={user.login}
+                      className="avatar"
+                      width={28}
+                      height={28}
+                    />
+                  )}
+                </button>
+                {userMenuOpen && (
+                  <div className="header-user-menu" role="menu">
+                    <button
+                      type="button"
+                      className="header-user-menu-item"
+                      onClick={() => setUserMenuOpen(false)}
+                    >
+                      Settings
+                    </button>
+                    <button
+                      type="button"
+                      className="header-user-menu-item header-user-menu-item-danger"
+                      onClick={handleLogout}
+                    >
+                      Sign out
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
           </header>
           {view === "workspaces" ? (
             <WorkspaceList
+              createDrawerOpen={createDrawerOpen}
+              onCloseCreateDrawer={() => setCreateDrawerOpen(false)}
               onSelectWorkspace={(id) => {
                 setSelectedWorkspaceId(id);
                 setView("detail");

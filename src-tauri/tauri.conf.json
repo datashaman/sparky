@@ -24,9 +24,9 @@
       {
         "label": "workspaces",
         "title": "Sparky",
-        "width": 680,
+        "width": 540,
         "height": 560,
-        "minWidth": 600,
+        "minWidth": 480,
         "minHeight": 400,
         "resizable": true,
         "visible": false

@@ -8,17 +8,46 @@ let mockWorkspaces: Workspace[] = [];
 export async function listWorkspaces(): Promise<Workspace[]> {
   if (!isTauri()) return [...mockWorkspaces];
   const db = await getDb();
-  const rows = await db.select<Workspace[]>("SELECT id, name, created_at FROM workspaces ORDER BY created_at DESC");
+  const rows = await db.select<Workspace[]>(
+    `SELECT w.id, w.name, w.created_at,
+            (SELECT COUNT(*) FROM workspace_repos wr WHERE wr.workspace_id = w.id) AS repo_count
+     FROM workspaces w
+     ORDER BY w.created_at DESC`
+  );
   return rows;
+}
+
+export async function workspaceNameExists(name: string, excludeId?: string): Promise<boolean> {
+  if (!isTauri()) {
+    return mockWorkspaces.some((w) => w.name.toLowerCase() === name.toLowerCase() && w.id !== excludeId);
+  }
+  const db = await getDb();
+  const rows = excludeId
+    ? await db.select<{ cnt: number }[]>(
+        "SELECT COUNT(*) AS cnt FROM workspaces WHERE LOWER(name) = LOWER($1) AND id != $2",
+        [name, excludeId]
+      )
+    : await db.select<{ cnt: number }[]>(
+        "SELECT COUNT(*) AS cnt FROM workspaces WHERE LOWER(name) = LOWER($1)",
+        [name]
+      );
+  return (rows[0]?.cnt ?? 0) > 0;
 }
 
 export async function createWorkspace(name: string): Promise<Workspace> {
   if (!isTauri()) {
+    if (mockWorkspaces.some((w) => w.name.toLowerCase() === name.toLowerCase())) {
+      throw new Error(`A workspace named "${name}" already exists`);
+    }
     const w: Workspace = { id: crypto.randomUUID(), name, created_at: new Date().toISOString() };
     mockWorkspaces = [w, ...mockWorkspaces];
     return w;
   }
   const db = await getDb();
+  const existing = await workspaceNameExists(name);
+  if (existing) {
+    throw new Error(`A workspace named "${name}" already exists`);
+  }
   const id = crypto.randomUUID();
   const created_at = new Date().toISOString();
   await db.execute("INSERT INTO workspaces (id, name, created_at) VALUES ($1, $2, $3)", [
