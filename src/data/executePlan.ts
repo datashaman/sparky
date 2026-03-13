@@ -2,7 +2,7 @@ import { getDefaultProvider, getDefaultModel, getExecProvider, getExecModel, get
 import { listAgentsForWorkspace, getToolIdsForAgent, getSkillIdsForAgent } from "./agents";
 import { listSkillsForWorkspace } from "./skills";
 import { ensureWorktree } from "./issueWorktrees";
-import { callLLMWithTools } from "./llm";
+import { callLLMWithTools, KEYLESS_PROVIDERS } from "./llm";
 import { TOOL_SCHEMAS, filterToolSchemas, createToolCallHandler } from "./tools";
 import type {
   ExecutionPlanResult,
@@ -33,7 +33,7 @@ export async function executePlan(opts: ExecutePlanOpts): Promise<void> {
     throw new Error("No default provider/model configured. Set one in Settings.");
   }
   const defaultApiKey = getApiKey(defaultProvider);
-  if (!defaultApiKey) {
+  if (!defaultApiKey && !KEYLESS_PROVIDERS.has(defaultProvider)) {
     throw new Error(`No API key configured for ${defaultProvider}. Add one in Settings.`);
   }
 
@@ -41,7 +41,7 @@ export async function executePlan(opts: ExecutePlanOpts): Promise<void> {
   const execProviderVal = getExecProvider() || defaultProvider;
   const execModelVal = getExecModel() || defaultModel;
   const execApiKey = execProviderVal !== defaultProvider ? getApiKey(execProviderVal) : defaultApiKey;
-  if (!execApiKey) {
+  if (!execApiKey && !KEYLESS_PROVIDERS.has(execProviderVal)) {
     throw new Error(`No API key configured for exec provider ${execProviderVal}. Add one in Settings.`);
   }
 
@@ -119,7 +119,7 @@ export async function executePlan(opts: ExecutePlanOpts): Promise<void> {
           provider = agent.provider;
           modelId = agent.model;
           const agentKey = getApiKey(agent.provider);
-          if (!agentKey) {
+          if (!agentKey && !KEYLESS_PROVIDERS.has(agent.provider)) {
             throw new Error(`No API key configured for agent provider ${agent.provider} (agent: ${agent.name}). Add one in Settings.`);
           }
           apiKey = agentKey;

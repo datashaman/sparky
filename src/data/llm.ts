@@ -1,5 +1,10 @@
 import type { AgentProvider, LLMToolDef } from "./types";
 
+const OLLAMA_BASE_URL = "http://localhost:11434/v1";
+
+/** Providers that don't require an API key. */
+export const KEYLESS_PROVIDERS = new Set<AgentProvider>(["ollama"]);
+
 export async function callLLM(opts: {
   provider: AgentProvider;
   modelId: string;
@@ -98,6 +103,28 @@ export async function callLLM(opts: {
       const data = await res.json();
       return data.candidates?.[0]?.content?.parts?.map((p: { text: string }) => p.text).join("") ?? "";
     }
+
+    case "ollama": {
+      const res = await fetch(`${OLLAMA_BASE_URL}/chat/completions`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          model: modelId,
+          max_tokens: maxTokens,
+          response_format: { type: "json_object" },
+          messages: [
+            { role: "system", content: systemPrompt + "\n\nYou MUST respond with valid JSON matching this schema:\n" + JSON.stringify(schema, null, 2) },
+            { role: "user", content: userPrompt },
+          ],
+        }),
+      });
+      if (!res.ok) {
+        const body = await res.text();
+        throw new Error(`Ollama API ${res.status}: ${body}`);
+      }
+      const data = await res.json();
+      return data.choices?.[0]?.message?.content ?? "";
+    }
   }
 }
 
@@ -123,7 +150,9 @@ export async function callLLMWithTools(opts: {
     case "anthropic":
       return anthropicToolLoop({ modelId, apiKey, systemPrompt, userPrompt, tools, maxTurns, onToolCall });
     case "openai":
-      return openaiToolLoop({ modelId, apiKey, systemPrompt, userPrompt, tools, maxTurns, onToolCall });
+      return openaiToolLoop({ modelId, apiKey, systemPrompt, userPrompt, tools, maxTurns, onToolCall, baseUrl: "https://api.openai.com/v1" });
+    case "ollama":
+      return openaiToolLoop({ modelId, apiKey, systemPrompt, userPrompt, tools, maxTurns, onToolCall, baseUrl: OLLAMA_BASE_URL });
     case "gemini":
       return geminiToolLoop({ modelId, apiKey, systemPrompt, userPrompt, tools, maxTurns, onToolCall });
   }
@@ -218,8 +247,9 @@ async function openaiToolLoop(opts: {
   tools: LLMToolDef[];
   maxTurns: number;
   onToolCall: (name: string, input: Record<string, unknown>) => Promise<string>;
+  baseUrl?: string;
 }): Promise<string> {
-  const { modelId, apiKey, systemPrompt, tools, maxTurns, onToolCall } = opts;
+  const { modelId, apiKey, systemPrompt, tools, maxTurns, onToolCall, baseUrl = "https://api.openai.com/v1" } = opts;
 
   const openaiTools = tools.map((t) => ({
     type: "function" as const,
@@ -238,12 +268,12 @@ async function openaiToolLoop(opts: {
       messages.push({ role: "user", content: "You have reached the tool-use limit. Summarize what you accomplished and what remains." });
     }
 
-    const res = await fetch("https://api.openai.com/v1/chat/completions", {
+    const headers: Record<string, string> = { "content-type": "application/json" };
+    if (apiKey) headers.authorization = `Bearer ${apiKey}`;
+
+    const res = await fetch(`${baseUrl}/chat/completions`, {
       method: "POST",
-      headers: {
-        "content-type": "application/json",
-        authorization: `Bearer ${apiKey}`,
-      },
+      headers,
       body: JSON.stringify({
         model: modelId,
         max_tokens: 4096,
@@ -254,12 +284,13 @@ async function openaiToolLoop(opts: {
 
     if (!res.ok) {
       const body = await res.text();
-      throw new Error(`OpenAI API ${res.status}: ${body}`);
+      const label = baseUrl.includes("openai.com") ? "OpenAI" : baseUrl.includes("localhost") ? "Ollama" : "API";
+      throw new Error(`${label} API ${res.status}: ${body}`);
     }
 
     const data = await res.json();
     const choice = data.choices?.[0];
-    if (!choice) throw new Error("No choices in OpenAI response");
+    if (!choice) throw new Error(`No choices in ${baseUrl.includes("openai.com") ? "OpenAI" : baseUrl.includes("localhost") ? "Ollama" : "API"} response`);
 
     const msg = choice.message;
     messages.push(msg);
