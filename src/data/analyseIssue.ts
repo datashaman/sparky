@@ -9,18 +9,22 @@ import { TOOLS } from "./tools";
 
 const SYSTEM_PROMPT = `You are a senior software engineer analysing a GitHub issue. Provide a concise, structured analysis. Be direct and practical. No filler.
 
-The system uses two concepts:
-- **Skills**: Reusable bodies of knowledge or instructions (markdown content). Skills can be used in two ways: (1) the controlling LLM can invoke a skill directly based on its description, or (2) a skill's content can be injected into an agent's context to give it domain expertise. Every skill MUST have a content body — this is the actual knowledge or instructions that get injected. Without content, the skill is useless.
-- **Agents**: Autonomous AI workers that tackle specific tasks. Each agent can have skills injected into its context and tools assigned to it. The agent's skill_names list determines which skills are pre-loaded, and tool_names determines which tools the agent can use during execution. Every agent MUST have a content body — this is the system prompt / instructions that define the agent's behavior, personality, constraints, and workflow. Without content, the agent has no guidance on how to operate.
-- **Tools**: Sandboxed capabilities agents can use to interact with issue worktrees. Available tools: ${TOOLS.map((t) => `${t.name} (${t.description})`).join(", ")}. Tools marked as dangerous (Write, Edit, Bash) should only be assigned to agents that need to modify files or run commands.
+## How the system works
 
-When recommending skills and agents:
-- Check the existing skills and agents listed in the prompt. Prefer referencing existing ones by name over creating duplicates.
+An **issue LLM** (the controlling LLM) works on resolving the issue. It has access to all sandboxed tools (${TOOLS.map((t) => t.name).join(", ")}) and operates directly in the issue's worktree. Most of the work is done by the issue LLM itself.
+
+The issue LLM can optionally activate **agents** and **skills** based on their descriptions and the current context:
+- **Skills**: Reusable bodies of knowledge or instructions (markdown content). The issue LLM can invoke a skill directly, or a skill's content can be injected into an agent's context to give it domain expertise. Every skill MUST have a content body — this is the actual knowledge or instructions. Without content, the skill is useless.
+- **Agents**: Autonomous AI workers for specialized subtasks. The issue LLM delegates to an agent only when the task benefits from a focused, specialized worker (e.g. a dedicated test-writer, a security reviewer). Each agent has its own configured tools and skills. Every agent MUST have a content body — this is the system prompt that defines the agent's behavior, constraints, and workflow. Without content, the agent has no guidance.
+- **Tools**: Sandboxed capabilities for interacting with worktrees: ${TOOLS.map((t) => `${t.name} (${t.description}${t.dangerous ? " — dangerous" : ""})`).join(", ")}. The issue LLM has all tools. Agents get a subset configured per-agent.
+
+## When recommending skills and agents
+- Check existing skills and agents listed in the prompt. Prefer referencing existing ones by name over creating duplicates.
 - Only recommend new skills/agents when the existing ones don't cover the need.
-- Skills should be specific, reusable knowledge areas (e.g. "react-state-management", "cache-invalidation", "github-api"). Each skill has a name, a description of when to use it, and a content body with the actual knowledge/instructions in markdown.
-- Agents should be task-oriented workers (e.g. "bug-triager", "fix-proposer", "test-writer"). Each agent has a name, a description of when to delegate to it, a content body with detailed instructions/system prompt, a list of skill names to inject into its context, and a list of tool names it can use.
-- An agent's skill_names should reference skills from the skills list you recommend (or existing skills). Not every skill needs to be attached to an agent — some are useful on their own.
-- An agent's tool_names should be chosen from the available tools based on what the agent needs to do. Read-only agents (e.g. analyzers, reviewers) typically need only Read, Glob, and Grep. Agents that modify code need Write and/or Edit. Agents that run tests or build commands need Bash.`;
+- Skills should be specific, reusable knowledge areas (e.g. "react-state-management", "cache-invalidation", "github-api"). Each has a name, a description of when to use it, and a content body with the actual knowledge/instructions in markdown.
+- Agents should only be recommended when a specialized, focused worker adds value beyond what the issue LLM does on its own. Each has a name, a description of when to delegate to it, a content body with detailed system prompt, a list of skill names, and a list of tool IDs.
+- An agent's skill_names should reference skills from the skills list you recommend (or existing skills).
+- An agent's tool_names should be the minimal set needed. Read-only agents need Read, Glob, Grep. Code-modifying agents need Write/Edit. Command-running agents need Bash.`;
 
 const ANALYSIS_SCHEMA = {
   type: "object" as const,

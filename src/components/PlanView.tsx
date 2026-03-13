@@ -18,20 +18,13 @@ export function PlanView({ result }: PlanViewProps) {
             <div className="pv-step-header">
               <span className="pv-step-number">{step.order}</span>
               <span className="pv-step-title">{step.title}</span>
-              <span className="pv-step-agent">{step.agent_name}</span>
+              {step.agent_name && <span className="pv-step-agent">{step.agent_name}</span>}
             </div>
             <p className="pv-step-description">{step.description}</p>
             {step.skill_names.length > 0 && (
               <div className="pv-step-skills">
                 {step.skill_names.map((s) => (
                   <span key={s} className="pv-skill-pill">{s}</span>
-                ))}
-              </div>
-            )}
-            {step.tool_names?.length > 0 && (
-              <div className="pv-step-skills">
-                {step.tool_names.map((t) => (
-                  <span key={t} className="pv-skill-pill pv-tool-pill">{t}</span>
                 ))}
               </div>
             )}
