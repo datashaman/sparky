@@ -1,6 +1,13 @@
+import { invoke } from "@tauri-apps/api/core";
 import type { AgentProvider, LLMToolDef } from "./types";
 
 const OLLAMA_BASE_URL = "http://localhost:11434/v1";
+
+/** Call Ollama via Tauri backend proxy to bypass CORS. */
+async function ollamaFetch(body: string): Promise<{ status: number; data: any }> {
+  const res = await invoke<{ status: number; body: string }>("ollama_chat", { body });
+  return { status: res.status, data: JSON.parse(res.body) };
+}
 
 /** Providers that don't require an API key. */
 export const KEYLESS_PROVIDERS = new Set<AgentProvider>(["ollama"]);
@@ -105,24 +112,19 @@ export async function callLLM(opts: {
     }
 
     case "ollama": {
-      const res = await fetch(`${OLLAMA_BASE_URL}/chat/completions`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          model: modelId,
-          max_tokens: maxTokens,
-          response_format: { type: "json_object" },
-          messages: [
-            { role: "system", content: systemPrompt + "\n\nYou MUST respond with valid JSON matching this schema:\n" + JSON.stringify(schema, null, 2) },
-            { role: "user", content: userPrompt },
-          ],
-        }),
+      const reqBody = JSON.stringify({
+        model: modelId,
+        max_tokens: maxTokens,
+        response_format: { type: "json_object" },
+        messages: [
+          { role: "system", content: systemPrompt + "\n\nYou MUST respond with valid JSON matching this schema:\n" + JSON.stringify(schema, null, 2) },
+          { role: "user", content: userPrompt },
+        ],
       });
-      if (!res.ok) {
-        const body = await res.text();
-        throw new Error(`Ollama API ${res.status}: ${body}`);
+      const { status, data } = await ollamaFetch(reqBody);
+      if (status !== 200) {
+        throw new Error(`Ollama API ${status}: ${JSON.stringify(data)}`);
       }
-      const data = await res.json();
       return data.choices?.[0]?.message?.content ?? "";
     }
 
@@ -184,7 +186,7 @@ export async function callLLMWithTools(opts: {
     case "openai":
       return openaiToolLoop({ modelId, apiKey, systemPrompt, userPrompt, tools, maxTurns, onToolCall, baseUrl: "https://api.openai.com/v1" });
     case "ollama":
-      return openaiToolLoop({ modelId, apiKey, systemPrompt, userPrompt, tools, maxTurns, onToolCall, baseUrl: OLLAMA_BASE_URL });
+      return openaiToolLoop({ modelId, apiKey, systemPrompt, userPrompt, tools, maxTurns, onToolCall, baseUrl: OLLAMA_BASE_URL, useProxy: true });
     case "openrouter":
       return openaiToolLoop({ modelId, apiKey, systemPrompt, userPrompt, tools, maxTurns, onToolCall, baseUrl: "https://openrouter.ai/api/v1" });
     case "gemini":
@@ -282,8 +284,9 @@ async function openaiToolLoop(opts: {
   maxTurns: number;
   onToolCall: (name: string, input: Record<string, unknown>) => Promise<string>;
   baseUrl?: string;
+  useProxy?: boolean;
 }): Promise<string> {
-  const { modelId, apiKey, systemPrompt, tools, maxTurns, onToolCall, baseUrl = "https://api.openai.com/v1" } = opts;
+  const { modelId, apiKey, systemPrompt, tools, maxTurns, onToolCall, baseUrl = "https://api.openai.com/v1", useProxy = false } = opts;
 
   const openaiTools = tools.map((t) => ({
     type: "function" as const,
@@ -302,29 +305,40 @@ async function openaiToolLoop(opts: {
       messages.push({ role: "user", content: "You have reached the tool-use limit. Summarize what you accomplished and what remains." });
     }
 
-    const headers: Record<string, string> = { "content-type": "application/json" };
-    if (apiKey) headers.authorization = `Bearer ${apiKey}`;
-
-    const res = await fetch(`${baseUrl}/chat/completions`, {
-      method: "POST",
-      headers,
-      body: JSON.stringify({
-        model: modelId,
-        max_tokens: 4096,
-        messages,
-        ...(isLastTurn ? {} : { tools: openaiTools }),
-      }),
+    const reqBody = JSON.stringify({
+      model: modelId,
+      max_tokens: 4096,
+      messages,
+      ...(isLastTurn ? {} : { tools: openaiTools }),
     });
 
-    if (!res.ok) {
-      const body = await res.text();
-      const label = baseUrl.includes("openai.com") ? "OpenAI" : baseUrl.includes("localhost") ? "Ollama" : baseUrl.includes("openrouter") ? "OpenRouter" : "API";
-      throw new Error(`${label} API ${res.status}: ${body}`);
+    let data: any;
+    if (useProxy) {
+      const proxyRes = await ollamaFetch(reqBody);
+      if (proxyRes.status !== 200) {
+        throw new Error(`Ollama API ${proxyRes.status}: ${JSON.stringify(proxyRes.data)}`);
+      }
+      data = proxyRes.data;
+    } else {
+      const headers: Record<string, string> = { "content-type": "application/json" };
+      if (apiKey) headers.authorization = `Bearer ${apiKey}`;
+
+      const res = await fetch(`${baseUrl}/chat/completions`, {
+        method: "POST",
+        headers,
+        body: reqBody,
+      });
+
+      if (!res.ok) {
+        const body = await res.text();
+        const label = baseUrl.includes("openai.com") ? "OpenAI" : baseUrl.includes("openrouter") ? "OpenRouter" : "API";
+        throw new Error(`${label} API ${res.status}: ${body}`);
+      }
+      data = await res.json();
     }
 
-    const data = await res.json();
     const choice = data.choices?.[0];
-    if (!choice) throw new Error(`No choices in ${baseUrl.includes("openai.com") ? "OpenAI" : baseUrl.includes("localhost") ? "Ollama" : baseUrl.includes("openrouter") ? "OpenRouter" : "API"} response`);
+    if (!choice) throw new Error(`No choices in ${useProxy ? "Ollama" : baseUrl.includes("openrouter") ? "OpenRouter" : "API"} response`);
 
     const msg = choice.message;
     messages.push(msg);

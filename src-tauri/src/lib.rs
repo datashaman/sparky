@@ -2,6 +2,7 @@ mod agent_tools;
 mod execution_log;
 mod git_ops;
 mod github_auth;
+mod ollama_proxy;
 
 // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
 #[tauri::command]
@@ -53,6 +54,7 @@ pub fn run() {
             agent_tools::tool_bash,
             execution_log::append_execution_log,
             execution_log::get_execution_log_path,
+            ollama_proxy::ollama_chat,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
