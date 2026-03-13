@@ -8,7 +8,7 @@ export function validateAgentSlug(name: string): boolean {
   return SLUG_REGEX.test(name);
 }
 
-export const AGENT_PROVIDERS: AgentProvider[] = ["openai", "anthropic", "gemini", "ollama"];
+export const AGENT_PROVIDERS: AgentProvider[] = ["openai", "anthropic", "gemini", "ollama", "openrouter"];
 
 /** Extract the first non-empty paragraph from markdown content. */
 function firstParagraph(content: string | null | undefined): string | null {
@@ -25,6 +25,7 @@ export const AGENT_MODELS: Record<AgentProvider, string[]> = {
   anthropic: ["claude-opus-4-6", "claude-sonnet-4-6", "claude-opus-4-5", "claude-sonnet-4-5", "claude-haiku-4-5"],
   gemini: ["gemini-2.5-pro", "gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-2.0-flash"],
   ollama: [],
+  openrouter: [],
 };
 
 let mockAgents: Agent[] = [];

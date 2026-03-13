@@ -31,7 +31,7 @@ export function getDisplayMode(): DisplayMode {
 export function getDefaultProvider(): AgentProvider | "" {
   try {
     const stored = localStorage.getItem(DEFAULT_PROVIDER_KEY);
-    if (stored === "openai" || stored === "anthropic" || stored === "gemini" || stored === "ollama") return stored;
+    if (stored === "openai" || stored === "anthropic" || stored === "gemini" || stored === "ollama" || stored === "openrouter") return stored;
   } catch { /* ignore */ }
   return "";
 }
@@ -45,7 +45,7 @@ export function getDefaultModel(): string {
 export function getExecProvider(): AgentProvider | "" {
   try {
     const stored = localStorage.getItem(EXEC_PROVIDER_KEY);
-    if (stored === "openai" || stored === "anthropic" || stored === "gemini" || stored === "ollama") return stored;
+    if (stored === "openai" || stored === "anthropic" || stored === "gemini" || stored === "ollama" || stored === "openrouter") return stored;
   } catch { /* ignore */ }
   return "";
 }
@@ -107,9 +107,10 @@ export function UserSettings({ open, onClose }: Props) {
   useEffect(() => {
     try { localStorage.setItem(DEFAULT_PROVIDER_KEY, provider); } catch { /* ignore */ }
     // Reset model if provider changes and current model isn't in new list
+    // Skip for free-text providers (empty model list)
     if (provider) {
       const available = AGENT_MODELS[provider];
-      if (!available.includes(model)) {
+      if (available.length > 0 && !available.includes(model)) {
         setModel(available[0] ?? "");
       }
     } else {
@@ -123,9 +124,10 @@ export function UserSettings({ open, onClose }: Props) {
 
   useEffect(() => {
     try { localStorage.setItem(EXEC_PROVIDER_KEY, execProvider); } catch { /* ignore */ }
+    // Skip for free-text providers (empty model list)
     if (execProvider) {
       const available = AGENT_MODELS[execProvider];
-      if (!available.includes(execModel)) {
+      if (available.length > 0 && !available.includes(execModel)) {
         setExecModel(available[0] ?? "");
       }
     } else {
@@ -194,9 +196,9 @@ export function UserSettings({ open, onClose }: Props) {
                 </div>
                 <div className="flex flex-col gap-1.5 flex-1 min-w-0">
                   <Label>Model</Label>
-                  {provider === "ollama" ? (
+                  {provider === "ollama" || provider === "openrouter" ? (
                     <Input
-                      placeholder="e.g. qwen2.5:3b"
+                      placeholder={provider === "ollama" ? "e.g. qwen2.5:3b" : "e.g. anthropic/claude-sonnet-4"}
                       value={model}
                       onChange={(e) => setModel(e.target.value)}
                     />
@@ -239,9 +241,9 @@ export function UserSettings({ open, onClose }: Props) {
                 </div>
                 <div className="flex flex-col gap-1.5 flex-1 min-w-0">
                   <Label>Model</Label>
-                  {execProvider === "ollama" ? (
+                  {execProvider === "ollama" || execProvider === "openrouter" ? (
                     <Input
-                      placeholder="e.g. qwen2.5:3b"
+                      placeholder={execProvider === "ollama" ? "e.g. qwen2.5:3b" : "e.g. anthropic/claude-sonnet-4"}
                       value={execModel}
                       onChange={(e) => setExecModel(e.target.value)}
                     />

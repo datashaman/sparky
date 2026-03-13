@@ -18,7 +18,7 @@ export interface WorkspaceWithRepos extends Workspace {
   repos: Repo[];
 }
 
-export type AgentProvider = "openai" | "anthropic" | "gemini" | "ollama";
+export type AgentProvider = "openai" | "anthropic" | "gemini" | "ollama" | "openrouter";
 
 export interface Agent {
   id: string;

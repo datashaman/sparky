@@ -125,6 +125,38 @@ export async function callLLM(opts: {
       const data = await res.json();
       return data.choices?.[0]?.message?.content ?? "";
     }
+
+    case "openrouter": {
+      const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "authorization": `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify({
+          model: modelId,
+          max_tokens: maxTokens,
+          response_format: {
+            type: "json_schema",
+            json_schema: {
+              name: schemaName,
+              strict: true,
+              schema,
+            },
+          },
+          messages: [
+            { role: "system", content: systemPrompt },
+            { role: "user", content: userPrompt },
+          ],
+        }),
+      });
+      if (!res.ok) {
+        const body = await res.text();
+        throw new Error(`OpenRouter API ${res.status}: ${body}`);
+      }
+      const data = await res.json();
+      return data.choices?.[0]?.message?.content ?? "";
+    }
   }
 }
 
@@ -153,6 +185,8 @@ export async function callLLMWithTools(opts: {
       return openaiToolLoop({ modelId, apiKey, systemPrompt, userPrompt, tools, maxTurns, onToolCall, baseUrl: "https://api.openai.com/v1" });
     case "ollama":
       return openaiToolLoop({ modelId, apiKey, systemPrompt, userPrompt, tools, maxTurns, onToolCall, baseUrl: OLLAMA_BASE_URL });
+    case "openrouter":
+      return openaiToolLoop({ modelId, apiKey, systemPrompt, userPrompt, tools, maxTurns, onToolCall, baseUrl: "https://openrouter.ai/api/v1" });
     case "gemini":
       return geminiToolLoop({ modelId, apiKey, systemPrompt, userPrompt, tools, maxTurns, onToolCall });
   }
@@ -284,13 +318,13 @@ async function openaiToolLoop(opts: {
 
     if (!res.ok) {
       const body = await res.text();
-      const label = baseUrl.includes("openai.com") ? "OpenAI" : baseUrl.includes("localhost") ? "Ollama" : "API";
+      const label = baseUrl.includes("openai.com") ? "OpenAI" : baseUrl.includes("localhost") ? "Ollama" : baseUrl.includes("openrouter") ? "OpenRouter" : "API";
       throw new Error(`${label} API ${res.status}: ${body}`);
     }
 
     const data = await res.json();
     const choice = data.choices?.[0];
-    if (!choice) throw new Error(`No choices in ${baseUrl.includes("openai.com") ? "OpenAI" : baseUrl.includes("localhost") ? "Ollama" : "API"} response`);
+    if (!choice) throw new Error(`No choices in ${baseUrl.includes("openai.com") ? "OpenAI" : baseUrl.includes("localhost") ? "Ollama" : baseUrl.includes("openrouter") ? "OpenRouter" : "API"} response`);
 
     const msg = choice.message;
     messages.push(msg);
