@@ -7,11 +7,16 @@ import { TOOLS } from "./tools";
 
 const PLAN_SYSTEM_PROMPT = `You are a senior software engineering project manager. Given a GitHub issue analysis, available agents, and their skills, create a concrete step-by-step execution plan to resolve the issue.
 
-Each step must be delegated to a specific agent. Steps can depend on other steps. Be practical and direct — no filler.
+The plan is executed by an **issue LLM** (the controlling LLM) that has access to all sandboxed tools (${TOOLS.map((t) => t.name).join(", ")}) and works directly in the issue's worktree. The issue LLM does most of the work itself. It can optionally delegate specific steps to specialized agents when their focused expertise adds value.
+
+Steps can depend on other steps. Be practical and direct — no filler.
 
 The plan should be minimal: only include steps that are necessary to resolve the issue. Prefer fewer, well-scoped steps over many granular ones.
 
-Agents have access to sandboxed tools for interacting with issue worktrees. Available tools: ${TOOLS.map((t) => `${t.name} (${t.description}${t.dangerous ? " — dangerous" : ""})`).join(", ")}. When specifying tool_names for a step, choose the minimal set of tools needed. Read-only steps need only Read/Glob/Grep. Steps that modify code need Write/Edit. Steps that run commands need Bash.`;
+For each step:
+- Most steps should be done by the issue LLM directly (leave agent_name null).
+- Only assign an agent_name when a specialized agent would do the step better than the issue LLM working alone.
+- skill_names can reference skills the issue LLM should load for context on that step, regardless of whether an agent is assigned.`;
 
 const PLAN_SCHEMA = {
   type: "object" as const,
@@ -24,17 +29,12 @@ const PLAN_SCHEMA = {
         properties: {
           order: { type: "number" as const, description: "Step number (1-based)" },
           title: { type: "string" as const, description: "Short step title" },
-          description: { type: "string" as const, description: "What the agent should do in this step" },
-          agent_name: { type: "string" as const, description: "Name of the agent to delegate to" },
+          description: { type: "string" as const, description: "What should be done in this step" },
+          agent_name: { type: ["string", "null"] as const, description: "Name of a specialized agent to delegate to, or null if the issue LLM handles this step directly" },
           skill_names: {
             type: "array" as const,
             items: { type: "string" as const },
-            description: "Skills the agent should use for this step",
-          },
-          tool_names: {
-            type: "array" as const,
-            items: { type: "string" as const, enum: TOOLS.map((t) => t.id) },
-            description: "Tool IDs the agent needs for this step (e.g. read, write, edit, glob, grep, bash)",
+            description: "Skills to load for context on this step (used by the issue LLM or the assigned agent)",
           },
           expected_output: { type: "string" as const, description: "What this step should produce" },
           depends_on: {
@@ -43,7 +43,7 @@ const PLAN_SCHEMA = {
             description: "Order numbers of prerequisite steps",
           },
         },
-        required: ["order", "title", "description", "agent_name", "skill_names", "tool_names", "expected_output", "depends_on"],
+        required: ["order", "title", "description", "agent_name", "skill_names", "expected_output", "depends_on"],
         additionalProperties: false,
       },
       description: "Ordered execution steps",
@@ -99,7 +99,7 @@ function buildPlanPrompt(
 
   parts.push(
     "",
-    "Create an execution plan using the available agents and skills. Each step must reference an agent by name. Only reference skills and agents that exist above.",
+    "Create an execution plan. Most steps should be handled directly by the issue LLM (agent_name: null). Only delegate to a named agent when its specialization adds clear value. Only reference skills and agents that exist above.",
   );
 
   return parts.join("\n");
