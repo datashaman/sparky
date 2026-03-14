@@ -115,7 +115,7 @@ export async function openaiToolLoop(opts: {
       model: modelId,
       max_tokens: 4096,
       messages,
-      ...(isLastTurn ? {} : { tools: openaiTools }),
+      ...(isLastTurn ? {} : { tools: openaiTools, parallel_tool_calls: false }),
     });
 
     const res = await fetch(`${baseUrl}/chat/completions`, {
