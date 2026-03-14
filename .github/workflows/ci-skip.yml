@@ -1,0 +1,33 @@
+name: CI (skip)
+
+on:
+  pull_request:
+    paths:
+      - '**.md'
+      - 'docs/**'
+      - 'LICENSE'
+
+jobs:
+  typecheck:
+    name: TypeScript
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "Skipped — docs-only change"
+
+  typecheck-worker:
+    name: TypeScript (Worker)
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "Skipped — docs-only change"
+
+  test:
+    name: Tests
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "Skipped — docs-only change"
+
+  rust:
+    name: Rust
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "Skipped — docs-only change"
