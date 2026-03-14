@@ -12,7 +12,6 @@ Work happens in sandboxed git worktrees, so your main branch stays clean.
 
 - [Node.js](https://nodejs.org/) (v18+)
 - [Rust](https://rustup.rs/) (stable)
-- [Tauri CLI](https://tauri.app/start/): `cargo install tauri-cli`
 
 ### Install and run
 
@@ -44,7 +43,7 @@ Each issue flows through five stages:
 | **Execution** | The LLM executes each step using sandboxed tools in an isolated git worktree |
 | **Adaptive Replanning** | If execution diverges from the plan, remaining steps are automatically adjusted |
 
-For a deeper look at internals, see [docs/agent-platform-internals-report.md](docs/agent-platform-internals-report.md).
+For a deeper look at internals, see [docs/architecture.md](docs/architecture.md).
 
 ## Supported providers
 

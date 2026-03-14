@@ -45,7 +45,7 @@ Find files matching a glob pattern.
 | Field | Value |
 |---|---|
 | **Parameters** | `pattern` (string, e.g. `**/*.ts`) |
-| **Returns** | List of relative file paths |
+| **Returns** | Newline-delimited relative file paths (truncated at 10,000 chars) |
 | **Dangerous** | No |
 
 ## grep
@@ -55,7 +55,7 @@ Search file contents with regex.
 | Field | Value |
 |---|---|
 | **Parameters** | `pattern` (string), `glob_filter` (optional string, e.g. `*.ts`) |
-| **Returns** | List of matches with file, line number, text |
+| **Returns** | Newline-delimited `file:line:text` entries, or "No matches found." (truncated at 10,000 chars) |
 | **Dangerous** | No |
 
 Uses `-rn -e` flags for safe pattern handling.
@@ -67,7 +67,7 @@ Run a shell command in the worktree.
 | Field | Value |
 |---|---|
 | **Parameters** | `command` (string) |
-| **Returns** | stdout, stderr, exit code |
+| **Returns** | Combined text: stdout, then `STDERR: ...` if present, then `Exit code: N` (truncated at 10,000 chars) |
 | **Dangerous** | Yes |
 
 Command must start with an allowed program. Restricted `PATH` and `HOME` env.

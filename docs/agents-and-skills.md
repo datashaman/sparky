@@ -13,7 +13,7 @@ Skills are scoped to a workspace. Each skill has:
 | **name** | Slug-format identifier (e.g. `react-best-practices`) |
 | **description** | Short summary of what the skill covers |
 | **content** | The markdown knowledge payload — coding guidelines, API references, conventions, etc. |
-| **provider / model** | Optional overrides for the LLM provider and model used when this skill is active |
+| **provider / model** | Stored for future use — not currently applied during execution |
 
 ### Example
 

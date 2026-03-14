@@ -53,7 +53,6 @@ src-tauri/
 
 ## Conventions
 
-- Python imports at top of file
 - TypeScript strict mode
 - Provider type: `AgentProvider` union in `types.ts`
 - Models: `AGENT_MODELS` in `agents.ts` (empty array = dynamic fetch)

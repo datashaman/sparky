@@ -6,7 +6,6 @@ Before you begin, make sure you have:
 
 - **Node.js 18+** — check with `node --version`
 - **Rust (latest stable)** — install via [rustup](https://rustup.rs/)
-- **Tauri CLI v2** — install with `cargo install tauri-cli`
 - **A GitHub account** — for authentication and repo integration
 - **At least one LLM provider configured** — see [Provider Configuration](#provider-configuration) below
 
@@ -31,6 +30,8 @@ This compiles the Rust backend, bundles the frontend, and opens the app window.
 4. Once authenticated, your token is stored in localStorage.
 
 You need this to create issues, read repos, and use GitHub-backed features.
+
+> **Security note:** The GitHub token is stored unencrypted in the Tauri webview's localStorage. It is only as secure as your local user account. To revoke access, log out from the app or clear the token from Settings. You can also revoke the OAuth app from your [GitHub settings](https://github.com/settings/applications).
 
 ## Provider Configuration
 
