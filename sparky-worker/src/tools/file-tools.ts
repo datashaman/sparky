@@ -50,16 +50,27 @@ export async function writeFile(worktreePath: string, filePath: string, content:
   writeFileSync(resolved, content);
 }
 
+/**
+ * Error thrown by editFile that carries the current file contents.
+ * This enables the edit-as-gather pattern without a redundant disk read.
+ */
+export class EditFileError extends Error {
+  constructor(message: string, public readonly currentContents: string) {
+    super(message);
+    this.name = "EditFileError";
+  }
+}
+
 export async function editFile(worktreePath: string, filePath: string, oldText: string, newText: string): Promise<void> {
   const resolved = sandboxResolve(worktreePath, filePath);
   const contents = readFileSync(resolved, "utf-8");
 
   const count = contents.split(oldText).length - 1;
   if (count === 0) {
-    throw new Error("old_text not found in file");
+    throw new EditFileError("old_text not found in file", contents);
   }
   if (count > 1) {
-    throw new Error(`old_text matches ${count} times — must be unique`);
+    throw new EditFileError(`old_text matches ${count} times — must be unique`, contents);
   }
 
   const updated = contents.replace(oldText, newText);
