@@ -81,8 +81,9 @@ export async function runPlanPipeline(opts: PlanPipelineOpts): Promise<void> {
     apiKey,
     onRetry: () => stepLog({ type: "info", message: "JSON extraction failed, retrying with focused prompt" }),
   }) as Record<string, unknown>;
-  if (!parsed.goal || !parsed.steps || !parsed.success_criteria) {
-    throw new Error("Invalid plan response: missing required fields");
+  repairPlanResponse(parsed);
+  if (!parsed.goal || !Array.isArray(parsed.steps) || (parsed.steps as unknown[]).length === 0) {
+    throw new Error("Invalid plan response: missing goal or steps");
   }
 
   // Critic review
@@ -104,6 +105,29 @@ export async function runPlanPipeline(opts: PlanPipelineOpts): Promise<void> {
 
   if (payload.plan_id) {
     updateExistingTable("execution_plans", payload.plan_id, { status: "done", result });
+  }
+}
+
+/**
+ * Fill missing/malformed fields in a plan response with sensible defaults.
+ * Small models often omit optional fields or use wrong types.
+ */
+function repairPlanResponse(parsed: Record<string, unknown>): void {
+  if (!parsed.success_criteria && parsed.goal) {
+    parsed.success_criteria = `Goal achieved: ${parsed.goal}`;
+  }
+
+  if (Array.isArray(parsed.steps)) {
+    parsed.steps = (parsed.steps as Record<string, unknown>[]).map((step, i) => ({
+      order: step.order ?? i + 1,
+      title: step.title ?? `Step ${i + 1}`,
+      description: step.description ?? step.title ?? "",
+      agent_name: step.agent_name ?? null,
+      expected_output: step.expected_output ?? step.description ?? "",
+      depends_on: Array.isArray(step.depends_on) ? step.depends_on : [],
+      verification_command: step.verification_command ?? null,
+      done_when: step.done_when ?? step.expected_output ?? "",
+    }));
   }
 }
 
