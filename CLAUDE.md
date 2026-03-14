@@ -20,6 +20,7 @@ cargo check           # Rust check (run from src-tauri/)
 src/                          # React frontend
   components/                 # UI components
   data/                       # Data layer, LLM integration, tools
+  lib/                        # Shared utilities
   db.ts                       # Database schema and migrations
 sparky-worker/                # Node.js worker process
   src/
@@ -51,7 +52,7 @@ src-tauri/
 
 | File | Purpose |
 |------|---------|
-| `src/data/llm.ts` | All LLM API integration (callLLM, callLLMWithTools, provider loops) |
+| `src/data/llm.ts` | Frontend LLM API integration (callLLM, callLLMWithTools, provider loops) |
 | `src/data/executePlan.ts` | Execution engine with tool-use loop |
 | `src/data/generatePlan.ts` | Plan generation with critic review |
 | `src/data/analyseIssue.ts` | Issue analysis with structured output |

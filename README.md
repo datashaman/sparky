@@ -67,6 +67,7 @@ sparky/
 ├── src/                  # React frontend (TypeScript)
 │   ├── components/       # UI components (workspace, analysis, plan views)
 │   ├── data/             # Data layer and type definitions
+│   ├── lib/              # Shared utilities
 │   └── db.ts             # SQLite database interface
 ├── sparky-worker/        # Node.js worker process (pipeline execution)
 │   └── src/
