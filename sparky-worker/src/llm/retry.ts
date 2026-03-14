@@ -5,7 +5,7 @@ import type { LogCallback } from "./index.js";
  *
  * Retries on:
  * - Network errors (fetch throws)
- * - 429 (rate limit) — respects Retry-After header
+ * - 429 (rate limit) — respects Retry-After header (seconds or HTTP-date)
  * - 500, 502, 503, 529 (server errors)
  *
  * Does NOT retry on:
@@ -34,20 +34,17 @@ export async function fetchWithRetry(
       }
 
       // Rate limit — respect Retry-After header if present
-      if (res.status === 429) {
+      if (res.status === 429 && attempt < maxRetries) {
         const retryAfter = res.headers.get("retry-after");
-        const delayMs = retryAfter
-          ? Math.min(parseInt(retryAfter, 10) * 1000, 60_000)
-          : backoffDelay(attempt, baseDelayMs);
+        const delayMs = parseRetryAfter(retryAfter) ?? backoffDelay(attempt, baseDelayMs);
 
-        if (attempt < maxRetries) {
-          opts?.onLog?.({
-            type: "info",
-            message: `${label} rate limited (429), retrying in ${Math.round(delayMs / 1000)}s (attempt ${attempt + 1}/${maxRetries})`,
-          });
-          await sleep(delayMs);
-          continue;
-        }
+        opts?.onLog?.({
+          type: "info",
+          message: `${label} rate limited (429), retry ${attempt + 1}/${maxRetries} in ${Math.round(delayMs / 1000)}s`,
+        });
+        await res.body?.cancel();
+        await sleep(delayMs);
+        continue;
       }
 
       // Server error — retry with backoff
@@ -55,8 +52,9 @@ export async function fetchWithRetry(
         const delayMs = backoffDelay(attempt, baseDelayMs);
         opts?.onLog?.({
           type: "info",
-          message: `${label} error ${res.status}, retrying in ${Math.round(delayMs / 1000)}s (attempt ${attempt + 1}/${maxRetries})`,
+          message: `${label} error ${res.status}, retry ${attempt + 1}/${maxRetries} in ${Math.round(delayMs / 1000)}s`,
         });
+        await res.body?.cancel();
         await sleep(delayMs);
         continue;
       }
@@ -68,7 +66,7 @@ export async function fetchWithRetry(
         const delayMs = backoffDelay(attempt, baseDelayMs);
         opts?.onLog?.({
           type: "info",
-          message: `${label} network error, retrying in ${Math.round(delayMs / 1000)}s (attempt ${attempt + 1}/${maxRetries}): ${err instanceof Error ? err.message : String(err)}`,
+          message: `${label} network error, retry ${attempt + 1}/${maxRetries} in ${Math.round(delayMs / 1000)}s: ${err instanceof Error ? err.message : String(err)}`,
         });
         await sleep(delayMs);
         continue;
@@ -85,6 +83,31 @@ const RETRYABLE_STATUS_CODES = new Set([429, 500, 502, 503, 529]);
 
 function isRetryable(status: number): boolean {
   return RETRYABLE_STATUS_CODES.has(status);
+}
+
+/**
+ * Parse Retry-After header which can be seconds or an HTTP-date.
+ * Returns delay in ms, or null if unparseable.
+ */
+function parseRetryAfter(value: string | null): number | null {
+  if (!value) return null;
+
+  // Try as integer seconds first
+  const seconds = parseInt(value, 10);
+  if (Number.isFinite(seconds) && seconds > 0) {
+    return Math.min(seconds * 1000, 60_000);
+  }
+
+  // Try as HTTP-date (e.g. "Wed, 21 Oct 2015 07:28:00 GMT")
+  const date = Date.parse(value);
+  if (Number.isFinite(date)) {
+    const delayMs = date - Date.now();
+    if (delayMs > 0) {
+      return Math.min(delayMs, 60_000);
+    }
+  }
+
+  return null;
 }
 
 function backoffDelay(attempt: number, baseMs: number): number {
