@@ -135,11 +135,11 @@ export async function anthropicToolLoop(opts: {
         content: result,
       });
       toolResultCount++;
-      if (onCheckpoint && toolResultCount % 3 === 0) {
-        onCheckpoint(messages, turn + 1);
-      }
     }
     messages.push({ role: "user", content: toolResults });
+    if (onCheckpoint && toolResultCount % 3 === 0) {
+      onCheckpoint(messages, turn + 1);
+    }
   }
 
   return { text: "(max turns reached)", messages };

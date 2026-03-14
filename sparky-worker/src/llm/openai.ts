@@ -166,9 +166,9 @@ export async function openaiToolLoop(opts: {
         content: result,
       });
       toolResultCount++;
-      if (onCheckpoint && toolResultCount % 3 === 0) {
-        onCheckpoint(messages, turn + 1);
-      }
+    }
+    if (onCheckpoint && toolResultCount % 3 === 0) {
+      onCheckpoint(messages, turn + 1);
     }
   }
 

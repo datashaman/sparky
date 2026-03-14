@@ -133,11 +133,11 @@ export async function geminiToolLoop(opts: {
         },
       });
       toolResultCount++;
-      if (onCheckpoint && toolResultCount % 3 === 0) {
-        onCheckpoint(contents, turn + 1);
-      }
     }
     contents.push({ role: "user", parts: responseParts });
+    if (onCheckpoint && toolResultCount % 3 === 0) {
+      onCheckpoint(contents, turn + 1);
+    }
   }
 
   return { text: "(max turns reached)", messages: contents };

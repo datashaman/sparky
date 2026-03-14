@@ -37,7 +37,7 @@ For each step:
 ## Step design guidelines
 - Prefer steps that deliver a complete vertical slice (e.g., model + API + test) over horizontal layers (all models, then all APIs).
 - Each step MUST have a concrete, verifiable output — not "understand the codebase".
-- Steps with no shared file dependencies can run in parallel. Mark independent steps with the same order number.
+- Steps with no shared file dependencies can potentially run in parallel. Note this in the step description but keep order numbers unique and sequential.
 - Include a \`verification_command\` (e.g. "npm test", "npx tsc --noEmit") and \`done_when\` criteria for each step where applicable.
 
 ## Anti-patterns to avoid
