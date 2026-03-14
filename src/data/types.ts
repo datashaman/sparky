@@ -143,6 +143,22 @@ export interface LLMToolDef {
   parameters: Record<string, unknown>;
 }
 
+export interface ExecutionLogEntry {
+  timestamp: number;
+  stepOrder: number;
+  type: "llm_request" | "llm_response" | "tool_call" | "tool_result" | "replan_check" | "replan_decision" | "info";
+  turn?: number;
+  provider?: string;
+  model?: string;
+  toolName?: string;
+  toolInput?: string;
+  toolResult?: string;
+  toolError?: string;
+  decision?: "continue" | "replan";
+  reason?: string;
+  message?: string;
+}
+
 export type WorktreeStatus = "creating" | "ready" | "error" | "removing";
 
 export interface IssueWorktree {

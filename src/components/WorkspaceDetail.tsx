@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { getWorkspace, deleteWorkspace, updateWorkspaceName } from "../data/workspaces";
 import {
   getOrCreateRepo,
@@ -13,7 +13,7 @@ import { getPlanForIssue, createPlan, deletePlansForIssue } from "../data/execut
 import { getWorktreeForIssue, removeWorktree } from "../data/issueWorktrees";
 import { runAnalysis } from "../data/analyseIssue";
 import { runPlanGeneration } from "../data/generatePlan";
-import type { IssueAnalysis, AnalysisResult, ExecutionPlan, ExecutionPlanResult, IssueWorktree, StepExecutionStatus, CriticReview } from "../data/types";
+import type { ExecutionLogEntry, IssueAnalysis, AnalysisResult, ExecutionPlan, ExecutionPlanResult, IssueWorktree, StepExecutionStatus, CriticReview } from "../data/types";
 import { executePlan } from "../data/executePlan";
 import { marked } from "marked";
 import { AnalysisView } from "./AnalysisView";
@@ -100,6 +100,25 @@ export function WorkspaceDetail({ workspaceId, onSwitchWorkspace, onDeleted, onW
   const [executing, setExecuting] = useState(false);
   const [stepStatuses, setStepStatuses] = useState<Map<number, StepExecutionStatus>>(new Map());
   const [executionError, setExecutionError] = useState<string | null>(null);
+  const [executionLogs, setExecutionLogs] = useState<ExecutionLogEntry[]>([]);
+
+  // Batch log updates to avoid per-entry React re-renders during rapid streaming
+  const logBufferRef = useRef<ExecutionLogEntry[]>([]);
+  const logRafRef = useRef<number>(0);
+  const flushLogs = useCallback(() => {
+    logRafRef.current = 0;
+    if (logBufferRef.current.length > 0) {
+      const batch = logBufferRef.current;
+      logBufferRef.current = [];
+      setExecutionLogs(prev => [...prev, ...batch]);
+    }
+  }, []);
+  const appendLog = useCallback((entry: ExecutionLogEntry) => {
+    logBufferRef.current.push(entry);
+    if (!logRafRef.current) {
+      logRafRef.current = requestAnimationFrame(flushLogs);
+    }
+  }, [flushLogs]);
 
   useEffect(() => {
     load();
@@ -836,11 +855,13 @@ export function WorkspaceDetail({ workspaceId, onSwitchWorkspace, onDeleted, onW
                           stepStatuses={stepStatuses}
                           executing={executing}
                           executionError={executionError}
+                          executionLogs={executionLogs}
                           onExecute={() => {
                             if (executing || !selectedIssue) return;
                             setExecuting(true);
                             setStepStatuses(new Map());
                             setExecutionError(null);
+                            setExecutionLogs([]);
                             executePlan({
                               planResult: parsed,
                               workspaceId,
@@ -854,6 +875,7 @@ export function WorkspaceDetail({ workspaceId, onSwitchWorkspace, onDeleted, onW
                               },
                               onWorktreeUpdate: setWorktree,
                               onPlanUpdate: (updated) => setPlan(prev => prev ? { ...prev, result: JSON.stringify(updated) } : prev),
+                              onLog: appendLog,
                             })
                               .catch((e) => {
                                 const msg = e instanceof Error ? e.message : String(e);

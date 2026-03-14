@@ -4426,6 +4426,82 @@ button.user-code:focus-visible {
   word-break: break-word;
 }
 
+/* Execution log panel */
+.pv-log-panel {
+  margin-top: 0.5rem;
+}
+
+.pv-log-toggle {
+  font-size: 0.75rem;
+  color: #6366f1;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  text-decoration: underline;
+}
+
+.pv-log-container {
+  margin-top: 0.35rem;
+  font-family: ui-monospace, "SF Mono", "Cascadia Code", Menlo, monospace;
+  font-size: 0.7rem;
+  line-height: 1.5;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 4px;
+  padding: 0.4rem 0.5rem;
+  max-height: 240px;
+  overflow-y: auto;
+}
+
+.pv-log-entry {
+  display: flex;
+  gap: 0.35rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pv-log-entry > span:last-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pv-log-time {
+  color: #94a3b8;
+  flex-shrink: 0;
+}
+
+.pv-log-icon {
+  flex-shrink: 0;
+  width: 1.2em;
+  text-align: center;
+}
+
+.pv-log-llm {
+  color: #3b82f6;
+}
+
+.pv-log-tool {
+  color: #f59e0b;
+}
+
+.pv-log-result {
+  color: #22c55e;
+}
+
+.pv-log-error {
+  color: #ef4444;
+}
+
+.pv-log-replan {
+  color: #a855f7;
+}
+
+.pv-log-info {
+  color: #64748b;
+}
+
 /* Critic review section */
 .pv-critic {
   border-radius: 8px;
@@ -4654,6 +4730,44 @@ button.user-code:focus-visible {
 
   .pv-step-result-toggle {
     color: #818cf8;
+  }
+
+  .pv-log-toggle {
+    color: #818cf8;
+    background: none;
+  }
+
+  .pv-log-container {
+    background: #0f172a;
+    border-color: #334155;
+  }
+
+  .pv-log-time {
+    color: #64748b;
+  }
+
+  .pv-log-llm {
+    color: #60a5fa;
+  }
+
+  .pv-log-tool {
+    color: #fbbf24;
+  }
+
+  .pv-log-result {
+    color: #4ade80;
+  }
+
+  .pv-log-error {
+    color: #f87171;
+  }
+
+  .pv-log-replan {
+    color: #c084fc;
+  }
+
+  .pv-log-info {
+    color: #94a3b8;
   }
 
   .pv-execute-btn {

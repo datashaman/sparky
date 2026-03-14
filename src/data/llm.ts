@@ -1,5 +1,11 @@
 import { invoke, isTauri } from "@tauri-apps/api/core";
-import type { AgentProvider, LLMToolDef } from "./types";
+import type { AgentProvider, ExecutionLogEntry, LLMToolDef } from "./types";
+
+export type LogCallback = (entry: Omit<ExecutionLogEntry, "timestamp" | "stepOrder">) => void;
+
+function truncate(s: string, max = 200): string {
+  return s.length > max ? s.slice(0, max) + "..." : s;
+}
 
 const OLLAMA_BASE_URL = "http://localhost:11434/v1";
 export const LITELLM_BASE_URL = "http://localhost:4000/v1";
@@ -237,22 +243,23 @@ export async function callLLMWithTools(opts: {
   tools: LLMToolDef[];
   maxTurns?: number;
   onToolCall: (name: string, input: Record<string, unknown>) => Promise<string>;
+  onLog?: LogCallback;
 }): Promise<string> {
-  const { provider, modelId, apiKey, systemPrompt, userPrompt, tools, maxTurns = DEFAULT_MAX_TURNS, onToolCall } = opts;
+  const { provider, modelId, apiKey, systemPrompt, userPrompt, tools, maxTurns = DEFAULT_MAX_TURNS, onToolCall, onLog } = opts;
 
   switch (provider) {
     case "anthropic":
-      return anthropicToolLoop({ modelId, apiKey, systemPrompt, userPrompt, tools, maxTurns, onToolCall });
+      return anthropicToolLoop({ modelId, apiKey, systemPrompt, userPrompt, tools, maxTurns, onToolCall, onLog });
     case "openai":
-      return openaiToolLoop({ modelId, apiKey, systemPrompt, userPrompt, tools, maxTurns, onToolCall, baseUrl: "https://api.openai.com/v1", label: "OpenAI" });
+      return openaiToolLoop({ modelId, apiKey, systemPrompt, userPrompt, tools, maxTurns, onToolCall, onLog, baseUrl: "https://api.openai.com/v1", label: "OpenAI" });
     case "ollama":
-      return openaiToolLoop({ modelId, apiKey, systemPrompt, userPrompt, tools, maxTurns, onToolCall, baseUrl: OLLAMA_BASE_URL, useProxy: true, label: "Ollama" });
+      return openaiToolLoop({ modelId, apiKey, systemPrompt, userPrompt, tools, maxTurns, onToolCall, onLog, baseUrl: OLLAMA_BASE_URL, useProxy: true, label: "Ollama" });
     case "openrouter":
-      return openaiToolLoop({ modelId, apiKey, systemPrompt, userPrompt, tools, maxTurns, onToolCall, baseUrl: "https://openrouter.ai/api/v1", label: "OpenRouter" });
+      return openaiToolLoop({ modelId, apiKey, systemPrompt, userPrompt, tools, maxTurns, onToolCall, onLog, baseUrl: "https://openrouter.ai/api/v1", label: "OpenRouter" });
     case "litellm":
-      return openaiToolLoop({ modelId, apiKey, systemPrompt, userPrompt, tools, maxTurns, onToolCall, baseUrl: LITELLM_BASE_URL, useProxy: true, proxyFn: litellmFetch, label: "LiteLLM" });
+      return openaiToolLoop({ modelId, apiKey, systemPrompt, userPrompt, tools, maxTurns, onToolCall, onLog, baseUrl: LITELLM_BASE_URL, useProxy: true, proxyFn: litellmFetch, label: "LiteLLM" });
     case "gemini":
-      return geminiToolLoop({ modelId, apiKey, systemPrompt, userPrompt, tools, maxTurns, onToolCall });
+      return geminiToolLoop({ modelId, apiKey, systemPrompt, userPrompt, tools, maxTurns, onToolCall, onLog });
   }
 }
 
@@ -266,8 +273,9 @@ async function anthropicToolLoop(opts: {
   tools: LLMToolDef[];
   maxTurns: number;
   onToolCall: (name: string, input: Record<string, unknown>) => Promise<string>;
+  onLog?: LogCallback;
 }): Promise<string> {
-  const { modelId, apiKey, systemPrompt, tools, maxTurns, onToolCall } = opts;
+  const { modelId, apiKey, systemPrompt, tools, maxTurns, onToolCall, onLog } = opts;
 
   const anthropicTools = tools.map((t) => ({
     name: t.name,
@@ -279,6 +287,9 @@ async function anthropicToolLoop(opts: {
 
   for (let turn = 0; turn < maxTurns; turn++) {
     const isLastTurn = turn === maxTurns - 1;
+
+    onLog?.({ type: "llm_request", turn: turn + 1, provider: "anthropic", model: modelId, message: turn === 0 ? truncate(opts.userPrompt, 150) : `turn ${turn + 1} (with tool results)` });
+
     const res = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: {
@@ -312,17 +323,21 @@ async function anthropicToolLoop(opts: {
     // Check if there are tool uses
     const toolUses = content.filter((b: any) => b.type === "tool_use");
     if (toolUses.length === 0 || data.stop_reason === "end_turn" || isLastTurn) {
-      // Extract final text
+      onLog?.({ type: "llm_response", turn: turn + 1, message: "final response" });
       return content
         .filter((b: any) => b.type === "text")
         .map((b: any) => b.text)
         .join("");
     }
 
+    onLog?.({ type: "llm_response", turn: turn + 1, message: `${toolUses.length} tool call${toolUses.length > 1 ? "s" : ""}` });
+
     // Execute tool calls and build results
     const toolResults: any[] = [];
     for (const tu of toolUses) {
+      onLog?.({ type: "tool_call", turn: turn + 1, toolName: tu.name, toolInput: truncate(JSON.stringify(tu.input ?? {})) });
       const result = await onToolCall(tu.name, tu.input ?? {});
+      onLog?.({ type: "tool_result", turn: turn + 1, toolName: tu.name, toolResult: truncate(result) });
       toolResults.push({
         type: "tool_result",
         tool_use_id: tu.id,
@@ -345,12 +360,13 @@ async function openaiToolLoop(opts: {
   tools: LLMToolDef[];
   maxTurns: number;
   onToolCall: (name: string, input: Record<string, unknown>) => Promise<string>;
+  onLog?: LogCallback;
   baseUrl?: string;
   useProxy?: boolean;
   proxyFn?: (body: string, apiKey: string) => Promise<{ status: number; data: any }>;
   label?: string;
 }): Promise<string> {
-  const { modelId, apiKey, systemPrompt, tools, maxTurns, onToolCall, baseUrl = "https://api.openai.com/v1", useProxy = false, proxyFn, label = "API" } = opts;
+  const { modelId, apiKey, systemPrompt, tools, maxTurns, onToolCall, onLog, baseUrl = "https://api.openai.com/v1", useProxy = false, proxyFn, label = "API" } = opts;
 
   const openaiTools = tools.map((t) => ({
     type: "function" as const,
@@ -368,6 +384,8 @@ async function openaiToolLoop(opts: {
     if (isLastTurn) {
       messages.push({ role: "user", content: "You have reached the tool-use limit. Summarize what you accomplished and what remains." });
     }
+
+    onLog?.({ type: "llm_request", turn: turn + 1, provider: label?.toLowerCase(), model: modelId, message: turn === 0 ? truncate(opts.userPrompt, 150) : `turn ${turn + 1} (with tool results)` });
 
     const reqBody = JSON.stringify({
       model: modelId,
@@ -408,8 +426,11 @@ async function openaiToolLoop(opts: {
     messages.push(msg);
 
     if (choice.finish_reason !== "tool_calls" || !msg.tool_calls?.length || isLastTurn) {
+      onLog?.({ type: "llm_response", turn: turn + 1, message: "final response" });
       return msg.content ?? "";
     }
+
+    onLog?.({ type: "llm_response", turn: turn + 1, message: `${msg.tool_calls.length} tool call${msg.tool_calls.length > 1 ? "s" : ""}` });
 
     // Execute tool calls
     for (const tc of msg.tool_calls) {
@@ -417,6 +438,7 @@ async function openaiToolLoop(opts: {
       try {
         args = JSON.parse(tc.function.arguments);
       } catch {
+        onLog?.({ type: "tool_result", turn: turn + 1, toolName: tc.function.name, toolError: "invalid JSON in tool arguments" });
         messages.push({
           role: "tool",
           tool_call_id: tc.id,
@@ -424,7 +446,9 @@ async function openaiToolLoop(opts: {
         });
         continue;
       }
+      onLog?.({ type: "tool_call", turn: turn + 1, toolName: tc.function.name, toolInput: truncate(JSON.stringify(args)) });
       const result = await onToolCall(tc.function.name, args);
+      onLog?.({ type: "tool_result", turn: turn + 1, toolName: tc.function.name, toolResult: truncate(result) });
       messages.push({
         role: "tool",
         tool_call_id: tc.id,
@@ -446,8 +470,9 @@ async function geminiToolLoop(opts: {
   tools: LLMToolDef[];
   maxTurns: number;
   onToolCall: (name: string, input: Record<string, unknown>) => Promise<string>;
+  onLog?: LogCallback;
 }): Promise<string> {
-  const { modelId, apiKey, systemPrompt, tools, maxTurns, onToolCall } = opts;
+  const { modelId, apiKey, systemPrompt, tools, maxTurns, onToolCall, onLog } = opts;
 
   // Gemini wants schemas without additionalProperties
   const declarations = tools.map((t) => {
@@ -464,6 +489,8 @@ async function geminiToolLoop(opts: {
     if (isLastTurn) {
       contents.push({ role: "user", parts: [{ text: "You have reached the tool-use limit. Summarize what you accomplished and what remains." }] });
     }
+
+    onLog?.({ type: "llm_request", turn: turn + 1, provider: "gemini", model: modelId, message: turn === 0 ? truncate(opts.userPrompt, 150) : `turn ${turn + 1} (with tool results)` });
 
     const res = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/${modelId}:generateContent?key=${apiKey}`,
@@ -492,17 +519,21 @@ async function geminiToolLoop(opts: {
     // Check for function calls
     const fnCalls = parts.filter((p: any) => p.functionCall);
     if (fnCalls.length === 0 || isLastTurn) {
-      // Extract text
+      onLog?.({ type: "llm_response", turn: turn + 1, message: "final response" });
       return parts
         .filter((p: any) => p.text)
         .map((p: any) => p.text)
         .join("");
     }
 
+    onLog?.({ type: "llm_response", turn: turn + 1, message: `${fnCalls.length} tool call${fnCalls.length > 1 ? "s" : ""}` });
+
     // Execute function calls and build responses
     const responseParts: any[] = [];
     for (const fc of fnCalls) {
+      onLog?.({ type: "tool_call", turn: turn + 1, toolName: fc.functionCall.name, toolInput: truncate(JSON.stringify(fc.functionCall.args ?? {})) });
       const result = await onToolCall(fc.functionCall.name, fc.functionCall.args ?? {});
+      onLog?.({ type: "tool_result", turn: turn + 1, toolName: fc.functionCall.name, toolResult: truncate(result) });
       responseParts.push({
         functionResponse: {
           name: fc.functionCall.name,
