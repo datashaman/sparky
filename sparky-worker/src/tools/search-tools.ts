@@ -1,12 +1,28 @@
 import { execSync } from "node:child_process";
-import { realpathSync } from "node:fs";
-import { relative } from "node:path";
+import { readdirSync, realpathSync } from "node:fs";
+import { join, relative } from "node:path";
 import { glob as globFn } from "glob";
 
 export interface GrepMatch {
   file: string;
   line: number;
   text: string;
+}
+
+export function listFiles(worktreePath: string, dirPath: string = "."): string[] {
+  const root = realpathSync(worktreePath);
+  const target = realpathSync(join(root, dirPath));
+  if (!target.startsWith(root)) {
+    throw new Error("Path is outside the worktree.");
+  }
+  const entries = readdirSync(target, { withFileTypes: true });
+  return entries
+    .filter((e) => !e.name.startsWith(".git") || e.name === ".gitignore")
+    .map((e) => {
+      const rel = relative(root, join(target, e.name));
+      return e.isDirectory() ? `${rel}/` : rel;
+    })
+    .sort();
 }
 
 export async function globFiles(worktreePath: string, pattern: string): Promise<string[]> {

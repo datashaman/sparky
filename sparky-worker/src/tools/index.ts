@@ -2,6 +2,7 @@ import type { LLMToolDef } from "../types.js";
 import { readFile } from "./file-tools.js";
 import { writeFile } from "./file-tools.js";
 import { editFile } from "./file-tools.js";
+import { listFiles } from "./search-tools.js";
 import { globFiles } from "./search-tools.js";
 import { grepFiles } from "./search-tools.js";
 import { runBash } from "./bash-tool.js";
@@ -17,6 +18,18 @@ export const TOOL_SCHEMAS: LLMToolDef[] = [
         file_path: { type: "string", description: "Path relative to worktree root" },
       },
       required: ["file_path"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "list_files",
+    description: "List files and directories in a given path. Returns entries with trailing / for directories. Defaults to the project root. Use this FIRST to orient yourself in unfamiliar codebases before searching for specific files.",
+    parameters: {
+      type: "object",
+      properties: {
+        path: { type: "string", description: "Directory path relative to worktree root (default: '.')" },
+      },
+      required: [],
       additionalProperties: false,
     },
   },
@@ -160,6 +173,7 @@ export const TOOL_SCHEMAS: LLMToolDef[] = [
 
 /** Map tool IDs to schema names. */
 const TOOL_ID_TO_SCHEMA_NAME: Record<string, string> = {
+  list_files: "list_files",
   read: "read_file",
   write: "write_file",
   edit: "edit_file",
@@ -222,6 +236,8 @@ export function createToolHandler(
   return async (name: string, input: Record<string, unknown>): Promise<string> => {
     try {
       switch (name) {
+        case "list_files":
+          return truncate(listFiles(worktreePath, (input.path as string) || ".").join("\n"));
         case "read_file":
           return truncate(await readFile(worktreePath, input.file_path as string));
         case "write_file":

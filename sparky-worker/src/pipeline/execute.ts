@@ -21,6 +21,7 @@ import { TOOL_SCHEMAS, filterToolSchemas, createToolHandler } from "../tools/ind
 import { buildSkillResolver } from "../tools/skill-tool.js";
 import { createAskUserHandler } from "../tools/ask-user-tool.js";
 import { isSessionCancelled } from "../session-manager.js";
+import { readRepoContext } from "../repo-context.js";
 
 export interface ExecutionPipelineOpts {
   sessionId: string;
@@ -56,6 +57,7 @@ export async function runExecutionPipeline(opts: ExecutionPipelineOpts): Promise
   }
 
   const worktreePath = await resolveWorktreePath(repo_full_name, issue_number);
+  const repoContext = readRepoContext(worktreePath);
 
   const agents = getAgentsForWorkspace(workspace_id);
   const skills = getSkillsForWorkspace(workspace_id);
@@ -181,6 +183,10 @@ export async function runExecutionPipeline(opts: ExecutionPipelineOpts): Promise
         step.verification_command ? `- After completing the task, run the verification command: \`${step.verification_command}\`. If it fails, fix the issue before reporting done.` : "",
         `- End your final response with STATUS: DONE if the task is complete, or STATUS: BLOCKED with a reason if you cannot proceed.`,
       ].filter(Boolean);
+
+      if (repoContext) {
+        systemParts.push("", repoContext);
+      }
 
       if (agentContent) {
         systemParts.push("", "## Agent Instructions", agentContent);

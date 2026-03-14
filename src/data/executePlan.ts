@@ -138,7 +138,7 @@ export async function executePlan(opts: ExecutePlanOpts): Promise<void> {
           if (agentToolIds.length > 0) {
             toolSchemas = filterToolSchemas(agentToolIds);
           } else {
-            toolSchemas = filterToolSchemas(["read", "glob", "grep"]);
+            toolSchemas = filterToolSchemas(["list_files", "read", "glob", "grep"]);
           }
         }
       }

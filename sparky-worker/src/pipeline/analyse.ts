@@ -6,8 +6,9 @@ import { buildSkillResolver } from "../tools/skill-tool.js";
 import { createAskUserHandler } from "../tools/ask-user-tool.js";
 import { isSessionCancelled } from "../session-manager.js";
 import { extractJSON } from "../util.js";
+import { readRepoContext } from "../repo-context.js";
 
-const TOOL_IDS = ["read_file", "glob", "grep", "bash", "ask_user", "use_skill", "create_issue", "update_issue", "close_issue"];
+const TOOL_IDS = ["list_files", "read_file", "glob", "grep", "bash", "ask_user", "use_skill", "create_issue", "update_issue", "close_issue"];
 
 export interface AnalysisPipelineOpts {
   sessionId: string;
@@ -49,7 +50,8 @@ export async function runAnalysisPipeline(opts: AnalysisPipelineOpts): Promise<v
 
   const analysisTools = TOOL_SCHEMAS.filter((t) => TOOL_IDS.includes(t.name));
 
-  const systemPrompt = buildAnalysisSystemPrompt(skills, agents);
+  const repoContext = readRepoContext(worktreePath);
+  const systemPrompt = buildAnalysisSystemPrompt(skills, agents) + (repoContext ? `\n\n${repoContext}` : "");
   const userPrompt = buildAnalysisUserPrompt(payload, skills, agents);
 
   const schemaInstruction = `\n\nWhen you are ready to provide your final analysis, respond with a JSON object matching this schema:\n${JSON.stringify(ANALYSIS_SCHEMA, null, 2)}`;
@@ -96,7 +98,7 @@ async function resolveWorktreePath(repoFullName: string, issueNumber: number, _t
 }
 
 function buildAnalysisSystemPrompt(skills: { name: string; description: string | null }[], agents: { name: string; description: string }[]): string {
-  const toolNames = "Read, Write, Edit, Glob, Grep, Bash, Skill, Ask User";
+  const toolNames = "List Files, Read, Write, Edit, Glob, Grep, Bash, Skill, Ask User";
   return `You are a senior software engineer analysing a GitHub issue. Provide a concise, structured analysis. Be direct and practical. No filler.
 
 ## Tools available to you during analysis

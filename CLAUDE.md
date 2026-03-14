@@ -46,7 +46,7 @@ src-tauri/
 - **Two model tiers:** planning (Opus-class) and execution (Sonnet-class)
 - **6 providers:** OpenAI, Anthropic, Gemini, Ollama, OpenRouter, LiteLLM
 - **Agents/Skills:** workspace-scoped; skills callable on demand via `use_skill` tool
-- **Tools:** sandboxed to git worktree, 11 tools (6 file/shell + use_skill + ask_user + 3 GitHub issue tools) with allowlist
+- **Tools:** sandboxed to git worktree, 12 tools (7 file/shell + use_skill + ask_user + 3 GitHub issue tools) with allowlist
 
 ## Key Files
 

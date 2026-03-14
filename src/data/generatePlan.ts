@@ -192,7 +192,7 @@ export async function runPlanGeneration(
       return args ? `${skill.content}\n\n## Arguments\n${args}` : skill.content;
     };
 
-    const PLAN_TOOL_NAMES = new Set(["read_file", "glob", "grep", "bash", "ask_user", "use_skill"]);
+    const PLAN_TOOL_NAMES = new Set(["list_files", "read_file", "glob", "grep", "bash", "ask_user", "use_skill"]);
     const planTools = TOOL_SCHEMAS.filter((t) => PLAN_TOOL_NAMES.has(t.name));
 
     const baseHandler = createToolCallHandler(worktree.path, skillResolver);

@@ -58,6 +58,7 @@ pub fn run() {
             git_ops::git_create_worktree,
             git_ops::git_remove_worktree,
             git_ops::git_worktree_status,
+            agent_tools::tool_list_files,
             agent_tools::tool_read_file,
             agent_tools::tool_write_file,
             agent_tools::tool_edit_file,

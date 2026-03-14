@@ -51,6 +51,44 @@ fn sandbox_resolve(root: &Path, relative: &str) -> Result<PathBuf, String> {
 }
 
 #[tauri::command]
+pub async fn tool_list_files(worktree_path: String, path: Option<String>) -> Result<Vec<String>, String> {
+    let root = Path::new(&worktree_path)
+        .canonicalize()
+        .map_err(|e| format!("Cannot canonicalize root: {}", e))?;
+
+    let dir_path = path.unwrap_or_else(|| ".".to_string());
+    let target = sandbox_resolve(&root, &dir_path)?;
+
+    if !target.is_dir() {
+        return Err(format!("Not a directory: {}", dir_path));
+    }
+
+    let entries = std::fs::read_dir(&target)
+        .map_err(|e| format!("Cannot read directory: {}", e))?;
+
+    let mut results = Vec::new();
+    for entry in entries {
+        let entry = entry.map_err(|e| format!("Read dir error: {}", e))?;
+        let name = entry.file_name().to_string_lossy().into_owned();
+        // Skip .git directory but allow .gitignore etc.
+        if name == ".git" {
+            continue;
+        }
+        let rel = target.join(&name);
+        let relative = rel.strip_prefix(&root)
+            .map(|p| p.to_string_lossy().into_owned())
+            .unwrap_or(name);
+        if entry.file_type().map(|ft| ft.is_dir()).unwrap_or(false) {
+            results.push(format!("{}/", relative));
+        } else {
+            results.push(relative);
+        }
+    }
+    results.sort();
+    Ok(results)
+}
+
+#[tauri::command]
 pub async fn tool_read_file(worktree_path: String, file_path: String) -> Result<String, String> {
     let root = Path::new(&worktree_path);
     let resolved = sandbox_resolve(root, &file_path)?;
