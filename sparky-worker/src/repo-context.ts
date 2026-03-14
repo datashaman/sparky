@@ -13,16 +13,20 @@ const CONTEXT_FILES = [
   ".cursor/rules",
 ];
 
-const MAX_FILE_SIZE = 8000;
+const DEFAULT_MAX_SIZE = 8000;
 
 /**
  * Read contextual documentation from a repo worktree.
  * Returns a formatted string suitable for injection into a system prompt,
  * or an empty string if no docs are found.
+ *
+ * @param maxSize - Total budget in characters for all docs combined. Use a smaller
+ *   value (e.g. 2000) for small models to avoid crowding out task instructions.
  */
-export function readRepoContext(worktreePath: string): string {
+export function readRepoContext(worktreePath: string, maxSize: number = DEFAULT_MAX_SIZE): string {
   const root = realpathSync(worktreePath);
   const sections: string[] = [];
+  let totalSize = 0;
 
   for (const filename of CONTEXT_FILES) {
     const filepath = join(root, filename);
@@ -47,10 +51,16 @@ export function readRepoContext(worktreePath: string): string {
     try {
       let content = readFileSync(filepath, "utf-8").trim();
       if (!content) continue;
-      if (content.length > MAX_FILE_SIZE) {
-        content = content.slice(0, MAX_FILE_SIZE) + "\n... (truncated)";
+      const headerPrefix = `### ${filename}\n\n`;
+      const truncationMarker = "\n... (truncated)";
+      const remaining = maxSize - totalSize - headerPrefix.length;
+      if (remaining <= 0) break;
+      if (content.length > remaining) {
+        content = content.slice(0, remaining - truncationMarker.length) + truncationMarker;
       }
-      sections.push(`### ${filename}\n\n${content}`);
+      const section = headerPrefix + content;
+      totalSize += section.length;
+      sections.push(section);
     } catch {
       // Skip unreadable files
     }

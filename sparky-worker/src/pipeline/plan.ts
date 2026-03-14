@@ -5,7 +5,7 @@ import { TOOL_SCHEMAS, createToolHandler } from "../tools/index.js";
 import { buildSkillResolver } from "../tools/skill-tool.js";
 import { createAskUserHandler } from "../tools/ask-user-tool.js";
 import { isSessionCancelled } from "../session-manager.js";
-import { extractJSON } from "../util.js";
+import { extractJSONWithRetry } from "../util.js";
 import { readRepoContext } from "../repo-context.js";
 
 const TOOL_IDS = ["list_files", "read_file", "glob", "grep", "bash", "ask_user", "use_skill"];
@@ -49,11 +49,12 @@ export async function runPlanPipeline(opts: PlanPipelineOpts): Promise<void> {
 
   const planTools = TOOL_SCHEMAS.filter((t) => TOOL_IDS.includes(t.name));
 
-  const repoContext = readRepoContext(worktreePath);
+  const repoContext = readRepoContext(worktreePath, 2000);
   const systemPrompt = buildPlanSystemPrompt() + (repoContext ? `\n\n${repoContext}` : "");
-  const userPrompt = buildPlanUserPrompt(payload, analysisResult, agents, skills);
+  const baseUserPrompt = buildPlanUserPrompt(payload, analysisResult, agents, skills);
 
-  const schemaInstruction = `\n\nWhen you are ready to provide your final plan, respond with a JSON object matching this schema:\n${JSON.stringify(PLAN_SCHEMA, null, 2)}`;
+  const schemaInstruction = `\n\nIMPORTANT: When you are ready to provide your final plan, you MUST respond with ONLY a JSON object (no prose, no explanation) matching this schema:\n${JSON.stringify(PLAN_SCHEMA, null, 2)}`;
+  const userPrompt = baseUserPrompt + schemaInstruction;
 
   const stepLog = (partial: Omit<ExecutionLogEntry, "timestamp" | "stepOrder">) => onLog(0, partial);
   stepLog({ type: "info", message: `Starting plan generation (${provider}/${modelId})` });
@@ -62,7 +63,7 @@ export async function runPlanPipeline(opts: PlanPipelineOpts): Promise<void> {
     provider,
     modelId,
     apiKey,
-    systemPrompt: systemPrompt + schemaInstruction,
+    systemPrompt,
     userPrompt,
     tools: planTools,
     maxTurns: 15,
@@ -70,7 +71,15 @@ export async function runPlanPipeline(opts: PlanPipelineOpts): Promise<void> {
     onLog: stepLog,
   });
 
-  let parsed = extractJSON(text) as Record<string, unknown>;
+  let parsed = await extractJSONWithRetry({
+    text,
+    schema: PLAN_SCHEMA,
+    schemaName: "execution_plan",
+    provider,
+    modelId,
+    apiKey,
+    onRetry: () => stepLog({ type: "info", message: "JSON extraction failed, retrying with focused prompt" }),
+  }) as Record<string, unknown>;
   if (!parsed.goal || !parsed.steps || !parsed.success_criteria) {
     throw new Error("Invalid plan response: missing required fields");
   }

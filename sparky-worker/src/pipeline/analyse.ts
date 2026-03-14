@@ -5,7 +5,7 @@ import { TOOL_SCHEMAS, createToolHandler } from "../tools/index.js";
 import { buildSkillResolver } from "../tools/skill-tool.js";
 import { createAskUserHandler } from "../tools/ask-user-tool.js";
 import { isSessionCancelled } from "../session-manager.js";
-import { extractJSON } from "../util.js";
+import { extractJSONWithRetry } from "../util.js";
 import { readRepoContext } from "../repo-context.js";
 
 const TOOL_IDS = ["list_files", "read_file", "glob", "grep", "bash", "ask_user", "use_skill", "create_issue", "update_issue", "close_issue"];
@@ -50,11 +50,12 @@ export async function runAnalysisPipeline(opts: AnalysisPipelineOpts): Promise<v
 
   const analysisTools = TOOL_SCHEMAS.filter((t) => TOOL_IDS.includes(t.name));
 
-  const repoContext = readRepoContext(worktreePath);
+  const repoContext = readRepoContext(worktreePath, 2000);
   const systemPrompt = buildAnalysisSystemPrompt(skills, agents) + (repoContext ? `\n\n${repoContext}` : "");
-  const userPrompt = buildAnalysisUserPrompt(payload, skills, agents);
+  const baseUserPrompt = buildAnalysisUserPrompt(payload, skills, agents);
 
-  const schemaInstruction = `\n\nWhen you are ready to provide your final analysis, respond with a JSON object matching this schema:\n${JSON.stringify(ANALYSIS_SCHEMA, null, 2)}`;
+  const schemaInstruction = `\n\nIMPORTANT: When you are ready to provide your final analysis, you MUST respond with ONLY a JSON object (no prose, no explanation) matching this schema:\n${JSON.stringify(ANALYSIS_SCHEMA, null, 2)}`;
+  const userPrompt = baseUserPrompt + schemaInstruction;
 
   const stepLog = (partial: Omit<ExecutionLogEntry, "timestamp" | "stepOrder">) => onLog(0, partial);
   stepLog({ type: "info", message: `Starting analysis (${provider}/${modelId})` });
@@ -63,7 +64,7 @@ export async function runAnalysisPipeline(opts: AnalysisPipelineOpts): Promise<v
     provider,
     modelId,
     apiKey,
-    systemPrompt: systemPrompt + schemaInstruction,
+    systemPrompt,
     userPrompt,
     tools: analysisTools,
     maxTurns: 10,
@@ -71,7 +72,15 @@ export async function runAnalysisPipeline(opts: AnalysisPipelineOpts): Promise<v
     onLog: stepLog,
   });
 
-  const parsed = extractJSON(text) as Record<string, unknown>;
+  const parsed = await extractJSONWithRetry({
+    text,
+    schema: ANALYSIS_SCHEMA,
+    schemaName: "analysis",
+    provider,
+    modelId,
+    apiKey,
+    onRetry: () => stepLog({ type: "info", message: "JSON extraction failed, retrying with focused prompt" }),
+  }) as Record<string, unknown>;
   if (!parsed.summary || !parsed.type || !parsed.complexity) {
     throw new Error("Invalid analysis response: missing required fields");
   }
