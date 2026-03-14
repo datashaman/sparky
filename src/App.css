@@ -4756,15 +4756,45 @@ button.user-code:focus-visible {
     border-color: #c2410c;
   }
 
+  .av-pill-selected::before {
+    background: #c2410c;
+    border-color: #c2410c;
+  }
+
+  .av-pill-selected:hover:not(:disabled) {
+    border-color: #ea580c;
+    background: #1c1305;
+  }
+
+  .av-pill-selected:hover:not(:disabled)::before {
+    background: #ea580c;
+    border-color: #ea580c;
+  }
+
+  .av-pill-dangerous {
+    border-color: #991b1b;
+    color: #fca5a5;
+  }
+
+  .av-pill-dangerous::before {
+    border-color: #991b1b;
+    background: #1e1e2e;
+  }
+
+  .av-pill-dangerous:hover:not(:disabled) {
+    border-color: #dc2626;
+    background: #1a0505;
+  }
+
+  .av-pill-dangerous:hover:not(:disabled)::before {
+    background: #dc2626;
+    border-color: #dc2626;
+  }
+
   .av-pill-exists {
     background: #1a2e1a;
     border-color: #166534;
     color: #86efac;
-  }
-
-  .av-pill-exists::before {
-    background: #166534;
-    border-color: #166534;
   }
 
   .av-agent-skills-hint {
