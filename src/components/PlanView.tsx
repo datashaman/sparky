@@ -1,5 +1,5 @@
-import { useState } from "react";
-import type { ExecutionPlanResult, StepExecutionStatus, CriticReview } from "../data/types";
+import { useEffect, useRef, useState } from "react";
+import type { ExecutionLogEntry, ExecutionPlanResult, StepExecutionStatus, CriticReview } from "../data/types";
 
 interface PlanViewProps {
   result: ExecutionPlanResult;
@@ -8,6 +8,7 @@ interface PlanViewProps {
   executing?: boolean;
   executionError?: string | null;
   onExecute?: () => void;
+  executionLogs?: ExecutionLogEntry[];
 }
 
 function StepStatusBadge({ status }: { status: StepExecutionStatus }) {
@@ -58,7 +59,107 @@ function CriticReviewSection({ review }: { review: CriticReview }) {
   );
 }
 
-export function PlanView({ result, criticReview, stepStatuses, executing, executionError, onExecute }: PlanViewProps) {
+function formatTime(ts: number): string {
+  const d = new Date(ts);
+  return d.toLocaleTimeString("en-US", { hour12: false, hour: "2-digit", minute: "2-digit", second: "2-digit" });
+}
+
+function LogEntryLine({ entry }: { entry: ExecutionLogEntry }) {
+  const time = formatTime(entry.timestamp);
+
+  switch (entry.type) {
+    case "llm_request":
+      return (
+        <div className="pv-log-entry pv-log-llm">
+          <span className="pv-log-time">[{time}]</span>
+          <span className="pv-log-icon">&#129302;</span>
+          <span>LLM turn {entry.turn} ({entry.provider}/{entry.model}): {entry.message}</span>
+        </div>
+      );
+    case "llm_response":
+      return (
+        <div className="pv-log-entry pv-log-llm">
+          <span className="pv-log-time">[{time}]</span>
+          <span className="pv-log-icon">&#129302;</span>
+          <span>LLM response: {entry.message}</span>
+        </div>
+      );
+    case "tool_call":
+      return (
+        <div className="pv-log-entry pv-log-tool">
+          <span className="pv-log-time">[{time}]</span>
+          <span className="pv-log-icon">&#128295;</span>
+          <span>{entry.toolName} {entry.toolInput}</span>
+        </div>
+      );
+    case "tool_result":
+      return (
+        <div className={`pv-log-entry ${entry.toolError ? "pv-log-error" : "pv-log-result"}`}>
+          <span className="pv-log-time">[{time}]</span>
+          <span className="pv-log-icon">{entry.toolError ? "\u2717" : "\u2713"}</span>
+          <span>{entry.toolName} {entry.toolError ? `error: ${entry.toolError}` : `\u2192 ${entry.toolResult}`}</span>
+        </div>
+      );
+    case "replan_check":
+      return (
+        <div className="pv-log-entry pv-log-replan">
+          <span className="pv-log-time">[{time}]</span>
+          <span className="pv-log-icon">&#128260;</span>
+          <span>{entry.message}</span>
+        </div>
+      );
+    case "replan_decision":
+      return (
+        <div className={`pv-log-entry ${entry.decision === "replan" ? "pv-log-replan" : "pv-log-result"}`}>
+          <span className="pv-log-time">[{time}]</span>
+          <span className="pv-log-icon">{entry.decision === "replan" ? "\u21BB" : "\u2713"}</span>
+          <span>{entry.decision === "replan" ? "Replanning" : "Continuing"}: {entry.reason}</span>
+        </div>
+      );
+    case "info":
+      return (
+        <div className="pv-log-entry pv-log-info">
+          <span className="pv-log-time">[{time}]</span>
+          <span className="pv-log-icon">&#8505;</span>
+          <span>{entry.message}</span>
+        </div>
+      );
+  }
+}
+
+function StepLogPanel({ logs }: { logs: ExecutionLogEntry[] }) {
+  const [expanded, setExpanded] = useState(true);
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (expanded && scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    }
+  }, [logs, expanded]);
+
+  if (logs.length === 0) return null;
+
+  return (
+    <div className="pv-log-panel">
+      <button
+        type="button"
+        className="pv-log-toggle"
+        onClick={() => setExpanded(!expanded)}
+      >
+        {expanded ? "Hide" : "Show"} execution log ({logs.length})
+      </button>
+      {expanded && (
+        <div className="pv-log-container" ref={scrollRef}>
+          {logs.map((entry, i) => (
+            <LogEntryLine key={i} entry={entry} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+export function PlanView({ result, criticReview, stepStatuses, executing, executionError, onExecute, executionLogs }: PlanViewProps) {
   const [expandedSteps, setExpandedSteps] = useState<Set<number>>(new Set());
 
   const toggleExpanded = (order: number) => {
@@ -69,6 +170,16 @@ export function PlanView({ result, criticReview, stepStatuses, executing, execut
       return next;
     });
   };
+
+  // Group logs by stepOrder
+  const logsByStep = new Map<number, ExecutionLogEntry[]>();
+  if (executionLogs) {
+    for (const entry of executionLogs) {
+      const arr = logsByStep.get(entry.stepOrder) ?? [];
+      arr.push(entry);
+      logsByStep.set(entry.stepOrder, arr);
+    }
+  }
 
   return (
     <div className="pv-root">
@@ -83,6 +194,7 @@ export function PlanView({ result, criticReview, stepStatuses, executing, execut
         {result.steps.map((step) => {
           const status = stepStatuses?.get(step.order);
           const isExpanded = expandedSteps.has(step.order);
+          const stepLogs = logsByStep.get(step.order) ?? [];
 
           return (
             <div key={step.order} className={`pv-step ${status ? `pv-step-${status.status}` : ""}`}>
@@ -107,6 +219,9 @@ export function PlanView({ result, criticReview, stepStatuses, executing, execut
                 <div className="pv-step-deps">
                   Depends on: {step.depends_on.map((d) => `Step ${d}`).join(", ")}
                 </div>
+              )}
+              {(status?.status === "running" || status?.status === "done") && stepLogs.length > 0 && (
+                <StepLogPanel logs={stepLogs} />
               )}
               {status?.status === "error" && status.error && (
                 <div className="pv-step-error-text">{status.error}</div>

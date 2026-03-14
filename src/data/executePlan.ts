@@ -5,6 +5,7 @@ import { ensureWorktree } from "./issueWorktrees";
 import { callLLMWithTools, KEYLESS_PROVIDERS } from "./llm";
 import { TOOL_SCHEMAS, filterToolSchemas, createToolCallHandler } from "./tools";
 import type {
+  ExecutionLogEntry,
   ExecutionPlanResult,
   StepExecutionStatus,
   Agent,
@@ -21,10 +22,11 @@ export interface ExecutePlanOpts {
   onStepUpdate: (stepOrder: number, status: StepExecutionStatus) => void;
   onWorktreeUpdate: (wt: IssueWorktree) => void;
   onPlanUpdate?: (updatedPlan: ExecutionPlanResult) => void;
+  onLog?: (entry: ExecutionLogEntry) => void;
 }
 
 export async function executePlan(opts: ExecutePlanOpts): Promise<void> {
-  const { planResult, workspaceId, issue, onStepUpdate, onWorktreeUpdate, onPlanUpdate } = opts;
+  const { planResult, workspaceId, issue, onStepUpdate, onWorktreeUpdate, onPlanUpdate, onLog } = opts;
 
   // Validate provider/model/key
   const defaultProvider = getDefaultProvider();
@@ -203,6 +205,14 @@ export async function executePlan(opts: ExecutePlanOpts): Promise<void> {
 
       console.log(`[execute] step ${step.order}: "${step.title}" provider=${provider} model=${modelId} tools=${toolSchemas.length} maxTurns=${maxTurns}`);
 
+      // Wrap onLog to auto-add timestamp and stepOrder
+      const stepLog = onLog
+        ? (partial: Omit<ExecutionLogEntry, "timestamp" | "stepOrder">) =>
+            onLog({ ...partial, timestamp: Date.now(), stepOrder: step.order })
+        : undefined;
+
+      stepLog?.({ type: "info", message: `Starting: ${step.title} (${provider}/${modelId})` });
+
       const output = await callLLMWithTools({
         provider,
         modelId,
@@ -212,6 +222,7 @@ export async function executePlan(opts: ExecutePlanOpts): Promise<void> {
         tools: toolSchemas,
         maxTurns,
         onToolCall: toolHandler,
+        onLog: stepLog,
       });
 
       stepOutputs.set(step.order, output);
@@ -222,6 +233,7 @@ export async function executePlan(opts: ExecutePlanOpts): Promise<void> {
       const remainingSteps = steps.slice(stepIdx + 1);
       if (remainingSteps.length > 0) {
         try {
+          stepLog?.({ type: "replan_check", message: "Checking if remaining steps need adjustment" });
           const replanResult = await checkNeedReplan(
             output,
             step,
@@ -232,6 +244,8 @@ export async function executePlan(opts: ExecutePlanOpts): Promise<void> {
             execModelVal,
             execApiKey,
           );
+
+          stepLog?.({ type: "replan_decision", decision: replanResult.decision, reason: replanResult.reason });
 
           if (replanResult.decision === "replan") {
             console.log("[execute] replanning:", replanResult.reason);
