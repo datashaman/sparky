@@ -149,10 +149,15 @@ export async function geminiToolLoop(opts: {
       compressMessages(contents, "gemini", modelId, onLog);
     }
 
-    // Proactive degradation hints
+    // Remaining turns awareness — inject at key thresholds
+    const remaining = maxTurns - turn - 1;
     const turnsUsedPct = ((turn + 1) / maxTurns) * 100;
-    if ((turnsUsedPct >= 80 || budget.utilizationPct >= 85) && !hintInjected) {
-      contents.push({ role: "user", parts: [{ text: "You are running low on remaining actions. Prioritize completing the most critical work. Leave the codebase in a working state." }] });
+    if (turnsUsedPct >= 50 && !hintInjected) {
+      if (turnsUsedPct >= 80 || budget.utilizationPct >= 85) {
+        contents.push({ role: "user", parts: [{ text: `⚠ ${remaining} actions remaining (context: ${budget.utilizationPct}% used). Prioritize completing the most critical work. Leave the codebase in a working state. Skip nice-to-haves.` }] });
+      } else {
+        contents.push({ role: "user", parts: [{ text: `Note: ${remaining} of ${maxTurns} actions remaining. Plan your remaining work accordingly.` }] });
+      }
       hintInjected = true;
     }
 
