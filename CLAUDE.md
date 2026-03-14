@@ -25,8 +25,20 @@ src/                          # React frontend
 sparky-worker/                # Node.js worker process
   src/
     pipeline/                 # Analysis, plan, execution pipelines
-    llm/                      # LLM provider loops (anthropic, openai, gemini)
+    llm/                      # LLM provider loops + context management
+      anthropic.ts            # Anthropic API (structured + tool loop)
+      openai.ts               # OpenAI-compatible API (shared by OpenAI, Ollama, OpenRouter, LiteLLM)
+      gemini.ts               # Gemini API
+      context-budget.ts       # Token budget tracking per model
+      compress.ts             # Message compression (assistant text + tool results)
+      retry.ts                # Fetch with exponential backoff
+      index.ts                # Provider routing (callLLM, callLLMWithTools)
     tools/                    # Sandboxed tool implementations
+    error-classifier.ts       # Error categorization with actionable suggestions
+    session-runner.ts         # Session lifecycle (start, resume, error handling)
+    session-manager.ts        # IPC command routing, cancellation
+    repo-context.ts           # Repository documentation injection
+    util.ts                   # JSON extraction with retry
     types.ts                  # Worker type definitions
     db.ts                     # Worker database access (better-sqlite3)
 src-tauri/
@@ -47,6 +59,8 @@ src-tauri/
 - **6 providers:** OpenAI, Anthropic, Gemini, Ollama, OpenRouter, LiteLLM
 - **Agents/Skills:** workspace-scoped; skills callable on demand via `use_skill` tool
 - **Tools:** sandboxed to git worktree, 12 tools (7 file/shell + use_skill + ask_user + 3 GitHub issue tools) with allowlist
+- **Context management:** token budget tracking, asymmetric compression (assistant text first), proactive degradation hints
+- **Resilience:** API retry with exponential backoff, error classification with actionable suggestions, edit-as-gather pattern
 
 ## Key Files
 
@@ -65,7 +79,11 @@ src-tauri/
 | `sparky-worker/src/pipeline/plan.ts` | Worker plan generation + critic |
 | `sparky-worker/src/pipeline/execute.ts` | Worker execution + replanning |
 | `sparky-worker/src/llm/index.ts` | Worker LLM routing (callLLM, callLLMWithTools) |
+| `sparky-worker/src/llm/context-budget.ts` | Token budget tracking, model context window lookup |
+| `sparky-worker/src/llm/compress.ts` | Message compression (assistant text + tool results) |
+| `sparky-worker/src/llm/retry.ts` | Fetch with exponential backoff for API calls |
 | `sparky-worker/src/tools/index.ts` | Worker tool schemas + handler |
+| `sparky-worker/src/error-classifier.ts` | Error categorization (rate_limit, auth, config, etc.) |
 
 ## Conventions
 
