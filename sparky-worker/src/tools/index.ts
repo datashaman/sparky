@@ -206,13 +206,12 @@ const TAIL_RESERVE = 1000;
 function truncate(s: string): string {
   if (s.length <= MAX_RESULT_LENGTH) return s;
 
-  const totalLines = s.split("\n").length;
   const headSize = MAX_RESULT_LENGTH - TAIL_RESERVE;
   const head = s.slice(0, headSize);
   const tail = s.slice(-TAIL_RESERVE);
-  const omitted = s.length - headSize - TAIL_RESERVE;
+  const omittedChars = s.length - headSize - TAIL_RESERVE;
 
-  return `${head}\n\n... (${omitted} chars / ~${totalLines} total lines omitted) ...\n\n${tail}`;
+  return `${head}\n\n... (${omittedChars} chars omitted, ${s.length} chars total) ...\n\n${tail}`;
 }
 
 export type SkillResolver = (skillName: string, args?: string) => string | null;
