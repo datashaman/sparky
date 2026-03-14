@@ -19,6 +19,7 @@ import { broadcast } from "./ipc.js";
 import { runAnalysisPipeline } from "./pipeline/analyse.js";
 import { runPlanPipeline } from "./pipeline/plan.js";
 import { runExecutionPipeline } from "./pipeline/execute.js";
+import { classifyError } from "./error-classifier.js";
 
 /** Start a new session and run its pipeline. */
 export async function startSession(payload: StartSessionPayload): Promise<string> {
@@ -97,11 +98,15 @@ async function runSession(sessionId: string, payload: StartSessionPayload): Prom
     updateSession(sessionId, { status: "done" });
     broadcast({ type: "session_complete", session_id: sessionId });
   } catch (err) {
-    const error = err instanceof Error ? err.message : String(err);
-    console.error(`[session ${sessionId}] error:`, error);
+    const classified = classifyError(err);
+    const errorMsg = `[${classified.category}] ${classified.message}`;
+    console.error(`[session ${sessionId}] ${errorMsg}`);
     updateSession(sessionId, { status: "error" });
-    broadcast({ type: "session_error", session_id: sessionId, error });
-    throw err;
+    logFn(0, {
+      type: "info",
+      message: `Error (${classified.category}): ${classified.suggestion}${classified.retryable ? " [retryable]" : ""}`,
+    });
+    broadcast({ type: "session_error", session_id: sessionId, error: `${classified.message}\n\n${classified.suggestion}` });
   }
 }
 
@@ -172,10 +177,15 @@ export async function resumeSession(session: Session): Promise<void> {
     updateSession(session.id, { status: "done" });
     broadcast({ type: "session_complete", session_id: session.id });
   } catch (err) {
-    const error = err instanceof Error ? err.message : String(err);
-    console.error(`[session ${session.id}] resume error:`, error);
+    const classified = classifyError(err);
+    const errorMsg = `[${classified.category}] ${classified.message}`;
+    console.error(`[session ${session.id}] resume error: ${errorMsg}`);
     updateSession(session.id, { status: "error" });
-    broadcast({ type: "session_error", session_id: session.id, error });
+    logFn(0, {
+      type: "info",
+      message: `Error (${classified.category}): ${classified.suggestion}${classified.retryable ? " [retryable]" : ""}`,
+    });
+    broadcast({ type: "session_error", session_id: session.id, error: `${classified.message}\n\n${classified.suggestion}` });
   }
 }
 
