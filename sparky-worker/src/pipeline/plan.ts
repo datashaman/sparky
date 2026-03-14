@@ -57,6 +57,7 @@ export async function runPlanPipeline(opts: PlanPipelineOpts): Promise<void> {
   const userPrompt = baseUserPrompt + schemaInstruction;
 
   const stepLog = (partial: Omit<ExecutionLogEntry, "timestamp" | "stepOrder">) => onLog(0, partial);
+  const startTime = Date.now();
   stepLog({ type: "info", message: `Starting plan generation (${provider}/${modelId})` });
 
   const { text } = await callLLMWithTools({
@@ -93,6 +94,10 @@ export async function runPlanPipeline(opts: PlanPipelineOpts): Promise<void> {
     parsed = await refinePlan(parsed, criticReview, payload, analysisResult, agents, skills, provider, modelId, apiKey);
     criticReview = await reviewPlan(parsed, payload, analysisResult, provider, modelId, apiKey);
   }
+
+  const duration = Math.round((Date.now() - startTime) / 1000);
+  const planSteps = (parsed as Record<string, unknown>).steps;
+  stepLog({ type: "info", message: `Plan completed in ${duration}s — ${Array.isArray(planSteps) ? planSteps.length : "?"} steps` });
 
   (parsed as Record<string, unknown>).critic_review = criticReview;
   const result = JSON.stringify(parsed);

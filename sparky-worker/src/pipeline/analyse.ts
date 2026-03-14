@@ -58,6 +58,7 @@ export async function runAnalysisPipeline(opts: AnalysisPipelineOpts): Promise<v
   const userPrompt = baseUserPrompt + schemaInstruction;
 
   const stepLog = (partial: Omit<ExecutionLogEntry, "timestamp" | "stepOrder">) => onLog(0, partial);
+  const startTime = Date.now();
   stepLog({ type: "info", message: `Starting analysis (${provider}/${modelId})` });
 
   const { text } = await callLLMWithTools({
@@ -84,6 +85,9 @@ export async function runAnalysisPipeline(opts: AnalysisPipelineOpts): Promise<v
   if (!parsed.summary || !parsed.type || !parsed.complexity) {
     throw new Error("Invalid analysis response: missing required fields");
   }
+
+  const duration = Math.round((Date.now() - startTime) / 1000);
+  stepLog({ type: "info", message: `Analysis completed in ${duration}s` });
 
   const result = JSON.stringify(parsed);
   const status = parsed.decomposed === true ? "decomposed" : "done";

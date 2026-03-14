@@ -17,7 +17,7 @@ import {
   updateExistingTable,
 } from "../db.js";
 import { callLLM, callLLMWithTools, KEYLESS_PROVIDERS } from "../llm/index.js";
-import { getContextWindowSize } from "../llm/context-budget.js";
+import { getContextWindowSize, estimateMessageTokens } from "../llm/context-budget.js";
 import { TOOL_SCHEMAS, filterToolSchemas, createToolHandler } from "../tools/index.js";
 import { buildSkillResolver } from "../tools/skill-tool.js";
 import { createAskUserHandler } from "../tools/ask-user-tool.js";
@@ -226,6 +226,7 @@ export async function runExecutionPipeline(opts: ExecutionPipelineOpts): Promise
       const maxTurns = agent?.max_turns ?? 25;
 
       const stepLog = (partial: Omit<ExecutionLogEntry, "timestamp" | "stepOrder">) => onLog(step.order, partial);
+      const stepStartTime = Date.now();
       stepLog({ type: "info", message: `Starting: ${step.title} (${provider}/${modelId})` });
 
       const askUserHandler = createAskUserHandler(sessionId, step.order, config.ask_user_timeout_minutes);
@@ -276,6 +277,14 @@ export async function runExecutionPipeline(opts: ExecutionPipelineOpts): Promise
         output,
         error: null,
         conversation_state: JSON.stringify({ messages, turn: actualTurn }),
+      });
+
+      // Log step metrics
+      const stepDuration = Math.round((Date.now() - stepStartTime) / 1000);
+      const estimatedTokens = estimateMessageTokens(messages);
+      stepLog({
+        type: "info",
+        message: `Step completed in ${stepDuration}s, ${actualTurn} turns, ~${estimatedTokens.toLocaleString()} tokens used`,
       });
 
       stepOutputs.set(step.order, output);
