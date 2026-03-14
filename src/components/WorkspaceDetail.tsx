@@ -756,9 +756,9 @@ export function WorkspaceDetail({ workspaceId, onSwitchWorkspace, onDeleted, onW
                     )}
                   </button>
                 )}
-                {(analysis?.status === "done" || plan?.status === "done") && (
+                {(analysis?.status === "done" || analysis?.status === "decomposed" || plan?.status === "done") && (
                   <div className="issue-tabs-actions">
-                    {analysis?.status === "done" && (
+                    {(analysis?.status === "done" || analysis?.status === "decomposed") && (
                       <button
                         type="button"
                         className="analyse-btn analyse-btn-inline"
@@ -852,6 +852,41 @@ export function WorkspaceDetail({ workspaceId, onSwitchWorkspace, onDeleted, onW
                     try {
                       const parsed: AnalysisResult = JSON.parse(analysis.result);
                       return <AnalysisView result={parsed} workspaceId={workspaceId} onAllCreated={() => setAllCreated(true)} />;
+                    } catch {
+                      return (
+                        <div
+                          className="analysis-result markdown-body"
+                          dangerouslySetInnerHTML={{ __html: marked.parse(analysis.result, { async: false }) as string }}
+                        />
+                      );
+                    }
+                  })()}
+                  {analysis?.status === "decomposed" && analysis.result && (() => {
+                    try {
+                      const parsed: AnalysisResult = JSON.parse(analysis.result);
+                      return (
+                        <div className="analysis-result">
+                          <p><strong>Summary:</strong> {parsed.summary}</p>
+                          {parsed.complexity_reason && <p><strong>Complexity:</strong> {parsed.complexity} — {parsed.complexity_reason}</p>}
+                          <p style={{ display: "inline-flex", alignItems: "center", gap: "0.5rem" }}>
+                            <span style={{ background: "#a78bfa", color: "white", padding: "0.125rem 0.5rem", borderRadius: "9999px", fontSize: "0.75rem", fontWeight: 600 }}>Decomposed</span>
+                          </p>
+                          {parsed.subissues && parsed.subissues.length > 0 && (
+                            <div style={{ marginTop: "0.75rem" }}>
+                              <strong>Subissues:</strong>
+                              <ul style={{ marginTop: "0.25rem" }}>
+                                {parsed.subissues.map((si) => (
+                                  <li key={si.number}>
+                                    <a href={`https://github.com/${analysis.repo_full_name}/issues/${si.number}`} target="_blank" rel="noopener noreferrer">
+                                      #{si.number}
+                                    </a>: {si.title}
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
+                          )}
+                        </div>
+                      );
                     } catch {
                       return (
                         <div

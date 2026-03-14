@@ -17,6 +17,9 @@ export const TOOLS: ToolDef[] = [
   { id: "bash", name: "Bash", description: "Run a shell command", dangerous: true },
   { id: "use_skill", name: "Skill", description: "Load a skill by name for domain-specific knowledge", dangerous: false },
   { id: "ask_user", name: "Ask User", description: "Ask the user a question for clarification or direction", dangerous: false },
+  { id: "create_issue", name: "Create Issue", description: "Create a GitHub subissue linked to the parent issue", dangerous: true },
+  { id: "update_issue", name: "Update Issue", description: "Update an existing issue's title or body", dangerous: true },
+  { id: "close_issue", name: "Close Issue", description: "Close an issue created by the agent in this session", dangerous: true },
 ];
 
 /** LLM-facing tool definitions with parameter schemas for function calling. */
@@ -128,6 +131,47 @@ export const TOOL_SCHEMAS: LLMToolDef[] = [
       additionalProperties: false,
     },
   },
+  {
+    name: "create_issue",
+    description: "Create a GitHub subissue linked to the parent issue. The body will automatically include a 'Part of #N' reference.",
+    parameters: {
+      type: "object",
+      properties: {
+        title: { type: "string", description: "Issue title" },
+        body: { type: "string", description: "Issue body (markdown)" },
+        labels: { type: "array", items: { type: "string" }, description: "Optional labels to apply" },
+      },
+      required: ["title", "body"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "update_issue",
+    description: "Update a subissue's title or body. Only works on issues created by the agent in this session.",
+    parameters: {
+      type: "object",
+      properties: {
+        issue_number: { type: "number", description: "Issue number to update" },
+        title: { type: "string", description: "New title (optional)" },
+        body: { type: "string", description: "New body (optional)" },
+      },
+      required: ["issue_number"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "close_issue",
+    description: "Close an issue. Only works on issues created by the agent in this session.",
+    parameters: {
+      type: "object",
+      properties: {
+        issue_number: { type: "number", description: "Issue number to close" },
+        reason: { type: "string", enum: ["completed", "not_planned"], description: "Reason for closing: 'completed' or 'not_planned'" },
+      },
+      required: ["issue_number", "reason"],
+      additionalProperties: false,
+    },
+  },
 ];
 
 /** Map tool IDs (read, write, etc.) to schema names (read_file, write_file, etc.) */
@@ -140,6 +184,9 @@ const TOOL_ID_TO_SCHEMA_NAME: Record<string, string> = {
   bash: "bash",
   use_skill: "use_skill",
   ask_user: "ask_user",
+  create_issue: "create_issue",
+  update_issue: "update_issue",
+  close_issue: "close_issue",
 };
 
 /** Always-on tools that are included regardless of agent tool restrictions. */
@@ -201,12 +248,19 @@ export function createAskUserInterceptor(
   };
 }
 
+export interface GitHubToolContext {
+  token: string;
+  repoFullName: string;
+  parentIssueNumber: number;
+}
+
 /**
- * Create a tool call handler that bridges LLM tool calls to Tauri invoke commands.
- * The handler takes a tool name and input, executes the corresponding Tauri command,
- * and returns the result as a string.
+ * Create a tool call handler that bridges LLM tool calls to Tauri invoke commands
+ * and GitHub API calls. File/shell tools use Tauri invoke; GitHub issue tools call
+ * the GitHub API directly via fetch.
  */
-export function createToolCallHandler(worktreePath: string, skillResolver?: SkillResolver): (name: string, input: Record<string, unknown>) => Promise<string> {
+export function createToolCallHandler(worktreePath: string, skillResolver?: SkillResolver, githubContext?: GitHubToolContext): (name: string, input: Record<string, unknown>) => Promise<string> {
+  const createdIssues = new Set<number>();
   return async (name: string, input: Record<string, unknown>): Promise<string> => {
     try {
       switch (name) {
@@ -268,6 +322,69 @@ export function createToolCallHandler(worktreePath: string, skillResolver?: Skil
           const content = skillResolver(skillName, args);
           if (content === null) return `Error: skill "${skillName}" not found. Check the available skill names.`;
           return truncate(content);
+        }
+        case "create_issue": {
+          if (!githubContext) return "Error: GitHub tools not available in this context.";
+          const fullBody = `${input.body as string}\n\nPart of #${githubContext.parentIssueNumber}`;
+          const payload: Record<string, unknown> = { title: input.title, body: fullBody };
+          if (input.labels) payload.labels = input.labels;
+          const res = await fetch(`https://api.github.com/repos/${githubContext.repoFullName}/issues`, {
+            method: "POST",
+            headers: {
+              "Authorization": `Bearer ${githubContext.token}`,
+              "Accept": "application/vnd.github+json",
+              "X-GitHub-Api-Version": "2022-11-28",
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify(payload),
+          });
+          if (!res.ok) throw new Error(`GitHub API failed (${res.status}): ${await res.text()}`);
+          const data = await res.json() as { number: number; html_url: string };
+          createdIssues.add(data.number);
+          return `Created issue #${data.number}: ${data.html_url}`;
+        }
+        case "update_issue": {
+          if (!githubContext) return "Error: GitHub tools not available in this context.";
+          const updateNum = input.issue_number as number;
+          if (!createdIssues.has(updateNum)) {
+            return `Error: cannot update issue #${updateNum} — only issues created by the agent in this session can be updated.`;
+          }
+          const payload: Record<string, unknown> = {};
+          if (input.title !== undefined) payload.title = input.title;
+          if (input.body !== undefined) payload.body = input.body;
+          if (Object.keys(payload).length === 0) return "No fields to update.";
+          const res = await fetch(`https://api.github.com/repos/${githubContext.repoFullName}/issues/${updateNum}`, {
+            method: "PATCH",
+            headers: {
+              "Authorization": `Bearer ${githubContext.token}`,
+              "Accept": "application/vnd.github+json",
+              "X-GitHub-Api-Version": "2022-11-28",
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify(payload),
+          });
+          if (!res.ok) throw new Error(`GitHub API failed (${res.status}): ${await res.text()}`);
+          return `Issue #${updateNum} updated.`;
+        }
+        case "close_issue": {
+          if (!githubContext) return "Error: GitHub tools not available in this context.";
+          const issueNum = input.issue_number as number;
+          const closeReason = input.reason as string;
+          if (!createdIssues.has(issueNum)) {
+            return `Error: cannot close issue #${issueNum} — only issues created by the agent in this session can be closed.`;
+          }
+          const res = await fetch(`https://api.github.com/repos/${githubContext.repoFullName}/issues/${issueNum}`, {
+            method: "PATCH",
+            headers: {
+              "Authorization": `Bearer ${githubContext.token}`,
+              "Accept": "application/vnd.github+json",
+              "X-GitHub-Api-Version": "2022-11-28",
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ state: "closed", state_reason: closeReason === "completed" ? "completed" : "not_planned" }),
+          });
+          if (!res.ok) throw new Error(`GitHub API failed (${res.status}): ${await res.text()}`);
+          return `Issue #${issueNum} closed (${closeReason}).`;
         }
         default:
           return `Unknown tool: ${name}`;

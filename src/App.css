@@ -1682,6 +1682,7 @@ button.user-code:focus-visible {
 .issue-tab-dot-running { background: #3b82f6; }
 .issue-tab-dot-done { background: #22c55e; }
 .issue-tab-dot-error { background: #ef4444; }
+.issue-tab-dot-decomposed { background: #a78bfa; }
 
 /* Issue analysis tab content */
 .issue-analysis-tab {

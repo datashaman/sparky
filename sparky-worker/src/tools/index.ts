@@ -5,6 +5,7 @@ import { editFile } from "./file-tools.js";
 import { globFiles } from "./search-tools.js";
 import { grepFiles } from "./search-tools.js";
 import { runBash } from "./bash-tool.js";
+import { createGitHubIssue, updateGitHubIssue, closeGitHubIssue, type GitHubToolContext } from "./github-tools.js";
 
 export const TOOL_SCHEMAS: LLMToolDef[] = [
   {
@@ -114,6 +115,47 @@ export const TOOL_SCHEMAS: LLMToolDef[] = [
       additionalProperties: false,
     },
   },
+  {
+    name: "create_issue",
+    description: "Create a GitHub subissue linked to the parent issue. The body will automatically include a 'Part of #N' reference.",
+    parameters: {
+      type: "object",
+      properties: {
+        title: { type: "string", description: "Issue title" },
+        body: { type: "string", description: "Issue body (markdown)" },
+        labels: { type: "array", items: { type: "string" }, description: "Optional labels to apply" },
+      },
+      required: ["title", "body"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "update_issue",
+    description: "Update a subissue's title or body. Only works on issues created by the agent in this session.",
+    parameters: {
+      type: "object",
+      properties: {
+        issue_number: { type: "number", description: "Issue number to update" },
+        title: { type: "string", description: "New title (optional)" },
+        body: { type: "string", description: "New body (optional)" },
+      },
+      required: ["issue_number"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "close_issue",
+    description: "Close an issue. Only works on issues created by the agent in this session.",
+    parameters: {
+      type: "object",
+      properties: {
+        issue_number: { type: "number", description: "Issue number to close" },
+        reason: { type: "string", enum: ["completed", "not_planned"], description: "Reason for closing: 'completed' or 'not_planned'" },
+      },
+      required: ["issue_number", "reason"],
+      additionalProperties: false,
+    },
+  },
 ];
 
 /** Map tool IDs to schema names. */
@@ -126,6 +168,9 @@ const TOOL_ID_TO_SCHEMA_NAME: Record<string, string> = {
   bash: "bash",
   use_skill: "use_skill",
   ask_user: "ask_user",
+  create_issue: "create_issue",
+  update_issue: "update_issue",
+  close_issue: "close_issue",
 };
 
 const ALWAYS_ON_TOOLS = new Set(["use_skill", "ask_user"]);
@@ -171,7 +216,9 @@ export function createToolHandler(
   worktreePath: string,
   skillResolver?: SkillResolver,
   askUserHandler?: AskUserHandler,
+  githubContext?: GitHubToolContext,
 ): (name: string, input: Record<string, unknown>) => Promise<string> {
+  const createdIssues = new Set<number>();
   return async (name: string, input: Record<string, unknown>): Promise<string> => {
     try {
       switch (name) {
@@ -207,6 +254,31 @@ export function createToolHandler(
           return selected.length === 0
             ? "User did not select any option."
             : `User selected: ${selected.join(", ")}`;
+        }
+        case "create_issue": {
+          if (!githubContext) return "Error: GitHub tools not available in this context.";
+          const result = await createGitHubIssue(
+            githubContext,
+            input.title as string,
+            input.body as string,
+            input.labels as string[] | undefined,
+          );
+          createdIssues.add(result.number);
+          return `Created issue #${result.number}: ${result.html_url}`;
+        }
+        case "update_issue": {
+          if (!githubContext) return "Error: GitHub tools not available in this context.";
+          return await updateGitHubIssue(
+            githubContext,
+            input.issue_number as number,
+            createdIssues,
+            input.title as string | undefined,
+            input.body as string | undefined,
+          );
+        }
+        case "close_issue": {
+          if (!githubContext) return "Error: GitHub tools not available in this context.";
+          return await closeGitHubIssue(githubContext, input.issue_number as number, createdIssues, input.reason as string);
         }
         default:
           return `Unknown tool: ${name}`;
