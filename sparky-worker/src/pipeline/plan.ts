@@ -81,7 +81,7 @@ export async function runPlanPipeline(opts: PlanPipelineOpts): Promise<void> {
     apiKey,
     onRetry: () => stepLog({ type: "info", message: "JSON extraction failed, retrying with focused prompt" }),
   }) as Record<string, unknown>;
-  parsed = repairPlanResponse(parsed);
+  repairPlanResponse(parsed);
   if (!parsed.goal || !Array.isArray(parsed.steps) || (parsed.steps as unknown[]).length === 0) {
     throw new Error("Invalid plan response: missing goal or steps");
   }
@@ -112,7 +112,7 @@ export async function runPlanPipeline(opts: PlanPipelineOpts): Promise<void> {
  * Fill missing/malformed fields in a plan response with sensible defaults.
  * Small models often omit optional fields or use wrong types.
  */
-function repairPlanResponse(parsed: Record<string, unknown>): Record<string, unknown> {
+function repairPlanResponse(parsed: Record<string, unknown>): void {
   if (!parsed.success_criteria && parsed.goal) {
     parsed.success_criteria = `Goal achieved: ${parsed.goal}`;
   }
@@ -129,8 +129,6 @@ function repairPlanResponse(parsed: Record<string, unknown>): Record<string, unk
       done_when: step.done_when ?? step.expected_output ?? "",
     }));
   }
-
-  return parsed;
 }
 
 async function resolveWorktreePath(repoFullName: string, issueNumber: number): Promise<string> {

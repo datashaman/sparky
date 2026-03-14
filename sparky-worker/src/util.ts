@@ -44,9 +44,7 @@ export function extractJSON(text: string): unknown {
 
 /**
  * Attempt to repair common JSON issues from small models:
- * - Trailing commas
- * - Single quotes instead of double quotes
- * - Unquoted keys
+ * - Trailing commas before } or ]
  */
 function repairJSON(text: string): unknown | null {
   // Find the JSON-like region
