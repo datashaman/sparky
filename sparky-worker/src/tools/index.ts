@@ -6,7 +6,7 @@ import { listFiles } from "./search-tools.js";
 import { globFiles } from "./search-tools.js";
 import { grepFiles } from "./search-tools.js";
 import { runBash } from "./bash-tool.js";
-import { createGitHubIssue, updateGitHubIssue, closeGitHubIssue, type GitHubToolContext } from "./github-tools.js";
+import { createGitHubIssue, updateGitHubIssue, closeGitHubIssue, createPullRequest, type GitHubToolContext } from "./github-tools.js";
 
 export const TOOL_SCHEMAS: LLMToolDef[] = [
   {
@@ -169,6 +169,19 @@ export const TOOL_SCHEMAS: LLMToolDef[] = [
       additionalProperties: false,
     },
   },
+  {
+    name: "create_pull_request",
+    description: "Commit all changes, push the branch, and create a pull request linking to the parent issue. Use this as the final step after all code changes are complete.",
+    parameters: {
+      type: "object",
+      properties: {
+        title: { type: "string", description: "Pull request title" },
+        body: { type: "string", description: "Pull request body describing the changes (markdown)" },
+      },
+      required: ["title", "body"],
+      additionalProperties: false,
+    },
+  },
 ];
 
 /** Map tool IDs to schema names. */
@@ -185,6 +198,7 @@ const TOOL_ID_TO_SCHEMA_NAME: Record<string, string> = {
   create_issue: "create_issue",
   update_issue: "update_issue",
   close_issue: "close_issue",
+  create_pull_request: "create_pull_request",
 };
 
 const ALWAYS_ON_TOOLS = new Set(["use_skill", "ask_user"]);
@@ -318,6 +332,10 @@ export function createToolHandler(
         case "close_issue": {
           if (!githubContext) return "Error: GitHub tools not available in this context.";
           return await closeGitHubIssue(githubContext, input.issue_number as number, createdIssues, input.reason as string);
+        }
+        case "create_pull_request": {
+          if (!githubContext) return "Error: GitHub tools not available in this context (no GitHub token).";
+          return await createPullRequest(githubContext, worktreePath, input.title as string, input.body as string);
         }
         default:
           return `Unknown tool: ${name}`;

@@ -1,3 +1,5 @@
+import { execSync } from "node:child_process";
+
 export interface GitHubToolContext {
   token: string;
   repoFullName: string;
@@ -54,6 +56,66 @@ export async function updateGitHubIssue(
 
   await githubFetch(ctx, `/repos/${ctx.repoFullName}/issues/${issueNumber}`, "PATCH", payload);
   return `Issue #${issueNumber} updated.`;
+}
+
+export async function createPullRequest(
+  ctx: GitHubToolContext,
+  worktreePath: string,
+  title: string,
+  body: string,
+): Promise<string> {
+  const git = (cmd: string) =>
+    execSync(cmd, { cwd: worktreePath, encoding: "utf-8", timeout: 30_000 }).trim();
+
+  // 1. Check for changes
+  const status = git("git status --porcelain");
+  if (!status) return "No changes to commit.";
+
+  // 2. Stage and commit
+  git("git add -A");
+  const commitMessage = `${title}\n\n${body}`;
+  execSync("git commit -m " + JSON.stringify(commitMessage), {
+    cwd: worktreePath,
+    encoding: "utf-8",
+    timeout: 30_000,
+  });
+
+  // 3. Get branch name
+  const branch = git("git rev-parse --abbrev-ref HEAD");
+
+  // 4. Push with auth
+  const basicAuth = Buffer.from(`x-access-token:${ctx.token}`).toString("base64");
+  git(
+    `git -c http.extraHeader="Authorization: Basic ${basicAuth}" push --force-with-lease -u origin ${branch}`,
+  );
+
+  // 5. Detect default branch
+  let defaultBranch = "main";
+  try {
+    const ref = git("git symbolic-ref refs/remotes/origin/HEAD --short");
+    defaultBranch = ref.replace(/^origin\//, "");
+  } catch {
+    // fallback to main
+  }
+
+  // 6. Create PR
+  const prBody = `${body}\n\nResolves #${ctx.parentIssueNumber}`;
+  try {
+    const res = await githubFetch(ctx, `/repos/${ctx.repoFullName}/pulls`, "POST", {
+      title,
+      body: prBody,
+      head: branch,
+      base: defaultBranch,
+    });
+    const data = (await res.json()) as { number: number; html_url: string };
+    return `Pull request #${data.number} created: ${data.html_url}`;
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    if (msg.includes("422")) {
+      return `Pull request already exists for branch ${branch}. Changes have been pushed.`;
+    }
+    throw e;
+  }
 }
 
 export async function closeGitHubIssue(
