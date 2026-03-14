@@ -13,6 +13,7 @@ import {
 import { listSkillsForWorkspace } from "../data/skills";
 import { TOOLS } from "../data/tools";
 import { fetchOllamaModels } from "../data/ollamaModels";
+import { fetchOpenRouterModels } from "../data/openrouterModels";
 import type { Agent, AgentProvider, Skill } from "../data/types";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -99,6 +100,7 @@ export function AgentDetail({ agentId, workspaceId, onBack, onDeleted }: AgentDe
   }, [agentId, workspaceId]);
 
   const [ollamaModels, setOllamaModels] = useState<string[]>([]);
+  const [openrouterModels, setOpenrouterModels] = useState<string[]>([]);
   const providerRef = useRef(formProvider);
   providerRef.current = formProvider;
 
@@ -113,12 +115,19 @@ export function AgentDetail({ agentId, workspaceId, onBack, onDeleted }: AgentDe
         setOllamaModels(m);
         if (current !== agent.provider && m.length > 0) setFormModel(m[0]);
       });
-    } else if (current !== agent.provider && current !== "openrouter" && AGENT_MODELS[current].length > 0) {
+    } else if (current === "openrouter") {
+      if (current !== agent.provider) setFormModel("");
+      fetchOpenRouterModels().then((m) => {
+        if (providerRef.current !== current) return;
+        setOpenrouterModels(m);
+        if (current !== agent.provider && m.length > 0) setFormModel(m[0]);
+      });
+    } else if (current !== agent.provider && AGENT_MODELS[current].length > 0) {
       setFormModel(AGENT_MODELS[current][0] ?? "");
     }
   }, [formProvider]);
 
-  const models = formProvider === "ollama" ? ollamaModels : (AGENT_MODELS[formProvider] ?? []);
+  const models = formProvider === "ollama" ? ollamaModels : formProvider === "openrouter" ? openrouterModels : (AGENT_MODELS[formProvider] ?? []);
 
   const skillsChanged = selectedSkillIds.size !== savedSkillIds.size ||
     [...selectedSkillIds].some((id) => !savedSkillIds.has(id));
@@ -323,7 +332,7 @@ export function AgentDetail({ agentId, workspaceId, onBack, onDeleted }: AgentDe
             </div>
             <div className="flex flex-col gap-1.5 flex-1 min-w-0">
               <Label>Model</Label>
-              {formProvider === "openrouter" || (formProvider === "ollama" && models.length === 0) ? (
+              {(formProvider === "openrouter" && openrouterModels.length === 0) || (formProvider === "ollama" && models.length === 0) ? (
                 <Input
                   placeholder={formProvider === "ollama" ? "e.g. qwen2.5:latest" : "e.g. anthropic/claude-sonnet-4"}
                   value={formModel}

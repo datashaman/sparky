@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { AGENT_PROVIDERS, AGENT_MODELS } from "../data/agents";
 import { fetchOllamaModels } from "../data/ollamaModels";
+import { fetchOpenRouterModels } from "../data/openrouterModels";
 import type { AgentProvider } from "../data/types";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
@@ -98,6 +99,7 @@ export function UserSettings({ open, onClose }: Props) {
   });
 
   const [ollamaModels, setOllamaModels] = useState<string[]>([]);
+  const [openrouterModels, setOpenrouterModels] = useState<string[]>([]);
   const providerRef = useRef(provider);
   providerRef.current = provider;
   const execProviderRef = useRef(execProvider);
@@ -111,10 +113,17 @@ export function UserSettings({ open, onClose }: Props) {
         setOllamaModels(m);
       });
     }
+    if (provider === "openrouter" || execProvider === "openrouter") {
+      const snapshot = { p: provider, ep: execProvider };
+      fetchOpenRouterModels().then((m) => {
+        if (providerRef.current !== snapshot.p && execProviderRef.current !== snapshot.ep) return;
+        setOpenrouterModels(m);
+      });
+    }
   }, [provider, execProvider]);
 
-  const models = provider === "ollama" ? ollamaModels : provider ? AGENT_MODELS[provider] : [];
-  const execModels = execProvider === "ollama" ? ollamaModels : execProvider ? AGENT_MODELS[execProvider] : [];
+  const models = provider === "ollama" ? ollamaModels : provider === "openrouter" ? openrouterModels : provider ? AGENT_MODELS[provider] : [];
+  const execModels = execProvider === "ollama" ? ollamaModels : execProvider === "openrouter" ? openrouterModels : execProvider ? AGENT_MODELS[execProvider] : [];
 
   useEffect(() => {
     applyDisplayMode(displayMode);
@@ -130,12 +139,15 @@ export function UserSettings({ open, onClose }: Props) {
       if (!ollamaModels.includes(model)) setModel(ollamaModels[0] ?? "");
       return;
     }
-    if (provider === "openrouter") return;
+    if (provider === "openrouter") {
+      if (openrouterModels.length > 0 && !openrouterModels.includes(model)) setModel(openrouterModels[0] ?? "");
+      return;
+    }
     const available = AGENT_MODELS[provider];
     if (available.length > 0 && !available.includes(model)) {
       setModel(available[0] ?? "");
     }
-  }, [provider, ollamaModels]);
+  }, [provider, ollamaModels, openrouterModels]);
 
   useEffect(() => {
     try { localStorage.setItem(DEFAULT_MODEL_KEY, model); } catch { /* ignore */ }
@@ -148,12 +160,15 @@ export function UserSettings({ open, onClose }: Props) {
       if (!ollamaModels.includes(execModel)) setExecModel(ollamaModels[0] ?? "");
       return;
     }
-    if (execProvider === "openrouter") return;
+    if (execProvider === "openrouter") {
+      if (openrouterModels.length > 0 && !openrouterModels.includes(execModel)) setExecModel(openrouterModels[0] ?? "");
+      return;
+    }
     const available = AGENT_MODELS[execProvider];
     if (available.length > 0 && !available.includes(execModel)) {
       setExecModel(available[0] ?? "");
     }
-  }, [execProvider, ollamaModels]);
+  }, [execProvider, ollamaModels, openrouterModels]);
 
   useEffect(() => {
     try { localStorage.setItem(EXEC_MODEL_KEY, execModel); } catch { /* ignore */ }
@@ -216,7 +231,7 @@ export function UserSettings({ open, onClose }: Props) {
                 </div>
                 <div className="flex flex-col gap-1.5 flex-1 min-w-0">
                   <Label>Model</Label>
-                  {provider === "openrouter" || (provider === "ollama" && models.length === 0) ? (
+                  {(provider === "openrouter" && openrouterModels.length === 0) || (provider === "ollama" && models.length === 0) ? (
                     <Input
                       placeholder={provider === "ollama" ? "e.g. qwen2.5:latest" : "e.g. anthropic/claude-sonnet-4"}
                       value={model}
@@ -261,7 +276,7 @@ export function UserSettings({ open, onClose }: Props) {
                 </div>
                 <div className="flex flex-col gap-1.5 flex-1 min-w-0">
                   <Label>Model</Label>
-                  {execProvider === "openrouter" || (execProvider === "ollama" && execModels.length === 0) ? (
+                  {(execProvider === "openrouter" && openrouterModels.length === 0) || (execProvider === "ollama" && execModels.length === 0) ? (
                     <Input
                       placeholder={execProvider === "ollama" ? "e.g. qwen2.5:latest" : "e.g. anthropic/claude-sonnet-4"}
                       value={execModel}

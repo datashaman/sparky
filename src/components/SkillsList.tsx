@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { listSkillsForWorkspace, createSkill, deleteSkill } from "../data/skills";
 import { AGENT_PROVIDERS, AGENT_MODELS } from "../data/agents";
 import { fetchOllamaModels } from "../data/ollamaModels";
+import { fetchOpenRouterModels } from "../data/openrouterModels";
 import type { AgentProvider } from "../data/types";
 import type { Skill } from "../data/types";
 import { Input } from "@/components/ui/input";
@@ -43,6 +44,7 @@ export function SkillsList({ workspaceId, onSelectSkill }: Props) {
   const [formModel, setFormModel] = useState("");
 
   const [ollamaModels, setOllamaModels] = useState<string[]>([]);
+  const [openrouterModels, setOpenrouterModels] = useState<string[]>([]);
   const providerRef = useRef(formProvider);
   providerRef.current = formProvider;
 
@@ -55,10 +57,17 @@ export function SkillsList({ workspaceId, onSelectSkill }: Props) {
         setOllamaModels(m);
         if (m.length > 0) setFormModel(m[0]);
       });
+    } else if (current === "openrouter") {
+      setFormModel("");
+      fetchOpenRouterModels().then((m) => {
+        if (providerRef.current !== current) return;
+        setOpenrouterModels(m);
+        if (m.length > 0) setFormModel(m[0]);
+      });
     }
   }, [formProvider]);
 
-  const models = formProvider === "ollama" ? ollamaModels : formProvider ? AGENT_MODELS[formProvider] : [];
+  const models = formProvider === "ollama" ? ollamaModels : formProvider === "openrouter" ? openrouterModels : formProvider ? AGENT_MODELS[formProvider] : [];
 
   async function load() {
     setLoading(true);
@@ -276,7 +285,7 @@ export function SkillsList({ workspaceId, onSelectSkill }: Props) {
                 </div>
                 <div className="flex flex-col gap-1.5 flex-1 min-w-0">
                   <Label>Model</Label>
-                  {formProvider === "openrouter" || (formProvider === "ollama" && models.length === 0) ? (
+                  {(formProvider === "openrouter" && openrouterModels.length === 0) || (formProvider === "ollama" && models.length === 0) ? (
                     <Input
                       placeholder={formProvider === "ollama" ? "e.g. qwen2.5:latest" : "e.g. anthropic/claude-sonnet-4"}
                       value={formModel}
