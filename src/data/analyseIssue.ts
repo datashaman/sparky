@@ -4,10 +4,24 @@ import type { IssueAnalysis, Skill, Agent } from "./types";
 import type { GitHubIssue } from "../github";
 import { listSkillsForWorkspace } from "./skills";
 import { listAgentsForWorkspace } from "./agents";
-import { callLLM, KEYLESS_PROVIDERS } from "./llm";
-import { TOOLS } from "./tools";
+import { callLLMWithTools, KEYLESS_PROVIDERS } from "./llm";
+import { TOOLS, TOOL_SCHEMAS, createToolCallHandler, createAskUserInterceptor, type AskUserHandler, type SkillResolver } from "./tools";
+import { ensureWorktree } from "./issueWorktrees";
+import { extractJSON } from "./jsonExtract";
 
 const SYSTEM_PROMPT = `You are a senior software engineer analysing a GitHub issue. Provide a concise, structured analysis. Be direct and practical. No filler.
+
+## Tools available to you during analysis
+
+You have access to tools during analysis:
+- **ask_user** — Ask the user clarifying questions. If the issue is ambiguous, underspecified, or could be interpreted multiple ways, use this to get the user's input. Provide clear options for them to choose from.
+- **use_skill** — Load domain-specific knowledge from available skills.
+- **read_file**, **glob**, **grep** — Explore the codebase to understand the project structure, existing code patterns, and relevant files before making your analysis.
+- **bash** — Run shell commands (e.g. to check dependencies, build configuration, or project setup).
+
+Use these tools as needed to produce a well-informed analysis. Explore the codebase when it would help you understand the issue better.
+
+When you are done gathering information, produce your final analysis as a JSON response matching the required schema.
 
 ## How the system works
 
@@ -135,6 +149,7 @@ export async function runAnalysis(
   analysis: IssueAnalysis,
   issue: GitHubIssue & { full_name: string },
   onUpdate: (a: IssueAnalysis) => void,
+  onAskUser?: AskUserHandler,
 ): Promise<void> {
   const provider = getDefaultProvider();
   const modelId = getDefaultModel();
@@ -171,20 +186,49 @@ export async function runAnalysis(
     const prompt = buildPrompt(issue, existingSkills, existingAgents);
     console.log("[analyse] calling", provider, modelId, "prompt length:", prompt.length);
 
-    const text = await callLLM({
+    // Ensure worktree exists so file/shell tools can read the codebase
+    const accessToken = localStorage.getItem("github_token") ?? "";
+    if (!accessToken) {
+      throw new Error("No GitHub token. Please log in.");
+    }
+    const worktree = await ensureWorktree(
+      analysis.workspace_id,
+      issue.full_name,
+      issue.number,
+      accessToken,
+      () => {}, // no UI worktree status updates during analysis
+    );
+
+    // Build skill resolver for use_skill tool
+    const skillsByName = new Map(existingSkills.map((s) => [s.name, s]));
+    const skillResolver: SkillResolver = (skillName, args) => {
+      const skill = skillsByName.get(skillName);
+      if (!skill?.content) return null;
+      return args ? `${skill.content}\n\n## Arguments\n${args}` : skill.content;
+    };
+
+    // Analysis tools: read-only file tools + bash + always-on tools
+    const ANALYSIS_TOOL_NAMES = new Set(["read_file", "glob", "grep", "bash", "ask_user", "use_skill"]);
+    const analysisTools = TOOL_SCHEMAS.filter((t) => ANALYSIS_TOOL_NAMES.has(t.name));
+
+    const baseHandler = createToolCallHandler(worktree.path, skillResolver);
+    const toolHandler = createAskUserInterceptor(onAskUser, baseHandler);
+
+    const schemaInstruction = `\n\nWhen you are ready to provide your final analysis, respond with a JSON object matching this schema:\n${JSON.stringify(ANALYSIS_SCHEMA, null, 2)}`;
+
+    const text = await callLLMWithTools({
       provider,
       modelId,
       apiKey,
-      systemPrompt: SYSTEM_PROMPT,
+      systemPrompt: SYSTEM_PROMPT + schemaInstruction,
       userPrompt: prompt,
-      schema: ANALYSIS_SCHEMA,
-      schemaName: "issue_analysis",
-      maxTokens: 4096,
+      tools: analysisTools,
+      maxTurns: 10,
+      onToolCall: toolHandler,
     });
     console.log("[analyse] success, response length:", text.length);
 
-    // Structured outputs guarantee valid JSON, but validate anyway
-    const parsed = JSON.parse(text);
+    const parsed = extractJSON(text) as Record<string, unknown>;
     if (!parsed.summary || !parsed.type || !parsed.complexity) {
       throw new Error("Invalid analysis response: missing required fields");
     }

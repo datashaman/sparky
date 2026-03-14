@@ -3,7 +3,8 @@ import { listAgentsForWorkspace, getToolIdsForAgent } from "./agents";
 import { listSkillsForWorkspace } from "./skills";
 import { ensureWorktree } from "./issueWorktrees";
 import { callLLMWithTools, KEYLESS_PROVIDERS } from "./llm";
-import { TOOL_SCHEMAS, filterToolSchemas, createToolCallHandler } from "./tools";
+import { TOOL_SCHEMAS, filterToolSchemas, createToolCallHandler, createAskUserInterceptor } from "./tools";
+import type { AskUserRequest } from "./tools";
 import type {
   ExecutionLogEntry,
   ExecutionPlanResult,
@@ -22,10 +23,11 @@ export interface ExecutePlanOpts {
   onWorktreeUpdate: (wt: IssueWorktree) => void;
   onPlanUpdate?: (updatedPlan: ExecutionPlanResult) => void;
   onLog?: (entry: ExecutionLogEntry) => void;
+  onAskUser?: (stepOrder: number, request: AskUserRequest) => Promise<string[]>;
 }
 
 export async function executePlan(opts: ExecutePlanOpts): Promise<void> {
-  const { planResult, workspaceId, issue, onStepUpdate, onWorktreeUpdate, onPlanUpdate, onLog } = opts;
+  const { planResult, workspaceId, issue, onStepUpdate, onWorktreeUpdate, onPlanUpdate, onLog, onAskUser } = opts;
 
   // Validate provider/model/key
   const defaultProvider = getDefaultProvider();
@@ -202,6 +204,12 @@ export async function executePlan(opts: ExecutePlanOpts): Promise<void> {
 
       stepLog?.({ type: "info", message: `Starting: ${step.title} (${provider}/${modelId})` });
 
+      // Wrap tool handler to intercept ask_user calls with step-scoped onAskUser
+      const askHandler = onAskUser
+        ? (req: AskUserRequest) => onAskUser(step.order, req)
+        : undefined;
+      const stepToolHandler = createAskUserInterceptor(askHandler, toolHandler);
+
       const output = await callLLMWithTools({
         provider,
         modelId,
@@ -210,7 +218,7 @@ export async function executePlan(opts: ExecutePlanOpts): Promise<void> {
         userPrompt,
         tools: toolSchemas,
         maxTurns,
-        onToolCall: toolHandler,
+        onToolCall: stepToolHandler,
         onLog: stepLog,
       });
 

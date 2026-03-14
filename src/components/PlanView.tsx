@@ -1,5 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ExecutionLogEntry, ExecutionPlanResult, StepExecutionStatus, CriticReview } from "../data/types";
+import type { AskUserRequest } from "../data/tools";
+
+export interface AskUserPrompt extends AskUserRequest {
+  stepOrder: number;
+  resolve: (selected: string[]) => void;
+}
 
 interface PlanViewProps {
   result: ExecutionPlanResult;
@@ -9,6 +15,7 @@ interface PlanViewProps {
   executionError?: string | null;
   onExecute?: () => void;
   executionLogs?: ExecutionLogEntry[];
+  askUserPrompt?: AskUserPrompt | null;
 }
 
 function StepStatusBadge({ status }: { status: StepExecutionStatus }) {
@@ -127,6 +134,55 @@ function LogEntryLine({ entry }: { entry: ExecutionLogEntry }) {
   }
 }
 
+export function AskUserPanel({ prompt }: { prompt: AskUserPrompt }) {
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+
+  const toggle = (option: string) => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (prompt.allowMultiple) {
+        if (next.has(option)) next.delete(option);
+        else next.add(option);
+      } else {
+        next.clear();
+        next.add(option);
+      }
+      return next;
+    });
+  };
+
+  const submit = () => {
+    prompt.resolve(Array.from(selected));
+  };
+
+  return (
+    <div className="pv-ask-user">
+      <div className="pv-ask-user-question">{prompt.question}</div>
+      <div className="pv-ask-user-options">
+        {prompt.options.map((option, idx) => (
+          <label key={idx} className="pv-ask-user-option">
+            <input
+              type={prompt.allowMultiple ? "checkbox" : "radio"}
+              name={`ask-user-${prompt.stepOrder}`}
+              checked={selected.has(option)}
+              onChange={() => toggle(option)}
+            />
+            <span>{option}</span>
+          </label>
+        ))}
+      </div>
+      <button
+        type="button"
+        className="pv-ask-user-submit"
+        onClick={submit}
+        disabled={selected.size === 0}
+      >
+        Submit
+      </button>
+    </div>
+  );
+}
+
 function StepLogPanel({ logs }: { logs: ExecutionLogEntry[] }) {
   const [expanded, setExpanded] = useState(true);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -159,7 +215,7 @@ function StepLogPanel({ logs }: { logs: ExecutionLogEntry[] }) {
   );
 }
 
-export function PlanView({ result, criticReview, stepStatuses, executing, executionError, onExecute, executionLogs }: PlanViewProps) {
+export function PlanView({ result, criticReview, stepStatuses, executing, executionError, onExecute, executionLogs, askUserPrompt }: PlanViewProps) {
   const [expandedSteps, setExpandedSteps] = useState<Set<number>>(new Set());
 
   const toggleExpanded = (order: number) => {
@@ -218,6 +274,9 @@ export function PlanView({ result, criticReview, stepStatuses, executing, execut
               )}
               {(status?.status === "running" || status?.status === "done" || status?.status === "error") && stepLogs.length > 0 && (
                 <StepLogPanel logs={stepLogs} />
+              )}
+              {askUserPrompt && askUserPrompt.stepOrder === step.order && (
+                <AskUserPanel prompt={askUserPrompt} />
               )}
               {status?.status === "error" && status.error && (
                 <div className="pv-step-error-text">{status.error}</div>
