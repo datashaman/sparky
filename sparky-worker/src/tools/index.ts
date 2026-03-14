@@ -1,7 +1,7 @@
 import type { LLMToolDef } from "../types.js";
 import { readFile } from "./file-tools.js";
 import { writeFile } from "./file-tools.js";
-import { editFile } from "./file-tools.js";
+import { editFile, EditFileError } from "./file-tools.js";
 import { listFiles } from "./search-tools.js";
 import { globFiles } from "./search-tools.js";
 import { grepFiles } from "./search-tools.js";
@@ -248,15 +248,14 @@ export function createToolHandler(
             await editFile(worktreePath, input.file_path as string, input.old_text as string, input.new_text as string);
             return "Edit applied successfully.";
           } catch (editErr) {
-            // Edit-as-gather: on failure, return the current file content so the
-            // model has fresh context to retry with correct old_text.
-            const errMsg = editErr instanceof Error ? editErr.message : String(editErr);
-            try {
-              const currentContent = await readFile(worktreePath, input.file_path as string);
-              return truncate(`Error: ${errMsg}\n\nCurrent file content:\n${currentContent}`);
-            } catch {
-              return `Error: ${errMsg}`;
+            // Edit-as-gather: on failure, include the current file content so
+            // the model has fresh context to retry with correct old_text.
+            // EditFileError carries the contents from the read already done
+            // inside editFile, avoiding redundant I/O and tool allow-list bypass.
+            if (editErr instanceof EditFileError) {
+              return truncate(`Error: ${editErr.message}\n\nCurrent file content:\n${editErr.currentContents}`);
             }
+            return `Error: ${editErr instanceof Error ? editErr.message : String(editErr)}`;
           }
         case "glob":
           return truncate((await globFiles(worktreePath, input.pattern as string)).join("\n"));
