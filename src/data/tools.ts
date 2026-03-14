@@ -147,7 +147,7 @@ export const TOOL_SCHEMAS: LLMToolDef[] = [
   },
   {
     name: "update_issue",
-    description: "Update an existing issue's title or body.",
+    description: "Update a subissue's title or body. Only works on issues created by the agent in this session.",
     parameters: {
       type: "object",
       properties: {
@@ -166,7 +166,7 @@ export const TOOL_SCHEMAS: LLMToolDef[] = [
       type: "object",
       properties: {
         issue_number: { type: "number", description: "Issue number to close" },
-        reason: { type: "string", description: "Reason for closing" },
+        reason: { type: "string", enum: ["completed", "not_planned"], description: "Reason for closing: 'completed' or 'not_planned'" },
       },
       required: ["issue_number", "reason"],
       additionalProperties: false,
@@ -255,9 +255,9 @@ export interface GitHubToolContext {
 }
 
 /**
- * Create a tool call handler that bridges LLM tool calls to Tauri invoke commands.
- * The handler takes a tool name and input, executes the corresponding Tauri command,
- * and returns the result as a string.
+ * Create a tool call handler that bridges LLM tool calls to Tauri invoke commands
+ * and GitHub API calls. File/shell tools use Tauri invoke; GitHub issue tools call
+ * the GitHub API directly via fetch.
  */
 export function createToolCallHandler(worktreePath: string, skillResolver?: SkillResolver, githubContext?: GitHubToolContext): (name: string, input: Record<string, unknown>) => Promise<string> {
   const createdIssues = new Set<number>();
@@ -345,11 +345,15 @@ export function createToolCallHandler(worktreePath: string, skillResolver?: Skil
         }
         case "update_issue": {
           if (!githubContext) return "Error: GitHub tools not available in this context.";
+          const updateNum = input.issue_number as number;
+          if (!createdIssues.has(updateNum)) {
+            return `Error: cannot update issue #${updateNum} — only issues created by the agent in this session can be updated.`;
+          }
           const payload: Record<string, unknown> = {};
           if (input.title !== undefined) payload.title = input.title;
           if (input.body !== undefined) payload.body = input.body;
           if (Object.keys(payload).length === 0) return "No fields to update.";
-          const res = await fetch(`https://api.github.com/repos/${githubContext.repoFullName}/issues/${input.issue_number}`, {
+          const res = await fetch(`https://api.github.com/repos/${githubContext.repoFullName}/issues/${updateNum}`, {
             method: "PATCH",
             headers: {
               "Authorization": `Bearer ${githubContext.token}`,
@@ -360,11 +364,12 @@ export function createToolCallHandler(worktreePath: string, skillResolver?: Skil
             body: JSON.stringify(payload),
           });
           if (!res.ok) throw new Error(`GitHub API failed (${res.status}): ${await res.text()}`);
-          return `Issue #${input.issue_number} updated.`;
+          return `Issue #${updateNum} updated.`;
         }
         case "close_issue": {
           if (!githubContext) return "Error: GitHub tools not available in this context.";
           const issueNum = input.issue_number as number;
+          const closeReason = input.reason as string;
           if (!createdIssues.has(issueNum)) {
             return `Error: cannot close issue #${issueNum} — only issues created by the agent in this session can be closed.`;
           }
@@ -376,10 +381,10 @@ export function createToolCallHandler(worktreePath: string, skillResolver?: Skil
               "X-GitHub-Api-Version": "2022-11-28",
               "Content-Type": "application/json",
             },
-            body: JSON.stringify({ state: "closed" }),
+            body: JSON.stringify({ state: "closed", state_reason: closeReason === "completed" ? "completed" : "not_planned" }),
           });
           if (!res.ok) throw new Error(`GitHub API failed (${res.status}): ${await res.text()}`);
-          return `Issue #${issueNum} closed.`;
+          return `Issue #${issueNum} closed (${closeReason}).`;
         }
         default:
           return `Unknown tool: ${name}`;

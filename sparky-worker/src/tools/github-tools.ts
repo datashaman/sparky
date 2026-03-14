@@ -40,9 +40,13 @@ export async function createGitHubIssue(
 export async function updateGitHubIssue(
   ctx: GitHubToolContext,
   issueNumber: number,
+  createdIssues: Set<number>,
   title?: string,
   body?: string,
 ): Promise<string> {
+  if (!createdIssues.has(issueNumber)) {
+    return `Error: cannot update issue #${issueNumber} — only issues created by the agent in this session can be updated.`;
+  }
   const payload: Record<string, unknown> = {};
   if (title !== undefined) payload.title = title;
   if (body !== undefined) payload.body = body;
@@ -56,10 +60,14 @@ export async function closeGitHubIssue(
   ctx: GitHubToolContext,
   issueNumber: number,
   createdIssues: Set<number>,
+  reason: string,
 ): Promise<string> {
   if (!createdIssues.has(issueNumber)) {
     return `Error: cannot close issue #${issueNumber} — only issues created by the agent in this session can be closed.`;
   }
-  await githubFetch(ctx, `/repos/${ctx.repoFullName}/issues/${issueNumber}`, "PATCH", { state: "closed" });
-  return `Issue #${issueNumber} closed.`;
+  await githubFetch(ctx, `/repos/${ctx.repoFullName}/issues/${issueNumber}`, "PATCH", {
+    state: "closed",
+    state_reason: reason === "completed" ? "completed" : "not_planned",
+  });
+  return `Issue #${issueNumber} closed (${reason}).`;
 }

@@ -131,7 +131,7 @@ export const TOOL_SCHEMAS: LLMToolDef[] = [
   },
   {
     name: "update_issue",
-    description: "Update an existing issue's title or body.",
+    description: "Update a subissue's title or body. Only works on issues created by the agent in this session.",
     parameters: {
       type: "object",
       properties: {
@@ -150,7 +150,7 @@ export const TOOL_SCHEMAS: LLMToolDef[] = [
       type: "object",
       properties: {
         issue_number: { type: "number", description: "Issue number to close" },
-        reason: { type: "string", description: "Reason for closing" },
+        reason: { type: "string", enum: ["completed", "not_planned"], description: "Reason for closing: 'completed' or 'not_planned'" },
       },
       required: ["issue_number", "reason"],
       additionalProperties: false,
@@ -271,13 +271,14 @@ export function createToolHandler(
           return await updateGitHubIssue(
             githubContext,
             input.issue_number as number,
+            createdIssues,
             input.title as string | undefined,
             input.body as string | undefined,
           );
         }
         case "close_issue": {
           if (!githubContext) return "Error: GitHub tools not available in this context.";
-          return await closeGitHubIssue(githubContext, input.issue_number as number, createdIssues);
+          return await closeGitHubIssue(githubContext, input.issue_number as number, createdIssues, input.reason as string);
         }
         default:
           return `Unknown tool: ${name}`;
