@@ -17,6 +17,7 @@ import {
   updateExistingTable,
 } from "../db.js";
 import { callLLM, callLLMWithTools, KEYLESS_PROVIDERS } from "../llm/index.js";
+import { getContextWindowSize } from "../llm/context-budget.js";
 import { TOOL_SCHEMAS, filterToolSchemas, createToolHandler } from "../tools/index.js";
 import { buildSkillResolver } from "../tools/skill-tool.js";
 import { createAskUserHandler } from "../tools/ask-user-tool.js";
@@ -57,7 +58,11 @@ export async function runExecutionPipeline(opts: ExecutionPipelineOpts): Promise
   }
 
   const worktreePath = await resolveWorktreePath(repo_full_name, issue_number);
-  const repoContext = readRepoContext(worktreePath);
+
+  // Dynamic repo context budget: 5% of context window, clamped to 2000-10000 chars
+  const execContextWindow = getContextWindowSize(execProvider, execModel);
+  const repoContextBudget = Math.min(10000, Math.max(2000, Math.floor(execContextWindow * 0.05 * 4)));
+  const repoContext = readRepoContext(worktreePath, repoContextBudget);
 
   const agents = getAgentsForWorkspace(workspace_id);
   const skills = getSkillsForWorkspace(workspace_id);
@@ -145,12 +150,22 @@ export async function runExecutionPipeline(opts: ExecutionPipelineOpts): Promise
         }
       }
 
-      // Build context from dependent step outputs
+      // Build context from dependent step outputs (budget-aware)
+      const stepContextWindow = getContextWindowSize(provider, modelId);
+      const totalDepsBudgetChars = Math.floor(stepContextWindow * 0.20) * 4; // 20% of window, in chars
+      const perDepBudget = step.depends_on.length > 0
+        ? Math.floor(totalDepsBudgetChars / step.depends_on.length)
+        : 0;
+
       const depsContext = step.depends_on
         .map((dep) => {
-          const output = stepOutputs.get(dep);
+          let output = stepOutputs.get(dep);
           const depStep = steps.find((s) => s.order === dep);
-          return output ? `## Output from step ${dep} (${depStep?.title ?? ""})\n${output}` : null;
+          if (!output) return null;
+          if (output.length > perDepBudget) {
+            output = output.slice(0, perDepBudget) + "\n... (truncated to fit context budget)";
+          }
+          return `## Output from step ${dep} (${depStep?.title ?? ""})\n${output}`;
         })
         .filter(Boolean)
         .join("\n\n");

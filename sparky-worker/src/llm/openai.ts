@@ -1,5 +1,7 @@
 import type { LLMToolDef } from "../types.js";
 import type { LogCallback, CheckpointCallback } from "./index.js";
+import { getContextBudget } from "./context-budget.js";
+import { compressMessages } from "./compress.js";
 
 function truncate(s: string, max = 200): string {
   return s.length > max ? s.slice(0, max) + "..." : s;
@@ -92,12 +94,13 @@ export async function openaiToolLoop(opts: {
   if (apiKey) headers.authorization = `Bearer ${apiKey}`;
 
   let toolResultCount = 0;
+  let hintInjected = false;
 
   for (let turn = 0; turn < maxTurns; turn++) {
     const isLastTurn = turn === maxTurns - 1;
 
     if (isLastTurn) {
-      messages.push({ role: "user", content: "You have reached the tool-use limit. Summarize what you accomplished and what remains." });
+      messages.push({ role: "user", content: "You have reached the tool-use limit. Respond with:\n1. What is DONE (with file paths)\n2. What REMAINS to be completed\n3. Current state of the codebase (compiles? tests pass?)" });
     }
 
     onLog?.({
@@ -167,6 +170,24 @@ export async function openaiToolLoop(opts: {
       });
       toolResultCount++;
     }
+
+    // Context budget tracking and compression
+    const budget = getContextBudget(messages, label.toLowerCase() as any, modelId);
+    onLog?.({ type: "context_budget", turn: turn + 1, message: `Context: ${budget.utilizationPct}% (${budget.usedTokens}/${budget.maxTokens} tokens)` });
+
+    if (budget.utilizationPct > 90) {
+      compressMessages(messages, label.toLowerCase() as any, modelId, onLog, { targetPct: 50 });
+    } else if (budget.utilizationPct > 75) {
+      compressMessages(messages, label.toLowerCase() as any, modelId, onLog);
+    }
+
+    // Proactive degradation hints
+    const turnsUsedPct = ((turn + 1) / maxTurns) * 100;
+    if ((turnsUsedPct >= 80 || budget.utilizationPct >= 85) && !hintInjected) {
+      messages.push({ role: "user", content: "You are running low on remaining actions. Prioritize completing the most critical work. Leave the codebase in a working state." });
+      hintInjected = true;
+    }
+
     if (onCheckpoint && toolResultCount % 3 === 0) {
       onCheckpoint(messages, turn + 1);
     }

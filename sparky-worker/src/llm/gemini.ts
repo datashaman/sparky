@@ -1,5 +1,7 @@
 import type { LLMToolDef } from "../types.js";
 import type { LogCallback, CheckpointCallback } from "./index.js";
+import { getContextBudget } from "./context-budget.js";
+import { compressMessages } from "./compress.js";
 
 function truncate(s: string, max = 200): string {
   return s.length > max ? s.slice(0, max) + "..." : s;
@@ -67,12 +69,13 @@ export async function geminiToolLoop(opts: {
     : [{ role: "user", parts: [{ text: opts.userPrompt }] }];
 
   let toolResultCount = 0;
+  let hintInjected = false;
 
   for (let turn = 0; turn < maxTurns; turn++) {
     const isLastTurn = turn === maxTurns - 1;
 
     if (isLastTurn) {
-      contents.push({ role: "user", parts: [{ text: "You have reached the tool-use limit. Summarize what you accomplished and what remains." }] });
+      contents.push({ role: "user", parts: [{ text: "You have reached the tool-use limit. Respond with:\n1. What is DONE (with file paths)\n2. What REMAINS to be completed\n3. Current state of the codebase (compiles? tests pass?)" }] });
     }
 
     onLog?.({
@@ -135,6 +138,24 @@ export async function geminiToolLoop(opts: {
       toolResultCount++;
     }
     contents.push({ role: "user", parts: responseParts });
+
+    // Context budget tracking and compression
+    const budget = getContextBudget(contents, "gemini", modelId);
+    onLog?.({ type: "context_budget", turn: turn + 1, message: `Context: ${budget.utilizationPct}% (${budget.usedTokens}/${budget.maxTokens} tokens)` });
+
+    if (budget.utilizationPct > 90) {
+      compressMessages(contents, "gemini", modelId, onLog, { targetPct: 50 });
+    } else if (budget.utilizationPct > 75) {
+      compressMessages(contents, "gemini", modelId, onLog);
+    }
+
+    // Proactive degradation hints
+    const turnsUsedPct = ((turn + 1) / maxTurns) * 100;
+    if ((turnsUsedPct >= 80 || budget.utilizationPct >= 85) && !hintInjected) {
+      contents.push({ role: "user", parts: [{ text: "You are running low on remaining actions. Prioritize completing the most critical work. Leave the codebase in a working state." }] });
+      hintInjected = true;
+    }
+
     if (onCheckpoint && toolResultCount % 3 === 0) {
       onCheckpoint(contents, turn + 1);
     }
