@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { getSkill, updateSkill, deleteSkill } from "../data/skills";
 import { AGENT_PROVIDERS, AGENT_MODELS } from "../data/agents";
 import { fetchOllamaModels } from "../data/ollamaModels";
+import { fetchOpenRouterModels } from "../data/openrouterModels";
 import type { AgentProvider, Skill } from "../data/types";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -44,6 +45,7 @@ export function SkillDetail({ skillId, onBack, onDeleted }: SkillDetailProps) {
   const [formModel, setFormModel] = useState("");
 
   const [ollamaModels, setOllamaModels] = useState<string[]>([]);
+  const [openrouterModels, setOpenrouterModels] = useState<string[]>([]);
   const providerRef = useRef(formProvider);
   providerRef.current = formProvider;
 
@@ -54,10 +56,15 @@ export function SkillDetail({ skillId, onBack, onDeleted }: SkillDetailProps) {
         if (providerRef.current !== current) return;
         setOllamaModels(m);
       });
+    } else if (current === "openrouter") {
+      fetchOpenRouterModels().then((m) => {
+        if (providerRef.current !== current) return;
+        setOpenrouterModels(m);
+      });
     }
   }, [formProvider]);
 
-  const models = formProvider === "ollama" ? ollamaModels : formProvider ? AGENT_MODELS[formProvider] : [];
+  const models = formProvider === "ollama" ? ollamaModels : formProvider === "openrouter" ? openrouterModels : formProvider ? AGENT_MODELS[formProvider] : [];
 
   useEffect(() => {
     let cancelled = false;
@@ -246,7 +253,7 @@ export function SkillDetail({ skillId, onBack, onDeleted }: SkillDetailProps) {
 
         <div className="detail-field">
           <Label>Model</Label>
-          {formProvider === "openrouter" || (formProvider === "ollama" && models.length === 0) ? (
+          {(formProvider === "openrouter" && openrouterModels.length === 0) || (formProvider === "ollama" && models.length === 0) ? (
             <Input
               placeholder={formProvider === "ollama" ? "e.g. qwen2.5:latest" : "e.g. anthropic/claude-sonnet-4"}
               value={formModel}

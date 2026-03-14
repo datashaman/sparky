@@ -7,6 +7,7 @@ import {
   AGENT_MODELS,
 } from "../data/agents";
 import { fetchOllamaModels } from "../data/ollamaModels";
+import { fetchOpenRouterModels } from "../data/openrouterModels";
 import type { AgentProvider } from "../data/types";
 import type { Agent } from "../data/types";
 import { Input } from "@/components/ui/input";
@@ -52,8 +53,9 @@ export function AgentsList({ workspaceId, onSelectAgent }: Props) {
   const [formBackground, setFormBackground] = useState(false);
 
   const [ollamaModels, setOllamaModels] = useState<string[]>([]);
+  const [openrouterModels, setOpenrouterModels] = useState<string[]>([]);
 
-  const models = formProvider === "ollama" ? ollamaModels : AGENT_MODELS[formProvider];
+  const models = formProvider === "ollama" ? ollamaModels : formProvider === "openrouter" ? openrouterModels : AGENT_MODELS[formProvider];
 
   async function load() {
     setLoading(true);
@@ -82,6 +84,13 @@ export function AgentsList({ workspaceId, onSelectAgent }: Props) {
       fetchOllamaModels().then((m) => {
         if (providerRef.current !== current) return;
         setOllamaModels(m);
+        if (m.length > 0) setFormModel(m[0]);
+      });
+    } else if (current === "openrouter") {
+      setFormModel("");
+      fetchOpenRouterModels().then((m) => {
+        if (providerRef.current !== current) return;
+        setOpenrouterModels(m);
         if (m.length > 0) setFormModel(m[0]);
       });
     } else if (models.length > 0) {
@@ -296,7 +305,7 @@ export function AgentsList({ workspaceId, onSelectAgent }: Props) {
                 </div>
                 <div className="flex flex-col gap-1.5 flex-1 min-w-0">
                   <Label>Model</Label>
-                  {formProvider === "openrouter" || (formProvider === "ollama" && models.length === 0) ? (
+                  {(formProvider === "openrouter" && openrouterModels.length === 0) || (formProvider === "ollama" && models.length === 0) ? (
                     <Input
                       placeholder={formProvider === "ollama" ? "e.g. qwen2.5:latest" : "e.g. anthropic/claude-sonnet-4"}
                       value={formModel}
