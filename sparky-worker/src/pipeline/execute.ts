@@ -2,12 +2,12 @@ import type {
   SessionConfig,
   StartSessionPayload,
   ExecutionLogEntry,
-  ExecutionPlanResult,
   ExecutionPlanStep,
   Agent,
   SessionStepState,
   AgentProvider,
 } from "../types.js";
+import type { GitHubToolContext } from "../tools/github-tools.js";
 import {
   updateSession,
   upsertStepState,
@@ -23,6 +23,23 @@ import { buildSkillResolver } from "../tools/skill-tool.js";
 import { createAskUserHandler } from "../tools/ask-user-tool.js";
 import { isSessionCancelled } from "../session-manager.js";
 import { readRepoContext } from "../repo-context.js";
+
+const FINALIZE_TITLE = "Commit changes and create pull request";
+
+function makeFinalizeStep(existingSteps: ExecutionPlanStep[]): ExecutionPlanStep {
+  const lastOrder = existingSteps.length > 0 ? Math.max(...existingSteps.map((s) => s.order)) : 0;
+  return {
+    order: lastOrder + 1,
+    title: FINALIZE_TITLE,
+    description:
+      "Review what changed with 'git diff --stat', then call create_pull_request with a clear title and body describing the changes. If no changes exist, report STATUS: DONE.",
+    agent_name: null,
+    expected_output: "A pull request URL or confirmation that no changes were needed.",
+    depends_on: existingSteps.map((s) => s.order),
+    verification_command: null,
+    done_when: "A pull request has been created, or no changes exist.",
+  };
+}
 
 export interface ExecutionPipelineOpts {
   sessionId: string;
@@ -72,6 +89,11 @@ export async function runExecutionPipeline(opts: ExecutionPipelineOpts): Promise
 
   const stepOutputs = new Map<number, string>();
   let steps = [...planResult.steps];
+
+  // Inject finalize step: commit + push + create PR
+  if (config.github_token && !steps.some((s) => s.title === FINALIZE_TITLE)) {
+    steps.push(makeFinalizeStep(steps));
+  }
 
   const issueContext = `${payload.issue_title} (#${payload.issue_number}) in ${payload.repo_full_name}${payload.issue_body ? `\n${payload.issue_body}` : ""}`;
 
@@ -238,7 +260,10 @@ export async function runExecutionPipeline(opts: ExecutionPipelineOpts): Promise
       stepLog({ type: "info", message: `Starting: ${step.title} (${provider}/${modelId})` });
 
       const askUserHandler = createAskUserHandler(sessionId, step.order, config.ask_user_timeout_minutes);
-      const toolHandler = createToolHandler(worktreePath, skillResolver, askUserHandler);
+      const githubContext: GitHubToolContext | undefined = config.github_token
+        ? { token: config.github_token, repoFullName: repo_full_name, parentIssueNumber: issue_number }
+        : undefined;
+      const toolHandler = createToolHandler(worktreePath, skillResolver, askUserHandler, githubContext);
 
       // Resume from checkpoint if available
       let existingMessages: unknown[] | undefined;
@@ -317,6 +342,14 @@ export async function runExecutionPipeline(opts: ExecutionPipelineOpts): Promise
             );
 
             steps = [...completedSteps, ...newSteps];
+
+            // Re-append finalize step if replanning removed it
+            if (config.github_token && !steps.some((s) => s.title === FINALIZE_TITLE)) {
+              const finalizeStep = makeFinalizeStep(steps);
+              steps.push(finalizeStep);
+              newSteps.push(finalizeStep);
+            }
+
             for (const ns of newSteps) {
               onStepUpdate(ns.order, "pending");
             }
