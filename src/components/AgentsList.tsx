@@ -8,6 +8,7 @@ import {
 } from "../data/agents";
 import { fetchOllamaModels } from "../data/ollamaModels";
 import { fetchOpenRouterModels } from "../data/openrouterModels";
+import { fetchLitellmModels } from "../data/litellmModels";
 import type { AgentProvider } from "../data/types";
 import type { Agent } from "../data/types";
 import { Input } from "@/components/ui/input";
@@ -35,6 +36,7 @@ const PROVIDER_COLORS: Record<AgentProvider, string> = {
   gemini: "#4285f4",
   ollama: "#1d1d1d",
   openrouter: "#b364e9",
+  litellm: "#2563eb",
 };
 
 export function AgentsList({ workspaceId, onSelectAgent }: Props) {
@@ -54,8 +56,9 @@ export function AgentsList({ workspaceId, onSelectAgent }: Props) {
 
   const [ollamaModels, setOllamaModels] = useState<string[]>([]);
   const [openrouterModels, setOpenrouterModels] = useState<string[]>([]);
+  const [litellmModels, setLitellmModels] = useState<string[]>([]);
 
-  const models = formProvider === "ollama" ? ollamaModels : formProvider === "openrouter" ? openrouterModels : AGENT_MODELS[formProvider];
+  const models = formProvider === "ollama" ? ollamaModels : formProvider === "openrouter" ? openrouterModels : formProvider === "litellm" ? litellmModels : AGENT_MODELS[formProvider];
 
   async function load() {
     setLoading(true);
@@ -91,6 +94,13 @@ export function AgentsList({ workspaceId, onSelectAgent }: Props) {
       fetchOpenRouterModels().then((m) => {
         if (providerRef.current !== current) return;
         setOpenrouterModels(m);
+        if (m.length > 0) setFormModel(m[0]);
+      });
+    } else if (current === "litellm") {
+      setFormModel("");
+      fetchLitellmModels().then((m) => {
+        if (providerRef.current !== current) return;
+        setLitellmModels(m);
         if (m.length > 0) setFormModel(m[0]);
       });
     } else if (models.length > 0) {
@@ -305,9 +315,9 @@ export function AgentsList({ workspaceId, onSelectAgent }: Props) {
                 </div>
                 <div className="flex flex-col gap-1.5 flex-1 min-w-0">
                   <Label>Model</Label>
-                  {(formProvider === "openrouter" && openrouterModels.length === 0) || (formProvider === "ollama" && models.length === 0) ? (
+                  {(formProvider === "openrouter" && openrouterModels.length === 0) || (formProvider === "ollama" && models.length === 0) || (formProvider === "litellm" && models.length === 0) ? (
                     <Input
-                      placeholder={formProvider === "ollama" ? "e.g. qwen2.5:latest" : "e.g. anthropic/claude-sonnet-4"}
+                      placeholder={formProvider === "ollama" ? "e.g. qwen2.5:latest" : formProvider === "litellm" ? "e.g. gpt-4o" : "e.g. anthropic/claude-sonnet-4"}
                       value={formModel}
                       onChange={(e) => setFormModel(e.target.value)}
                       disabled={creating}

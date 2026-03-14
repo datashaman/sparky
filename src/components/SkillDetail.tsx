@@ -3,6 +3,7 @@ import { getSkill, updateSkill, deleteSkill } from "../data/skills";
 import { AGENT_PROVIDERS, AGENT_MODELS } from "../data/agents";
 import { fetchOllamaModels } from "../data/ollamaModels";
 import { fetchOpenRouterModels } from "../data/openrouterModels";
+import { fetchLitellmModels } from "../data/litellmModels";
 import type { AgentProvider, Skill } from "../data/types";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -28,6 +29,7 @@ const PROVIDER_COLORS: Record<AgentProvider, string> = {
   gemini: "#4285f4",
   ollama: "#1d1d1d",
   openrouter: "#b364e9",
+  litellm: "#2563eb",
 };
 
 export function SkillDetail({ skillId, onBack, onDeleted }: SkillDetailProps) {
@@ -46,6 +48,7 @@ export function SkillDetail({ skillId, onBack, onDeleted }: SkillDetailProps) {
 
   const [ollamaModels, setOllamaModels] = useState<string[]>([]);
   const [openrouterModels, setOpenrouterModels] = useState<string[]>([]);
+  const [litellmModels, setLitellmModels] = useState<string[]>([]);
   const providerRef = useRef(formProvider);
   providerRef.current = formProvider;
 
@@ -61,10 +64,15 @@ export function SkillDetail({ skillId, onBack, onDeleted }: SkillDetailProps) {
         if (providerRef.current !== current) return;
         setOpenrouterModels(m);
       });
+    } else if (current === "litellm") {
+      fetchLitellmModels().then((m) => {
+        if (providerRef.current !== current) return;
+        setLitellmModels(m);
+      });
     }
   }, [formProvider]);
 
-  const models = formProvider === "ollama" ? ollamaModels : formProvider === "openrouter" ? openrouterModels : formProvider ? AGENT_MODELS[formProvider] : [];
+  const models = formProvider === "ollama" ? ollamaModels : formProvider === "openrouter" ? openrouterModels : formProvider === "litellm" ? litellmModels : formProvider ? AGENT_MODELS[formProvider] : [];
 
   useEffect(() => {
     let cancelled = false;
@@ -253,9 +261,9 @@ export function SkillDetail({ skillId, onBack, onDeleted }: SkillDetailProps) {
 
         <div className="detail-field">
           <Label>Model</Label>
-          {(formProvider === "openrouter" && openrouterModels.length === 0) || (formProvider === "ollama" && models.length === 0) ? (
+          {(formProvider === "openrouter" && openrouterModels.length === 0) || (formProvider === "ollama" && models.length === 0) || (formProvider === "litellm" && models.length === 0) ? (
             <Input
-              placeholder={formProvider === "ollama" ? "e.g. qwen2.5:latest" : "e.g. anthropic/claude-sonnet-4"}
+              placeholder={formProvider === "ollama" ? "e.g. qwen2.5:latest" : formProvider === "litellm" ? "e.g. gpt-4o" : "e.g. anthropic/claude-sonnet-4"}
               value={formModel}
               onChange={(e) => setFormModel(e.target.value)}
               disabled={saving}

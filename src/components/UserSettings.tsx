@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { AGENT_PROVIDERS, AGENT_MODELS } from "../data/agents";
 import { fetchOllamaModels } from "../data/ollamaModels";
 import { fetchOpenRouterModels } from "../data/openrouterModels";
+import { fetchLitellmModels } from "../data/litellmModels";
 import type { AgentProvider } from "../data/types";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
@@ -33,7 +34,7 @@ export function getDisplayMode(): DisplayMode {
 export function getDefaultProvider(): AgentProvider | "" {
   try {
     const stored = localStorage.getItem(DEFAULT_PROVIDER_KEY);
-    if (stored === "openai" || stored === "anthropic" || stored === "gemini" || stored === "ollama" || stored === "openrouter") return stored;
+    if (stored === "openai" || stored === "anthropic" || stored === "gemini" || stored === "ollama" || stored === "openrouter" || stored === "litellm") return stored;
   } catch { /* ignore */ }
   return "";
 }
@@ -47,7 +48,7 @@ export function getDefaultModel(): string {
 export function getExecProvider(): AgentProvider | "" {
   try {
     const stored = localStorage.getItem(EXEC_PROVIDER_KEY);
-    if (stored === "openai" || stored === "anthropic" || stored === "gemini" || stored === "ollama" || stored === "openrouter") return stored;
+    if (stored === "openai" || stored === "anthropic" || stored === "gemini" || stored === "ollama" || stored === "openrouter" || stored === "litellm") return stored;
   } catch { /* ignore */ }
   return "";
 }
@@ -100,6 +101,7 @@ export function UserSettings({ open, onClose }: Props) {
 
   const [ollamaModels, setOllamaModels] = useState<string[]>([]);
   const [openrouterModels, setOpenrouterModels] = useState<string[]>([]);
+  const [litellmModels, setLitellmModels] = useState<string[]>([]);
   const providerRef = useRef(provider);
   providerRef.current = provider;
   const execProviderRef = useRef(execProvider);
@@ -118,10 +120,16 @@ export function UserSettings({ open, onClose }: Props) {
         setOpenrouterModels(m);
       });
     }
+    if (provider === "litellm" || execProvider === "litellm") {
+      fetchLitellmModels().then((m) => {
+        if (providerRef.current !== "litellm" && execProviderRef.current !== "litellm") return;
+        setLitellmModels(m);
+      });
+    }
   }, [provider, execProvider]);
 
-  const models = provider === "ollama" ? ollamaModels : provider === "openrouter" ? openrouterModels : provider ? AGENT_MODELS[provider] : [];
-  const execModels = execProvider === "ollama" ? ollamaModels : execProvider === "openrouter" ? openrouterModels : execProvider ? AGENT_MODELS[execProvider] : [];
+  const models = provider === "ollama" ? ollamaModels : provider === "openrouter" ? openrouterModels : provider === "litellm" ? litellmModels : provider ? AGENT_MODELS[provider] : [];
+  const execModels = execProvider === "ollama" ? ollamaModels : execProvider === "openrouter" ? openrouterModels : execProvider === "litellm" ? litellmModels : execProvider ? AGENT_MODELS[execProvider] : [];
 
   useEffect(() => {
     applyDisplayMode(displayMode);
@@ -141,11 +149,15 @@ export function UserSettings({ open, onClose }: Props) {
       if (openrouterModels.length > 0 && !openrouterModels.includes(model)) setModel(openrouterModels[0] ?? "");
       return;
     }
+    if (provider === "litellm") {
+      if (litellmModels.length > 0 && !litellmModels.includes(model)) setModel(litellmModels[0] ?? "");
+      return;
+    }
     const available = AGENT_MODELS[provider];
     if (available.length > 0 && !available.includes(model)) {
       setModel(available[0] ?? "");
     }
-  }, [provider, ollamaModels, openrouterModels]);
+  }, [provider, ollamaModels, openrouterModels, litellmModels]);
 
   useEffect(() => {
     try { localStorage.setItem(DEFAULT_MODEL_KEY, model); } catch { /* ignore */ }
@@ -162,11 +174,15 @@ export function UserSettings({ open, onClose }: Props) {
       if (openrouterModels.length > 0 && !openrouterModels.includes(execModel)) setExecModel(openrouterModels[0] ?? "");
       return;
     }
+    if (execProvider === "litellm") {
+      if (litellmModels.length > 0 && !litellmModels.includes(execModel)) setExecModel(litellmModels[0] ?? "");
+      return;
+    }
     const available = AGENT_MODELS[execProvider];
     if (available.length > 0 && !available.includes(execModel)) {
       setExecModel(available[0] ?? "");
     }
-  }, [execProvider, ollamaModels, openrouterModels]);
+  }, [execProvider, ollamaModels, openrouterModels, litellmModels]);
 
   useEffect(() => {
     try { localStorage.setItem(EXEC_MODEL_KEY, execModel); } catch { /* ignore */ }
@@ -229,9 +245,9 @@ export function UserSettings({ open, onClose }: Props) {
                 </div>
                 <div className="flex flex-col gap-1.5 flex-1 min-w-0">
                   <Label>Model</Label>
-                  {(provider === "openrouter" && openrouterModels.length === 0) || (provider === "ollama" && models.length === 0) ? (
+                  {(provider === "openrouter" && openrouterModels.length === 0) || (provider === "ollama" && models.length === 0) || (provider === "litellm" && models.length === 0) ? (
                     <Input
-                      placeholder={provider === "ollama" ? "e.g. qwen2.5:latest" : "e.g. anthropic/claude-sonnet-4"}
+                      placeholder={provider === "ollama" ? "e.g. qwen2.5:latest" : provider === "litellm" ? "e.g. gpt-4o" : "e.g. anthropic/claude-sonnet-4"}
                       value={model}
                       onChange={(e) => setModel(e.target.value)}
                     />
@@ -274,9 +290,9 @@ export function UserSettings({ open, onClose }: Props) {
                 </div>
                 <div className="flex flex-col gap-1.5 flex-1 min-w-0">
                   <Label>Model</Label>
-                  {(execProvider === "openrouter" && openrouterModels.length === 0) || (execProvider === "ollama" && execModels.length === 0) ? (
+                  {(execProvider === "openrouter" && openrouterModels.length === 0) || (execProvider === "ollama" && execModels.length === 0) || (execProvider === "litellm" && execModels.length === 0) ? (
                     <Input
-                      placeholder={execProvider === "ollama" ? "e.g. qwen2.5:latest" : "e.g. anthropic/claude-sonnet-4"}
+                      placeholder={execProvider === "ollama" ? "e.g. qwen2.5:latest" : execProvider === "litellm" ? "e.g. gpt-4o" : "e.g. anthropic/claude-sonnet-4"}
                       value={execModel}
                       onChange={(e) => setExecModel(e.target.value)}
                     />

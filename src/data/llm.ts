@@ -2,8 +2,31 @@ import { invoke, isTauri } from "@tauri-apps/api/core";
 import type { AgentProvider, LLMToolDef } from "./types";
 
 const OLLAMA_BASE_URL = "http://localhost:11434/v1";
+export const LITELLM_BASE_URL = "http://localhost:4000/v1";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
+
+/** Call LiteLLM via Tauri backend proxy to bypass CORS, or direct fetch in non-Tauri mode. */
+async function litellmFetch(body: string, apiKey: string): Promise<{ status: number; data: any }> {
+  if (isTauri()) {
+    const res = await invoke<{ status: number; body: string }>("litellm_chat", { body, apiKey });
+    let data: any;
+    try {
+      data = JSON.parse(res.body);
+    } catch {
+      data = { raw: res.body };
+    }
+    return { status: res.status, data };
+  }
+  const headers: Record<string, string> = { "content-type": "application/json" };
+  if (apiKey) headers.authorization = `Bearer ${apiKey}`;
+  const res = await fetch(`${LITELLM_BASE_URL}/chat/completions`, {
+    method: "POST",
+    headers,
+    body,
+  });
+  return { status: res.status, data: await res.json() };
+}
 
 /** Call Ollama via Tauri backend proxy to bypass CORS, or direct fetch in non-Tauri mode. */
 async function ollamaFetch(body: string): Promise<{ status: number; data: any }> {
@@ -27,7 +50,7 @@ async function ollamaFetch(body: string): Promise<{ status: number; data: any }>
 }
 
 /** Providers that don't require an API key. */
-export const KEYLESS_PROVIDERS = new Set<AgentProvider>(["ollama"]);
+export const KEYLESS_PROVIDERS = new Set<AgentProvider>(["ollama", "litellm"]);
 
 export async function callLLM(opts: {
   provider: AgentProvider;
@@ -176,6 +199,26 @@ export async function callLLM(opts: {
       const data = await res.json();
       return data.choices?.[0]?.message?.content ?? "";
     }
+
+    case "litellm": {
+      const reqBody = JSON.stringify({
+        model: modelId,
+        max_tokens: maxTokens,
+        response_format: {
+          type: "json_schema",
+          json_schema: { name: schemaName, strict: true, schema },
+        },
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: userPrompt },
+        ],
+      });
+      const { status, data } = await litellmFetch(reqBody, apiKey);
+      if (status !== 200) {
+        throw new Error(`LiteLLM API ${status}: ${JSON.stringify(data)}`);
+      }
+      return data.choices?.[0]?.message?.content ?? "";
+    }
   }
 }
 
@@ -201,11 +244,13 @@ export async function callLLMWithTools(opts: {
     case "anthropic":
       return anthropicToolLoop({ modelId, apiKey, systemPrompt, userPrompt, tools, maxTurns, onToolCall });
     case "openai":
-      return openaiToolLoop({ modelId, apiKey, systemPrompt, userPrompt, tools, maxTurns, onToolCall, baseUrl: "https://api.openai.com/v1" });
+      return openaiToolLoop({ modelId, apiKey, systemPrompt, userPrompt, tools, maxTurns, onToolCall, baseUrl: "https://api.openai.com/v1", label: "OpenAI" });
     case "ollama":
-      return openaiToolLoop({ modelId, apiKey, systemPrompt, userPrompt, tools, maxTurns, onToolCall, baseUrl: OLLAMA_BASE_URL, useProxy: true });
+      return openaiToolLoop({ modelId, apiKey, systemPrompt, userPrompt, tools, maxTurns, onToolCall, baseUrl: OLLAMA_BASE_URL, useProxy: true, label: "Ollama" });
     case "openrouter":
-      return openaiToolLoop({ modelId, apiKey, systemPrompt, userPrompt, tools, maxTurns, onToolCall, baseUrl: "https://openrouter.ai/api/v1" });
+      return openaiToolLoop({ modelId, apiKey, systemPrompt, userPrompt, tools, maxTurns, onToolCall, baseUrl: "https://openrouter.ai/api/v1", label: "OpenRouter" });
+    case "litellm":
+      return openaiToolLoop({ modelId, apiKey, systemPrompt, userPrompt, tools, maxTurns, onToolCall, baseUrl: LITELLM_BASE_URL, useProxy: true, proxyFn: litellmFetch, label: "LiteLLM" });
     case "gemini":
       return geminiToolLoop({ modelId, apiKey, systemPrompt, userPrompt, tools, maxTurns, onToolCall });
   }
@@ -302,10 +347,10 @@ async function openaiToolLoop(opts: {
   onToolCall: (name: string, input: Record<string, unknown>) => Promise<string>;
   baseUrl?: string;
   useProxy?: boolean;
+  proxyFn?: (body: string, apiKey: string) => Promise<{ status: number; data: any }>;
+  label?: string;
 }): Promise<string> {
-  const { modelId, apiKey, systemPrompt, tools, maxTurns, onToolCall, baseUrl = "https://api.openai.com/v1", useProxy = false } = opts;
-
-  const providerLabel = useProxy ? "Ollama" : baseUrl.includes("openai.com") ? "OpenAI" : baseUrl.includes("openrouter") ? "OpenRouter" : "API";
+  const { modelId, apiKey, systemPrompt, tools, maxTurns, onToolCall, baseUrl = "https://api.openai.com/v1", useProxy = false, proxyFn, label = "API" } = opts;
 
   const openaiTools = tools.map((t) => ({
     type: "function" as const,
@@ -333,9 +378,10 @@ async function openaiToolLoop(opts: {
 
     let data: any;
     if (useProxy) {
-      const proxyRes = await ollamaFetch(reqBody);
+      const fetchFn = proxyFn ?? ((b: string) => ollamaFetch(b));
+      const proxyRes = await fetchFn(reqBody, apiKey);
       if (proxyRes.status !== 200) {
-        throw new Error(`Ollama API ${proxyRes.status}: ${JSON.stringify(proxyRes.data)}`);
+        throw new Error(`${label} API ${proxyRes.status}: ${JSON.stringify(proxyRes.data)}`);
       }
       data = proxyRes.data;
     } else {
@@ -350,13 +396,13 @@ async function openaiToolLoop(opts: {
 
       if (!res.ok) {
         const body = await res.text();
-        throw new Error(`${providerLabel} API ${res.status}: ${body}`);
+        throw new Error(`${label} API ${res.status}: ${body}`);
       }
       data = await res.json();
     }
 
     const choice = data.choices?.[0];
-    if (!choice) throw new Error(`No choices in ${providerLabel} response`);
+    if (!choice) throw new Error(`No choices in ${label} response`);
 
     const msg = choice.message;
     messages.push(msg);
