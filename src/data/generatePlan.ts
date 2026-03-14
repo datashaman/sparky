@@ -89,7 +89,7 @@ export function buildPlanPrompt(
 
   if (skills.length > 0) {
     parts.push("", "## Available Skills (accessible at runtime via use_skill tool)");
-    parts.push("The issue LLM can call `use_skill(skill_name, arguments?)` at any time during execution to load a skill's content. Skills accept optional arguments to customize their behavior. You do NOT need to plan skill usage — the LLM will invoke them as needed.");
+    parts.push("The issue LLM can call the `use_skill` tool at any time during execution to load a skill's content. The tool takes a required `skill_name` field and an optional `arguments` field to customize the skill's output. You do NOT need to plan skill usage — the LLM will invoke skills as needed.");
     for (const s of skills) {
       parts.push(`- **${s.name}**: ${s.description || "(no description)"}`);
     }

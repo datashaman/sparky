@@ -167,7 +167,7 @@ export async function executePlan(opts: ExecutePlanOpts): Promise<void> {
       // List available skills so the LLM knows what it can call via use_skill
       if (wsSkills.length > 0) {
         systemParts.push("", "## Available Skills");
-        systemParts.push("Call `use_skill(skill_name, arguments?)` to load a skill's content. Skills accept optional arguments to customize their output.");
+        systemParts.push("Use the `use_skill` tool to load a skill's content. Provide the `skill_name` field, and optionally an `arguments` field to customize the output.");
         for (const s of wsSkills) {
           systemParts.push(`- **${s.name}**: ${s.description || "(no description)"}`);
         }

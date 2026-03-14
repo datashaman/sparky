@@ -204,7 +204,7 @@ export function createToolCallHandler(worktreePath: string, skillResolver?: Skil
           const args = input.arguments as string | undefined;
           const content = skillResolver(skillName, args);
           if (content === null) return `Error: skill "${skillName}" not found. Check the available skill names.`;
-          return content;
+          return truncate(content);
         }
         default:
           return `Unknown tool: ${name}`;
