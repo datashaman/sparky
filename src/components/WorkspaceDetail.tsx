@@ -17,7 +17,7 @@ import type { AskUserPrompt, ExecutionLogEntry, IssueAnalysis, AnalysisResult, E
 import { executePlan } from "../data/executePlan";
 import { marked } from "marked";
 import { AnalysisView } from "./AnalysisView";
-import { PlanView } from "./PlanView";
+import { PlanView, AskUserPanel } from "./PlanView";
 import { SkillDetail } from "./SkillDetail";
 import { AgentDetail } from "./AgentDetail";
 
@@ -120,6 +120,21 @@ export function WorkspaceDetail({ workspaceId, onSwitchWorkspace, onDeleted, onW
       logRafRef.current = requestAnimationFrame(flushLogs);
     }
   }, [flushLogs]);
+
+  // Reusable ask-user handler that bridges execution/analysis to the UI
+  const createAskUserBridge = useCallback((stepOrder: number) => {
+    return (request: { question: string; options: string[]; allowMultiple: boolean }) =>
+      new Promise<string[]>((resolve) => {
+        setAskUserPrompt({
+          ...request,
+          stepOrder,
+          resolve: (selected) => {
+            setAskUserPrompt(null);
+            resolve(selected);
+          },
+        });
+      });
+  }, []);
 
   useEffect(() => {
     load();
@@ -255,7 +270,7 @@ export function WorkspaceDetail({ workspaceId, onSwitchWorkspace, onDeleted, onW
       const p = await createPlan(workspaceId, selectedIssue.full_name, selectedIssue.number);
       setPlan(p);
       setIssueTab("plan");
-      runPlanGeneration(p, selectedIssue, analysisResult, agents, skills, setPlan);
+      runPlanGeneration(p, selectedIssue, analysisResult, agents, skills, setPlan, createAskUserBridge(0));
     } finally {
       setPlanLoading(false);
     }
@@ -696,7 +711,7 @@ export function WorkspaceDetail({ workspaceId, onSwitchWorkspace, onDeleted, onW
                     if (!analysis && !analysisLoading) {
                       createAnalysis(workspaceId, selectedIssue.full_name, selectedIssue.number).then((a) => {
                         setAnalysis(a);
-                        runAnalysis(a, selectedIssue, setAnalysis);
+                        runAnalysis(a, selectedIssue, setAnalysis, createAskUserBridge(0));
                       });
                     }
                   }}
@@ -735,7 +750,7 @@ export function WorkspaceDetail({ workspaceId, onSwitchWorkspace, onDeleted, onW
                           setPlan(null);
                           setAllCreated(false);
                           setIssueTab("analysis");
-                          runAnalysis(a, selectedIssue, setAnalysis);
+                          runAnalysis(a, selectedIssue, setAnalysis, createAskUserBridge(0));
                         }}
                         disabled={executing}
                       >
@@ -808,7 +823,12 @@ export function WorkspaceDetail({ workspaceId, onSwitchWorkspace, onDeleted, onW
               ) : issueTab === "analysis" ? (
                 <div className="issue-analysis-tab">
                   {analysis?.status === "running" && (
-                    <p className="analysis-running">Analysing...</p>
+                    <>
+                      <p className="analysis-running">Analysing...</p>
+                      {askUserPrompt && askUserPrompt.stepOrder === 0 && (
+                        <AskUserPanel prompt={askUserPrompt} />
+                      )}
+                    </>
                   )}
                   {analysis?.status === "done" && analysis.result && (() => {
                     try {
@@ -832,7 +852,7 @@ export function WorkspaceDetail({ workspaceId, onSwitchWorkspace, onDeleted, onW
                         onClick={async () => {
                           const a = await createAnalysis(workspaceId, selectedIssue.full_name, selectedIssue.number);
                           setAnalysis(a);
-                          runAnalysis(a, selectedIssue, setAnalysis);
+                          runAnalysis(a, selectedIssue, setAnalysis, createAskUserBridge(0));
                         }}
                       >
                         Retry
@@ -843,7 +863,12 @@ export function WorkspaceDetail({ workspaceId, onSwitchWorkspace, onDeleted, onW
               ) : (
                 <div className="issue-plan-tab">
                   {(plan?.status === "pending" || plan?.status === "running") && (
-                    <p className="analysis-running">Generating plan...</p>
+                    <>
+                      <p className="analysis-running">Generating plan...</p>
+                      {askUserPrompt && askUserPrompt.stepOrder === 0 && (
+                        <AskUserPanel prompt={askUserPrompt} />
+                      )}
+                    </>
                   )}
                   {plan?.status === "done" && plan.result && (() => {
                     try {
@@ -879,17 +904,7 @@ export function WorkspaceDetail({ workspaceId, onSwitchWorkspace, onDeleted, onW
                               onWorktreeUpdate: setWorktree,
                               onPlanUpdate: (updated) => setPlan(prev => prev ? { ...prev, result: JSON.stringify(updated) } : prev),
                               onLog: appendLog,
-                              onAskUser: (stepOrder, request) =>
-                                new Promise<string[]>((resolve) => {
-                                  setAskUserPrompt({
-                                    ...request,
-                                    stepOrder,
-                                    resolve: (selected) => {
-                                      setAskUserPrompt(null);
-                                      resolve(selected);
-                                    },
-                                  });
-                                }),
+                              onAskUser: (stepOrder, request) => createAskUserBridge(stepOrder)(request),
                             })
                               .catch((e) => {
                                 const msg = e instanceof Error ? e.message : String(e);

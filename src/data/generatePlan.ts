@@ -2,15 +2,28 @@ import { getDefaultProvider, getDefaultModel, getApiKey } from "../components/Us
 import { getDb } from "../db";
 import type { ExecutionPlan, ExecutionPlanResult, AnalysisResult, Agent, Skill } from "./types";
 import type { GitHubIssue } from "../github";
-import { callLLM, KEYLESS_PROVIDERS } from "./llm";
-import { TOOLS } from "./tools";
+import { callLLMWithTools, KEYLESS_PROVIDERS } from "./llm";
+import { TOOLS, TOOL_SCHEMAS, createToolCallHandler, type AskUserHandler, type SkillResolver } from "./tools";
+import { ensureWorktree } from "./issueWorktrees";
 import { reviewPlan, refinePlan } from "./criticPlan";
 
 const PLAN_SYSTEM_PROMPT = `You are a senior software engineering project manager. Given a GitHub issue analysis, available agents, and available skills, create a concrete step-by-step execution plan to resolve the issue.
 
+## Tools available to you during planning
+
+You have access to tools to help you create a better plan:
+- **ask_user** — Ask the user clarifying questions about priorities, scope, or approach. If you are unsure about something, ask.
+- **use_skill** — Load domain-specific knowledge from available skills.
+- **read_file**, **glob**, **grep** — Explore the codebase to understand project structure and existing patterns before planning.
+- **bash** — Run shell commands to check dependencies, build config, etc.
+
+Use these tools as needed before producing your final plan.
+
+## How execution works
+
 The plan is executed by an **issue LLM** (the controlling LLM) that has access to sandboxed tools (${TOOLS.map((t) => t.name).join(", ")}) and works directly in the issue's worktree. The issue LLM does most of the work itself. It can optionally delegate specific steps to specialized agents when their focused expertise adds value.
 
-The issue LLM also has a **use_skill** tool that lets it load any available skill on demand during execution. Skills provide domain-specific knowledge and instructions. The LLM decides at runtime which skills to call — you do NOT need to plan for skill loading.
+The issue LLM also has a **use_skill** tool that lets it load any available skill on demand during execution, and an **ask_user** tool to request clarification from the user. You do NOT need to plan for skill loading or user questions — the LLM will invoke them as needed at runtime.
 
 Steps can depend on other steps. Be practical and direct — no filler.
 
@@ -125,6 +138,7 @@ export async function runPlanGeneration(
   agents: Agent[],
   skills: Skill[],
   onUpdate: (p: ExecutionPlan) => void,
+  onAskUser?: AskUserHandler,
 ): Promise<void> {
   const provider = getDefaultProvider();
   const modelId = getDefaultModel();
@@ -154,19 +168,63 @@ export async function runPlanGeneration(
     const prompt = buildPlanPrompt(issue, analysisResult, agents, skills);
     console.log("[plan] calling", provider, modelId, "prompt length:", prompt.length);
 
-    const text = await callLLM({
+    // Ensure worktree exists so file/shell tools can explore the codebase
+    const accessToken = localStorage.getItem("github_token") ?? "";
+    if (!accessToken) {
+      throw new Error("No GitHub token. Please log in.");
+    }
+    const worktree = await ensureWorktree(
+      plan.workspace_id,
+      issue.full_name,
+      issue.number,
+      accessToken,
+      () => {},
+    );
+
+    // Build skill resolver and tool handler
+    const skillsByName = new Map(skills.map((s) => [s.name, s]));
+    const skillResolver: SkillResolver = (skillName, args) => {
+      const skill = skillsByName.get(skillName);
+      if (!skill?.content) return null;
+      return args ? `${skill.content}\n\n## Arguments\n${args}` : skill.content;
+    };
+
+    const PLAN_TOOL_NAMES = new Set(["read_file", "glob", "grep", "bash", "ask_user", "use_skill"]);
+    const planTools = TOOL_SCHEMAS.filter((t) => PLAN_TOOL_NAMES.has(t.name));
+
+    const baseHandler = createToolCallHandler(worktree.path, skillResolver);
+    const toolHandler = async (name: string, input: Record<string, unknown>): Promise<string> => {
+      if (name === "ask_user") {
+        if (!onAskUser) return "Error: user interaction not available.";
+        const question = input.question as string;
+        const options = input.options as string[];
+        const allowMultiple = (input.allow_multiple as boolean) ?? false;
+        const selected = await onAskUser({ question, options, allowMultiple });
+        return selected.length === 0
+          ? "User did not select any option."
+          : `User selected: ${selected.join(", ")}`;
+      }
+      return baseHandler(name, input);
+    };
+
+    const schemaInstruction = `\n\nWhen you are ready to provide your final plan, respond with a JSON object matching this schema:\n${JSON.stringify(PLAN_SCHEMA, null, 2)}`;
+
+    const text = await callLLMWithTools({
       provider,
       modelId,
       apiKey,
-      systemPrompt: PLAN_SYSTEM_PROMPT,
+      systemPrompt: PLAN_SYSTEM_PROMPT + schemaInstruction,
       userPrompt: prompt,
-      schema: PLAN_SCHEMA,
-      schemaName: "execution_plan",
-      maxTokens: 2048,
+      tools: planTools,
+      maxTurns: 15,
+      onToolCall: toolHandler,
     });
     console.log("[plan] success, response length:", text.length);
 
-    let parsed: ExecutionPlanResult = JSON.parse(text);
+    // Extract JSON from the response (may be wrapped in code fences)
+    const jsonMatch = text.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/) ?? [null, text];
+    const jsonText = (jsonMatch[1] ?? text).trim();
+    let parsed: ExecutionPlanResult = JSON.parse(jsonText);
     if (!parsed.goal || !parsed.steps || !parsed.success_criteria) {
       throw new Error("Invalid plan response: missing required fields");
     }

@@ -128,7 +128,7 @@ function LogEntryLine({ entry }: { entry: ExecutionLogEntry }) {
   }
 }
 
-function AskUserPanel({ prompt }: { prompt: AskUserPrompt }) {
+export function AskUserPanel({ prompt }: { prompt: AskUserPrompt }) {
   const [selected, setSelected] = useState<Set<string>>(new Set());
 
   const toggle = (option: string) => {
