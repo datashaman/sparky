@@ -1,6 +1,6 @@
 import type { SessionConfig, StartSessionPayload, ExecutionLogEntry } from "../types.js";
 import { updateSession, updateExistingTable, getSkillsForWorkspace, getAgentsForWorkspace } from "../db.js";
-import { callLLMWithTools, KEYLESS_PROVIDERS } from "../llm/index.js";
+import { callLLM, callLLMWithTools, KEYLESS_PROVIDERS } from "../llm/index.js";
 import { TOOL_SCHEMAS, createToolHandler } from "../tools/index.js";
 import { buildSkillResolver } from "../tools/skill-tool.js";
 import { createAskUserHandler } from "../tools/ask-user-tool.js";
@@ -50,11 +50,12 @@ export async function runAnalysisPipeline(opts: AnalysisPipelineOpts): Promise<v
 
   const analysisTools = TOOL_SCHEMAS.filter((t) => TOOL_IDS.includes(t.name));
 
-  const repoContext = readRepoContext(worktreePath);
+  const repoContext = readRepoContext(worktreePath, 2000);
   const systemPrompt = buildAnalysisSystemPrompt(skills, agents) + (repoContext ? `\n\n${repoContext}` : "");
-  const userPrompt = buildAnalysisUserPrompt(payload, skills, agents);
+  const baseUserPrompt = buildAnalysisUserPrompt(payload, skills, agents);
 
-  const schemaInstruction = `\n\nWhen you are ready to provide your final analysis, respond with a JSON object matching this schema:\n${JSON.stringify(ANALYSIS_SCHEMA, null, 2)}`;
+  const schemaInstruction = `\n\nIMPORTANT: When you are ready to provide your final analysis, you MUST respond with ONLY a JSON object (no prose, no explanation) matching this schema:\n${JSON.stringify(ANALYSIS_SCHEMA, null, 2)}`;
+  const userPrompt = baseUserPrompt + schemaInstruction;
 
   const stepLog = (partial: Omit<ExecutionLogEntry, "timestamp" | "stepOrder">) => onLog(0, partial);
   stepLog({ type: "info", message: `Starting analysis (${provider}/${modelId})` });
@@ -63,7 +64,7 @@ export async function runAnalysisPipeline(opts: AnalysisPipelineOpts): Promise<v
     provider,
     modelId,
     apiKey,
-    systemPrompt: systemPrompt + schemaInstruction,
+    systemPrompt,
     userPrompt,
     tools: analysisTools,
     maxTurns: 10,
@@ -71,7 +72,24 @@ export async function runAnalysisPipeline(opts: AnalysisPipelineOpts): Promise<v
     onLog: stepLog,
   });
 
-  const parsed = extractJSON(text) as Record<string, unknown>;
+  let parsed: Record<string, unknown>;
+  try {
+    parsed = extractJSON(text) as Record<string, unknown>;
+  } catch {
+    // JSON extraction failed — retry with a focused prompt
+    stepLog({ type: "info", message: "JSON extraction failed, retrying with focused prompt" });
+    const retryText = await callLLM({
+      provider,
+      modelId,
+      apiKey,
+      systemPrompt: "You are a JSON formatter. Convert the analysis below into a valid JSON object. Output ONLY the JSON, nothing else.",
+      userPrompt: `Convert this analysis into JSON matching this schema:\n${JSON.stringify(ANALYSIS_SCHEMA, null, 2)}\n\nAnalysis to convert:\n${text.slice(0, 4000)}`,
+      schema: ANALYSIS_SCHEMA,
+      schemaName: "analysis",
+      maxTokens: 2048,
+    });
+    parsed = extractJSON(retryText) as Record<string, unknown>;
+  }
   if (!parsed.summary || !parsed.type || !parsed.complexity) {
     throw new Error("Invalid analysis response: missing required fields");
   }
