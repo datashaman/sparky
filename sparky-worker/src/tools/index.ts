@@ -196,10 +196,23 @@ export function filterToolSchemas(toolIds: string[]): LLMToolDef[] {
 }
 
 const MAX_RESULT_LENGTH = 10000;
+const TAIL_RESERVE = 1000;
 
+/**
+ * Smart truncation that preserves both head and tail of the output.
+ * Keeping the tail is important because error messages, test results,
+ * and command exit status typically appear at the end.
+ */
 function truncate(s: string): string {
   if (s.length <= MAX_RESULT_LENGTH) return s;
-  return s.slice(0, MAX_RESULT_LENGTH) + `\n... (truncated, ${s.length} chars total)`;
+
+  const totalLines = s.split("\n").length;
+  const headSize = MAX_RESULT_LENGTH - TAIL_RESERVE;
+  const head = s.slice(0, headSize);
+  const tail = s.slice(-TAIL_RESERVE);
+  const omitted = s.length - headSize - TAIL_RESERVE;
+
+  return `${head}\n\n... (${omitted} chars / ~${totalLines} total lines omitted) ...\n\n${tail}`;
 }
 
 export type SkillResolver = (skillName: string, args?: string) => string | null;
