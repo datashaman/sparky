@@ -6,13 +6,18 @@ import type { LogCallback } from "./index.js";
 
 const TRUNCATE_THRESHOLD = 2048;
 const SUMMARIZE_THRESHOLD = 256;
+const ASSISTANT_TEXT_PREVIEW_LENGTH = 200;
+const ASSISTANT_TEXT_OMIT_OVERSHOOT = 20;
+const ASSISTANT_TEXT_OMITTED = "[assistant reasoning omitted]";
+const ASSISTANT_TEXT_SUFFIX = "\n... (assistant text compressed)";
 
 /**
- * Compress older tool results in the message array when context utilization
- * exceeds a threshold. Mutates the array in place.
+ * Compress older messages when context utilization exceeds a threshold.
+ * Mutates the array in place.
  *
  * Protected: the last `protectedTail` messages are never touched.
- * Compression is applied oldest-first in three tiers:
+ * Assistant text is compressed first (truncate or omit), then tool results
+ * are compressed in three tiers:
  *   1. Truncate content to 2KB
  *   2. Summarize to a short tag
  *   3. Drop entirely (replace with placeholder)
@@ -51,7 +56,7 @@ export function compressMessages(
   if (compressed > 0) {
     onLog?.({
       type: "info",
-      message: `Compressed ${compressed} tool results: ${budget.utilizationPct}% → ${currentPct}% utilization`,
+      message: `Compressed ${compressed} messages: ${budget.utilizationPct}% → ${currentPct}% utilization`,
     });
   }
 }
@@ -126,7 +131,8 @@ function compressGeminiMessage(msg: any, currentPct: number, targetPct: number):
 /**
  * Compress assistant text blocks. Assistant reasoning/narration is the least
  * valuable content to preserve — the tool calls and user messages carry the
- * actual state. We strip assistant text to a short summary.
+ * actual state. At moderate overshoot, text is truncated to a preview. At
+ * severe overshoot, text is replaced with a placeholder.
  */
 function compressAssistantText(msg: any, provider: AgentProvider, currentPct: number, targetPct: number): number {
   const overshoot = currentPct - targetPct;
@@ -137,11 +143,7 @@ function compressAssistantText(msg: any, provider: AgentProvider, currentPct: nu
     let count = 0;
     for (const part of msg.parts) {
       if (!part.text || typeof part.text !== "string" || part.text.length < SUMMARIZE_THRESHOLD) continue;
-      if (overshoot > 20) {
-        part.text = "[assistant reasoning omitted]";
-      } else {
-        part.text = part.text.slice(0, 200) + "\n... (assistant text compressed)";
-      }
+      part.text = compressAssistantContent(part.text, overshoot);
       count++;
     }
     return count;
@@ -153,11 +155,7 @@ function compressAssistantText(msg: any, provider: AgentProvider, currentPct: nu
     let count = 0;
     for (const block of msg.content) {
       if (block.type !== "text" || typeof block.text !== "string" || block.text.length < SUMMARIZE_THRESHOLD) continue;
-      if (overshoot > 20) {
-        block.text = "[assistant reasoning omitted]";
-      } else {
-        block.text = block.text.slice(0, 200) + "\n... (assistant text compressed)";
-      }
+      block.text = compressAssistantContent(block.text, overshoot);
       count++;
     }
     return count;
@@ -165,12 +163,15 @@ function compressAssistantText(msg: any, provider: AgentProvider, currentPct: nu
 
   // OpenAI-compatible: assistant messages with content string
   if (msg.role !== "assistant" || typeof msg.content !== "string" || msg.content.length < SUMMARIZE_THRESHOLD) return 0;
-  if (overshoot > 20) {
-    msg.content = "[assistant reasoning omitted]";
-  } else {
-    msg.content = msg.content.slice(0, 200) + "\n... (assistant text compressed)";
-  }
+  msg.content = compressAssistantContent(msg.content, overshoot);
   return 1;
+}
+
+function compressAssistantContent(text: string, overshoot: number): string {
+  if (overshoot > ASSISTANT_TEXT_OMIT_OVERSHOOT) {
+    return ASSISTANT_TEXT_OMITTED;
+  }
+  return text.slice(0, ASSISTANT_TEXT_PREVIEW_LENGTH) + ASSISTANT_TEXT_SUFFIX;
 }
 
 /**
