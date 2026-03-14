@@ -49,11 +49,12 @@ export async function runPlanPipeline(opts: PlanPipelineOpts): Promise<void> {
 
   const planTools = TOOL_SCHEMAS.filter((t) => TOOL_IDS.includes(t.name));
 
-  const repoContext = readRepoContext(worktreePath);
+  const repoContext = readRepoContext(worktreePath, 2000);
   const systemPrompt = buildPlanSystemPrompt() + (repoContext ? `\n\n${repoContext}` : "");
-  const userPrompt = buildPlanUserPrompt(payload, analysisResult, agents, skills);
+  const baseUserPrompt = buildPlanUserPrompt(payload, analysisResult, agents, skills);
 
-  const schemaInstruction = `\n\nWhen you are ready to provide your final plan, respond with a JSON object matching this schema:\n${JSON.stringify(PLAN_SCHEMA, null, 2)}`;
+  const schemaInstruction = `\n\nIMPORTANT: When you are ready to provide your final plan, you MUST respond with ONLY a JSON object (no prose, no explanation) matching this schema:\n${JSON.stringify(PLAN_SCHEMA, null, 2)}`;
+  const userPrompt = baseUserPrompt + schemaInstruction;
 
   const stepLog = (partial: Omit<ExecutionLogEntry, "timestamp" | "stepOrder">) => onLog(0, partial);
   stepLog({ type: "info", message: `Starting plan generation (${provider}/${modelId})` });
@@ -62,7 +63,7 @@ export async function runPlanPipeline(opts: PlanPipelineOpts): Promise<void> {
     provider,
     modelId,
     apiKey,
-    systemPrompt: systemPrompt + schemaInstruction,
+    systemPrompt,
     userPrompt,
     tools: planTools,
     maxTurns: 15,
@@ -70,7 +71,24 @@ export async function runPlanPipeline(opts: PlanPipelineOpts): Promise<void> {
     onLog: stepLog,
   });
 
-  let parsed = extractJSON(text) as Record<string, unknown>;
+  let parsed: Record<string, unknown>;
+  try {
+    parsed = extractJSON(text) as Record<string, unknown>;
+  } catch {
+    // JSON extraction failed — retry with a focused prompt
+    stepLog({ type: "info", message: "JSON extraction failed, retrying with focused prompt" });
+    const retryText = await callLLM({
+      provider,
+      modelId,
+      apiKey,
+      systemPrompt: "You are a JSON formatter. Convert the plan below into a valid JSON object. Output ONLY the JSON, nothing else.",
+      userPrompt: `Convert this plan into JSON matching this schema:\n${JSON.stringify(PLAN_SCHEMA, null, 2)}\n\nPlan to convert:\n${text.slice(0, 4000)}`,
+      schema: PLAN_SCHEMA,
+      schemaName: "execution_plan",
+      maxTokens: 2048,
+    });
+    parsed = extractJSON(retryText) as Record<string, unknown>;
+  }
   if (!parsed.goal || !parsed.steps || !parsed.success_criteria) {
     throw new Error("Invalid plan response: missing required fields");
   }
