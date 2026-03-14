@@ -1,6 +1,6 @@
 # Sparky — AI-Powered GitHub Issue Resolution
 
-Tauri v2 desktop app. Frontend: React 18 + TypeScript + Vite + Tailwind CSS v4. Backend: Rust (Tauri commands). Database: SQLite via @tauri-apps/plugin-sql. All LLM calls originate from the frontend (except local providers proxied through Rust).
+Tauri v2 desktop app. Frontend: React 18 + TypeScript + Vite + Tailwind CSS v4. Backend: Rust (Tauri commands). Worker: Node.js process for pipeline execution. Database: SQLite via better-sqlite3 (worker) and @tauri-apps/plugin-sql (frontend).
 
 ## Commands
 
@@ -18,6 +18,13 @@ src/                          # React frontend
   components/                 # UI components
   data/                       # Data layer, LLM integration, tools
   db.ts                       # Database schema and migrations
+sparky-worker/                # Node.js worker process
+  src/
+    pipeline/                 # Analysis, plan, execution pipelines
+    llm/                      # LLM provider loops (anthropic, openai, gemini)
+    tools/                    # Sandboxed tool implementations
+    types.ts                  # Worker type definitions
+    db.ts                     # Worker database access (better-sqlite3)
 src-tauri/
   src/
     lib.rs                    # Tauri command registration
@@ -35,7 +42,7 @@ src-tauri/
 - **Two model tiers:** planning (Opus-class) and execution (Sonnet-class)
 - **6 providers:** OpenAI, Anthropic, Gemini, Ollama, OpenRouter, LiteLLM
 - **Agents/Skills:** workspace-scoped; skills callable on demand via `use_skill` tool
-- **Tools:** sandboxed to git worktree, 7 tools (6 file/shell + use_skill) with allowlist
+- **Tools:** sandboxed to git worktree, 8 tools (6 file/shell + use_skill + ask_user) with allowlist
 
 ## Key Files
 
@@ -50,6 +57,11 @@ src-tauri/
 | `src/data/agents.ts` | Agent/provider/model definitions |
 | `src/components/WorkspaceDetail.tsx` | Main workspace UI (large file) |
 | `src/components/UserSettings.tsx` | Provider/model configuration |
+| `sparky-worker/src/pipeline/analyse.ts` | Worker analysis pipeline |
+| `sparky-worker/src/pipeline/plan.ts` | Worker plan generation + critic |
+| `sparky-worker/src/pipeline/execute.ts` | Worker execution + replanning |
+| `sparky-worker/src/llm/index.ts` | Worker LLM routing (callLLM, callLLMWithTools) |
+| `sparky-worker/src/tools/index.ts` | Worker tool schemas + handler |
 
 ## Conventions
 
