@@ -1,6 +1,7 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { listSkillsForWorkspace, createSkill, deleteSkill } from "../data/skills";
 import { AGENT_PROVIDERS, AGENT_MODELS } from "../data/agents";
+import { fetchOllamaModels } from "../data/ollamaModels";
 import type { AgentProvider } from "../data/types";
 import type { Skill } from "../data/types";
 import { Input } from "@/components/ui/input";
@@ -41,7 +42,23 @@ export function SkillsList({ workspaceId, onSelectSkill }: Props) {
   const [formProvider, setFormProvider] = useState<AgentProvider | "">("");
   const [formModel, setFormModel] = useState("");
 
-  const models = formProvider ? AGENT_MODELS[formProvider] : [];
+  const [ollamaModels, setOllamaModels] = useState<string[]>([]);
+  const providerRef = useRef(formProvider);
+  providerRef.current = formProvider;
+
+  useEffect(() => {
+    const current = formProvider;
+    if (current === "ollama") {
+      setFormModel("");
+      fetchOllamaModels().then((m) => {
+        if (providerRef.current !== current) return;
+        setOllamaModels(m);
+        if (m.length > 0) setFormModel(m[0]);
+      });
+    }
+  }, [formProvider]);
+
+  const models = formProvider === "ollama" ? ollamaModels : formProvider ? AGENT_MODELS[formProvider] : [];
 
   async function load() {
     setLoading(true);
@@ -259,9 +276,9 @@ export function SkillsList({ workspaceId, onSelectSkill }: Props) {
                 </div>
                 <div className="flex flex-col gap-1.5 flex-1 min-w-0">
                   <Label>Model</Label>
-                  {formProvider && models.length === 0 ? (
+                  {formProvider === "openrouter" || (formProvider === "ollama" && models.length === 0) ? (
                     <Input
-                      placeholder="e.g. qwen2.5:3b"
+                      placeholder={formProvider === "ollama" ? "e.g. qwen2.5:latest" : "e.g. anthropic/claude-sonnet-4"}
                       value={formModel}
                       onChange={(e) => setFormModel(e.target.value)}
                       disabled={creating}
@@ -276,7 +293,7 @@ export function SkillsList({ workspaceId, onSelectSkill }: Props) {
                         <SelectValue placeholder={formProvider ? "Select model" : "Pick provider first"} />
                       </SelectTrigger>
                       <SelectContent>
-                        {models.map((m) => (
+                        {[...models].sort().map((m) => (
                           <SelectItem key={m} value={m}>{m}</SelectItem>
                         ))}
                       </SelectContent>
