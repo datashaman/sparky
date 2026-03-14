@@ -11,6 +11,12 @@ Evaluate the plan for:
 - **Feasibility**: Can each step actually be accomplished with the available tools and context?
 - **Ordering**: Are steps in a logical order?
 
+For each step, verify:
+- It contributes directly to the stated goal. Remove steps that don't.
+- It has a concrete, verifiable output (not "understand X" or "explore Y").
+- It doesn't duplicate work done by another step.
+- The verification_command and done_when fields are specific enough to objectively assess completion.
+
 Be practical. Only flag real problems, not stylistic preferences. A good plan with minor wording issues should pass.`;
 
 const CRITIC_SCHEMA = {

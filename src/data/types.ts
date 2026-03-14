@@ -90,6 +90,8 @@ export interface ExecutionPlanStep {
   agent_name: string | null;
   expected_output: string;
   depends_on: number[];
+  verification_command?: string | null;
+  done_when?: string;
 }
 
 export interface ExecutionPlanResult {
