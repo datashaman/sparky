@@ -90,8 +90,6 @@ For each step:
 
 **Remaining turns awareness**: At 75% of max turns, an informational message is injected with the exact remaining count. At 80% of turns or 85% of context utilization, an urgent warning is injected telling the model to skip nice-to-haves and prioritize completing critical work. Both hints can fire independently (tracked via a `hintLevel`).
 
-**Step status parsing**: The execution engine parses `STATUS: DONE` and `STATUS: BLOCKED <reason>` from step output. Blocked steps are logged as warnings but still treated as completed — replanning handles gaps.
-
 **Pipeline metrics**: Each pipeline stage logs duration on completion. Execution steps additionally log turn count and estimated token usage.
 
 ### 5. Adaptive Replanning (`src/data/replanCheck.ts`)
@@ -134,10 +132,11 @@ The analysis stage recommends both skills and agents. The user reviews these rec
 
 ## Tool Sandbox
 
-Eleven tools are available. Six are file/shell operations implemented as Tauri commands in Rust (`src-tauri/src/agent_tools.rs`). Two are always-on interaction tools. Three are GitHub issue tools available only during analysis:
+Twelve tools are available. Seven are file/shell operations implemented as Tauri commands in Rust (`src-tauri/src/agent_tools.rs`). Two are always-on interaction tools. Three are GitHub issue tools available only during analysis:
 
 | Tool | LLM Name | Description | Dangerous | Availability |
 |------|----------|-------------|-----------|-------------|
+| List | `list_files` | List files and directories in a path | No | All phases |
 | Read | `read_file` | Read a file's contents | No | All phases |
 | Write | `write_file` | Create or overwrite a file | Yes | Execution only |
 | Edit | `edit_file` | Find-and-replace text in a file (old_text must be unique) | Yes | Execution only |
@@ -236,7 +235,7 @@ When building context from dependency step outputs, each dependency is capped at
 
 ### API Retry (`sparky-worker/src/llm/retry.ts`)
 
-All LLM API calls use `fetchWithRetry` with exponential backoff and jitter. Retries on 429 (rate limit, respects `Retry-After` header as seconds or HTTP-date), 500, 502, 503, 529. Does not retry client errors (400, 401, 403, 404). Response bodies are drained before retry to prevent connection leaks.
+All LLM API calls use `fetchWithRetry` with exponential backoff and jitter. Retries on 429 (rate limit, respects `Retry-After` header as seconds or HTTP-date), 500, 502, 503, 529. Does not retry client errors (400, 401, 403, 404). Response bodies are cancelled before retry to prevent connection leaks.
 
 ### Error Classification (`sparky-worker/src/error-classifier.ts`)
 

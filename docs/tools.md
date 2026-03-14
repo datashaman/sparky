@@ -54,7 +54,7 @@ Find-and-replace text in a file.
 2. **Line ending normalization** — CRLF converted to LF for matching, but the original file's line endings are preserved in the written output
 3. **Trailing whitespace trimming** — trailing spaces/tabs per line are ignored for matching, but only the matched region is replaced (rest of file untouched)
 
-**Edit-as-gather pattern**: On failure, the error response includes the current file contents (carried from the read already done inside `editFile` via `EditFileError`). This creates a self-correcting loop — the model gets fresh context to retry without a separate `read_file` call, saving a turn. This does not bypass tool allow-listing since the read happens inside `editFile` itself.
+**Edit-as-gather pattern**: On failure, the error response includes the current file contents (carried from the read already done inside `editFile` via `EditFileError`). This creates a self-correcting loop — the model gets fresh context to retry without a separate `read_file` call, saving a turn. This does not bypass tool allow-listing since the read happens inside `editFile` itself. Note: the combined error + file content is subject to the standard 10,000-character truncation, so large files may be partially included.
 
 ## glob
 
