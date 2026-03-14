@@ -34,20 +34,24 @@ export function compressMessages(
   if (cutoff <= 0) return;
 
   let compressed = 0;
+  let currentPct = budget.utilizationPct;
 
   for (let i = 0; i < cutoff; i++) {
-    const msg = messages[i];
-    const currentBudget = getContextBudget(messages, provider, modelId);
-    if (currentBudget.utilizationPct <= targetPct) break;
+    if (currentPct <= targetPct) break;
 
-    compressed += compressMessage(msg, provider, currentBudget.utilizationPct, targetPct);
+    const count = compressMessage(messages[i], provider, currentPct, targetPct);
+    compressed += count;
+
+    // Only recalculate budget when we actually compressed something
+    if (count > 0) {
+      currentPct = getContextBudget(messages, provider, modelId).utilizationPct;
+    }
   }
 
   if (compressed > 0) {
-    const after = getContextBudget(messages, provider, modelId);
     onLog?.({
       type: "info",
-      message: `Compressed ${compressed} tool results: ${budget.utilizationPct}% → ${after.utilizationPct}% utilization`,
+      message: `Compressed ${compressed} tool results: ${budget.utilizationPct}% → ${currentPct}% utilization`,
     });
   }
 }
@@ -130,8 +134,7 @@ function compressContent(content: string, currentPct: number, targetPct: number)
   if (overshoot > 15) {
     // Tier 2: summarize
     const preview = content.slice(0, 100).replace(/\n/g, " ");
-    const removed = content.length;
-    return `[tool result: ${preview}... (${removed} chars removed)]`;
+    return `[tool result: ${preview}... (original ${content.length} chars)]`;
   }
 
   // Tier 1: truncate to 2KB

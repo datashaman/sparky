@@ -19,13 +19,27 @@ const CONTEXT_WINDOWS: [prefix: string, tokens: number][] = [
   ["o4", 200_000],
 ];
 
+/**
+ * Conservative defaults per provider when the model ID doesn't match
+ * any known prefix. Local/proxy providers (Ollama, LiteLLM) get a
+ * smaller default since their models often have limited context.
+ */
+const PROVIDER_DEFAULTS: Partial<Record<AgentProvider, number>> = {
+  anthropic: 200_000,
+  openai: 128_000,
+  gemini: 1_000_000,
+  ollama: 8_000,
+  openrouter: 32_000,
+  litellm: 32_000,
+};
+
 const DEFAULT_CONTEXT_WINDOW = 32_000;
 
-export function getContextWindowSize(_provider: AgentProvider, modelId: string): number {
+export function getContextWindowSize(provider: AgentProvider, modelId: string): number {
   for (const [prefix, tokens] of CONTEXT_WINDOWS) {
     if (modelId.startsWith(prefix)) return tokens;
   }
-  return DEFAULT_CONTEXT_WINDOW;
+  return PROVIDER_DEFAULTS[provider] ?? DEFAULT_CONTEXT_WINDOW;
 }
 
 /**
