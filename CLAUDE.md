@@ -34,8 +34,8 @@ src-tauri/
 - **Pipeline:** Issue -> Analysis -> Plan (+ Critic) -> Execution (+ Replanning)
 - **Two model tiers:** planning (Opus-class) and execution (Sonnet-class)
 - **6 providers:** OpenAI, Anthropic, Gemini, Ollama, OpenRouter, LiteLLM
-- **Agents/Skills:** workspace-scoped, referenced by name in plans
-- **Tools:** sandboxed to git worktree, 6 tools with allowlist
+- **Agents/Skills:** workspace-scoped; skills callable on demand via `use_skill` tool
+- **Tools:** sandboxed to git worktree, 7 tools (6 file/shell + use_skill) with allowlist
 
 ## Key Files
 

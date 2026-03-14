@@ -40,9 +40,8 @@ Each step specifies:
 - **expected_output** -- what the step should produce
 - **depends_on** -- order numbers of prerequisite steps
 - **agent_name** -- name of a specialized agent to delegate to, or null if the issue LLM handles it directly
-- **skill_names** -- skills to load into context for this step
 
-The planner is instructed to keep plans minimal. Most steps should be handled by the issue LLM directly; agent delegation is only for cases where specialized focus adds clear value.
+The planner is instructed to keep plans minimal. Every step must represent real work (exploring code, making changes, running tests). Most steps should be handled by the issue LLM directly; agent delegation is only for cases where specialized focus adds clear value. Skills are not allocated to steps -- the LLM invokes them on demand at runtime via the `use_skill` tool.
 
 ### 3. Critic Review (`src/data/criticPlan.ts`)
 
@@ -73,14 +72,15 @@ Execution is the core loop that actually resolves the issue. It operates inside 
 For each step:
 1. Verify all dependency steps have completed
 2. Resolve the agent if `agent_name` is specified -- this overrides the provider, model, and available tools
-3. Collect skill content from the step's `skill_names` plus any skills assigned to the agent
-4. Build a system prompt containing: the issue context, step instructions, agent instructions (if delegated), and skill content
-5. Build a user prompt with context from dependency step outputs and the issue body
-6. Call the LLM in a tool-use loop (`callLLMWithTools`) with the resolved tools
-7. Store the step output for downstream dependency context
-8. After each step, run an adaptive replan check (see below)
+3. Build a system prompt containing: the issue context, step instructions, agent instructions (if delegated), and a list of available skills (callable via `use_skill`)
+4. Build a user prompt with context from dependency step outputs and the issue body
+5. Call the LLM in a tool-use loop (`callLLMWithTools`) with the resolved tools
+6. Store the step output for downstream dependency context
+7. After each step, run an adaptive replan check (see below)
 
-**Agent delegation** works by overriding the execution context for that step: the agent's own provider/model is used, its system prompt content is injected, and its tool set replaces the default. If an agent has no tools configured, it defaults to read-only tools (read, glob, grep).
+**Agent delegation** works by overriding the execution context for that step: the agent's own provider/model is used, its system prompt content is injected, and its tool set replaces the default. If an agent has no tools configured, it defaults to read-only tools (read, glob, grep). The `use_skill` tool is always available regardless of agent tool restrictions.
+
+**Execution logging**: The execution engine emits real-time log events via an `onLog` callback. Events include LLM requests/responses, tool calls/results, and replan checks/decisions. Each entry carries a timestamp, step order, and type-specific metadata. The UI displays these in a collapsible, auto-scrolling log panel per step.
 
 **Max turns**: Each step has a turn limit (agent's `max_turns` or default 25). On the last turn, the LLM is told to summarize what it accomplished and what remains rather than making more tool calls.
 
@@ -110,21 +110,21 @@ Sparky separates planning from execution at the model level, configured independ
 
 ## Agent and Skill System
 
-**Skills** are reusable bodies of knowledge stored as markdown content. They have a name, description, and content body. During execution, a skill's content is injected into the LLM's system prompt as a `## Skill: {name}` section. Skills are workspace-scoped: they are available to any plan or agent within that workspace.
+**Skills** are reusable bodies of knowledge stored as markdown content. They have a name, description, and content body. During execution, all workspace skills are listed in the system prompt and the LLM can load any skill on demand by calling the `use_skill` tool with the skill's name and optional arguments. Skills are workspace-scoped: they are available to any step within that workspace.
 
 **Agents** are specialized workers with their own configuration:
 - **System prompt** (`content` field) -- defines the agent's role, behavior, constraints, and workflow
 - **Provider and model** -- can differ from the default execution model
-- **Skills** -- skills assigned to the agent are loaded into its context alongside any step-level skills
-- **Tools** -- the subset of sandbox tools the agent can access (see Tool Sandbox below)
+- **Skills** -- skills can be associated with an agent (via `agent_skills`) for organization. All workspace skills are accessible at runtime via `use_skill`.
+- **Tools** -- the subset of sandbox tools the agent can access (see Tool Sandbox below); `use_skill` is always available
 - **Max turns** -- per-agent turn limit for the tool-use loop
 - **Background flag** -- for future use
 
-The analysis stage recommends both skills and agents. The user reviews these recommendations and creates them through the UI. The planner then references existing skills and agents by name when building the execution plan.
+The analysis stage recommends both skills and agents. The user reviews these recommendations and creates them through the UI. The planner then references existing agents by name when building the execution plan.
 
 ## Tool Sandbox
 
-Six tools are available, implemented as Tauri commands in Rust (`src-tauri/src/agent_tools.rs`):
+Seven tools are available. Six are file/shell operations implemented as Tauri commands in Rust (`src-tauri/src/agent_tools.rs`), plus the `use_skill` tool which loads workspace skills on demand:
 
 | Tool | LLM Name | Description | Dangerous |
 |------|----------|-------------|-----------|
@@ -134,10 +134,11 @@ Six tools are available, implemented as Tauri commands in Rust (`src-tauri/src/a
 | Glob | `glob` | Find files matching a glob pattern | No |
 | Grep | `grep` | Search file contents with regex | No |
 | Bash | `bash` | Run a shell command | Yes |
+| Skill | `use_skill` | Load a skill's content by name (with optional arguments) | No |
 
 **Sandbox enforcement**: All file operations go through `sandbox_resolve`, which canonicalizes paths and verifies they do not escape the worktree root. For non-existent paths (write targets), it walks up to the nearest existing ancestor and validates that ancestor is within the sandbox.
 
-**Agent tool restriction**: When a step is delegated to an agent, only the agent's configured tools are provided to the LLM. Agents with no tools configured default to read-only: read, glob, and grep. This prevents an unconfigured agent from accidentally modifying files.
+**Agent tool restriction**: When a step is delegated to an agent, only the agent's configured tools are provided to the LLM. Agents with no tools configured default to read-only: read, glob, and grep. The `use_skill` tool is always included regardless of agent restrictions. This prevents an unconfigured agent from accidentally modifying files while still allowing skill access.
 
 **Bash command allowlist**: The bash tool validates that the command starts with an allowed program. The allowlist includes common filesystem commands (`ls`, `find`, `cat`, `cp`, `mv`, `rm`), build tools (`npm`, `cargo`, `make`, `python`), git, and text processing utilities (`sed`, `awk`, `grep`). Commands not on the list are rejected. The command runs with a restricted `PATH` (`/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin`) and `HOME` set to the worktree root.
 
@@ -192,7 +193,7 @@ Sparky supports six LLM providers:
 
 **Two code paths for LLM calls:**
 - `callLLM` -- single-shot structured output (used by analysis, planning, critic, replan check). Provider-specific request formatting, returns the parsed text.
-- `callLLMWithTools` -- multi-turn tool-use loop (used by execution). Three implementations: `anthropicToolLoop` (native Anthropic format), `openaiToolLoop` (shared by OpenAI, OpenRouter, Ollama, LiteLLM), and `geminiToolLoop` (native Gemini format).
+- `callLLMWithTools` -- multi-turn tool-use loop (used by execution). Three implementations: `anthropicToolLoop` (native Anthropic format), `openaiToolLoop` (shared by OpenAI, OpenRouter, Ollama, LiteLLM), and `geminiToolLoop` (native Gemini format). Accepts an optional `onLog` callback for real-time execution logging of LLM requests, responses, tool calls, and results.
 
 **Local provider proxying**: Ollama and LiteLLM run locally and do not set CORS headers. When running inside Tauri, requests are routed through Rust backend commands (`ollama_chat`, `litellm_chat`) that make the HTTP call server-side. Outside Tauri (development), direct fetch is attempted as a fallback.
 
