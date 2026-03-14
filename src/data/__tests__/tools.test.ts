@@ -10,6 +10,7 @@ describe('TOOL_SCHEMAS', () => {
     expect(names).toContain('glob')
     expect(names).toContain('grep')
     expect(names).toContain('bash')
+    expect(names).toContain('use_skill')
   })
 
   it('each schema has name, description, and parameters', () => {
@@ -22,26 +23,30 @@ describe('TOOL_SCHEMAS', () => {
 })
 
 describe('filterToolSchemas', () => {
-  it('returns correct subset for given tool ids', () => {
+  it('returns correct subset for given tool ids (use_skill always included)', () => {
     const result = filterToolSchemas(['read', 'glob'])
     const names = result.map((t) => t.name)
-    expect(names).toEqual(['read_file', 'glob'])
+    expect(names).toContain('read_file')
+    expect(names).toContain('glob')
+    expect(names).toContain('use_skill')
   })
 
-  it('returns empty array for empty input', () => {
+  it('returns only use_skill for empty input', () => {
     const result = filterToolSchemas([])
-    expect(result).toEqual([])
+    expect(result).toHaveLength(1)
+    expect(result[0].name).toBe('use_skill')
   })
 
-  it('ignores unknown tool ids', () => {
+  it('ignores unknown tool ids (use_skill still included)', () => {
     const result = filterToolSchemas(['read', 'nonexistent'])
-    expect(result).toHaveLength(1)
+    expect(result).toHaveLength(2)
     expect(result[0].name).toBe('read_file')
+    expect(result[1].name).toBe('use_skill')
   })
 
   it('returns all schemas when all ids provided', () => {
-    const result = filterToolSchemas(['read', 'write', 'edit', 'glob', 'grep', 'bash'])
-    expect(result).toHaveLength(6)
+    const result = filterToolSchemas(['read', 'write', 'edit', 'glob', 'grep', 'bash', 'use_skill'])
+    expect(result).toHaveLength(7)
   })
 })
 
