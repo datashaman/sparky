@@ -13,12 +13,11 @@ Thanks for your interest in contributing! This guide will help you get started.
 2. Install prerequisites:
    - [Node.js 18+](https://nodejs.org/)
    - [Rust (stable)](https://rustup.rs/)
-   - [Bun](https://bun.sh/)
 
 3. Install dependencies and start the dev server:
    ```bash
-   bun install
-   bun run tauri dev
+   npm install
+   npm run tauri dev
    ```
 
 ## Development Workflow
@@ -32,9 +31,9 @@ Thanks for your interest in contributing! This guide will help you get started.
 
 3. Run checks before committing:
    ```bash
-   bunx tsc --noEmit        # TypeScript
-   cd src-tauri && cargo check  # Rust
-   bun run test             # Tests
+   npx tsc --noEmit                              # TypeScript
+   cargo check --manifest-path src-tauri/Cargo.toml  # Rust
+   npm test                                       # Tests
    ```
 
 4. Commit with a descriptive message and push:
@@ -62,7 +61,7 @@ See the step-by-step checklist in [CLAUDE.md](CLAUDE.md#adding-a-new-provider).
 - TypeScript strict mode — no unused imports or variables
 - Keep PRs focused — one feature or fix per PR
 - Prefer editing existing files over creating new ones
-- Write tests for new data layer logic
+- Add tests for new data layer logic when the test suite is available
 
 ## Reporting Issues
 
