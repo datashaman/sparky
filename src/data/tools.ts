@@ -9,6 +9,7 @@ export interface ToolDef {
 }
 
 export const TOOLS: ToolDef[] = [
+  { id: "list_files", name: "List Files", description: "List files and directories in a path", dangerous: false },
   { id: "read", name: "Read", description: "Read a file's contents", dangerous: false },
   { id: "write", name: "Write", description: "Create or overwrite a file", dangerous: true },
   { id: "edit", name: "Edit", description: "Find-and-replace text in a file", dangerous: true },
@@ -24,6 +25,18 @@ export const TOOLS: ToolDef[] = [
 
 /** LLM-facing tool definitions with parameter schemas for function calling. */
 export const TOOL_SCHEMAS: LLMToolDef[] = [
+  {
+    name: "list_files",
+    description: "List files and directories in a given path. Returns entries with trailing / for directories. Defaults to the project root. Use this FIRST to orient yourself in unfamiliar codebases before searching for specific files.",
+    parameters: {
+      type: "object",
+      properties: {
+        path: { type: "string", description: "Directory path relative to worktree root (default: '.')" },
+      },
+      required: [],
+      additionalProperties: false,
+    },
+  },
   {
     name: "read_file",
     description: "Read a file's contents. Returns the full file text. Use this to understand existing code before making changes. Do NOT use to check if a file exists — use glob instead.",
@@ -176,6 +189,7 @@ export const TOOL_SCHEMAS: LLMToolDef[] = [
 
 /** Map tool IDs (read, write, etc.) to schema names (read_file, write_file, etc.) */
 const TOOL_ID_TO_SCHEMA_NAME: Record<string, string> = {
+  list_files: "list_files",
   read: "read_file",
   write: "write_file",
   edit: "edit_file",
@@ -264,6 +278,13 @@ export function createToolCallHandler(worktreePath: string, skillResolver?: Skil
   return async (name: string, input: Record<string, unknown>): Promise<string> => {
     try {
       switch (name) {
+        case "list_files": {
+          const results = await invoke<string[]>("tool_list_files", {
+            worktreePath,
+            path: (input.path as string) || null,
+          });
+          return truncate(results.join("\n"));
+        }
         case "read_file": {
           const result = await invoke<string>("tool_read_file", {
             worktreePath,

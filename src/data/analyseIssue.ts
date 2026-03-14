@@ -234,7 +234,7 @@ export async function runAnalysis(
     };
 
     // Analysis tools: read-only file tools + bash + always-on tools + GitHub issue tools
-    const ANALYSIS_TOOL_NAMES = new Set(["read_file", "glob", "grep", "bash", "ask_user", "use_skill", "create_issue", "update_issue", "close_issue"]);
+    const ANALYSIS_TOOL_NAMES = new Set(["list_files", "read_file", "glob", "grep", "bash", "ask_user", "use_skill", "create_issue", "update_issue", "close_issue"]);
     const analysisTools = TOOL_SCHEMAS.filter((t) => ANALYSIS_TOOL_NAMES.has(t.name));
 
     const githubContext: GitHubToolContext = {

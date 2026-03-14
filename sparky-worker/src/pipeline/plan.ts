@@ -6,8 +6,9 @@ import { buildSkillResolver } from "../tools/skill-tool.js";
 import { createAskUserHandler } from "../tools/ask-user-tool.js";
 import { isSessionCancelled } from "../session-manager.js";
 import { extractJSON } from "../util.js";
+import { readRepoContext } from "../repo-context.js";
 
-const TOOL_IDS = ["read_file", "glob", "grep", "bash", "ask_user", "use_skill"];
+const TOOL_IDS = ["list_files", "read_file", "glob", "grep", "bash", "ask_user", "use_skill"];
 
 export interface PlanPipelineOpts {
   sessionId: string;
@@ -48,7 +49,8 @@ export async function runPlanPipeline(opts: PlanPipelineOpts): Promise<void> {
 
   const planTools = TOOL_SCHEMAS.filter((t) => TOOL_IDS.includes(t.name));
 
-  const systemPrompt = buildPlanSystemPrompt();
+  const repoContext = readRepoContext(worktreePath);
+  const systemPrompt = buildPlanSystemPrompt() + (repoContext ? `\n\n${repoContext}` : "");
   const userPrompt = buildPlanUserPrompt(payload, analysisResult, agents, skills);
 
   const schemaInstruction = `\n\nWhen you are ready to provide your final plan, respond with a JSON object matching this schema:\n${JSON.stringify(PLAN_SCHEMA, null, 2)}`;

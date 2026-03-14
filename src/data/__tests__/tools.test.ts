@@ -4,6 +4,7 @@ import { filterToolSchemas, TOOL_SCHEMAS, createToolCallHandler } from '../tools
 describe('TOOL_SCHEMAS', () => {
   it('has expected tool names', () => {
     const names = TOOL_SCHEMAS.map((t) => t.name)
+    expect(names).toContain('list_files')
     expect(names).toContain('read_file')
     expect(names).toContain('write_file')
     expect(names).toContain('edit_file')
@@ -51,8 +52,8 @@ describe('filterToolSchemas', () => {
   })
 
   it('returns all schemas when all ids provided', () => {
-    const result = filterToolSchemas(['read', 'write', 'edit', 'glob', 'grep', 'bash', 'use_skill', 'ask_user'])
-    expect(result).toHaveLength(8)
+    const result = filterToolSchemas(['list_files', 'read', 'write', 'edit', 'glob', 'grep', 'bash', 'use_skill', 'ask_user'])
+    expect(result).toHaveLength(9)
   })
 })
 

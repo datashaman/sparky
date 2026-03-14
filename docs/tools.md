@@ -1,6 +1,18 @@
 # Tools Reference
 
-11 tools are available. Six are file/shell operations confined to the issue's git worktree (path escape prevented by `sandbox_resolve`). Two are always-on interaction tools (`use_skill`, `ask_user`). Three are GitHub issue tools (`create_issue`, `update_issue`, `close_issue`) available only during the analysis phase.
+12 tools are available. Seven are file/shell operations confined to the issue's git worktree (path escape prevented by `sandbox_resolve`). Two are always-on interaction tools (`use_skill`, `ask_user`). Three are GitHub issue tools (`create_issue`, `update_issue`, `close_issue`) available only during the analysis phase.
+
+## list_files
+
+List files and directories in a given path.
+
+| Field | Value |
+|---|---|
+| **Parameters** | `path` (string, optional, relative to worktree root — defaults to `.`) |
+| **Returns** | Newline-separated entries; directories have trailing `/` |
+| **Dangerous** | No |
+
+Hides the `.git` directory only (other dotfiles like `.gitignore`, `.gitmodules` are visible). Results are sorted alphabetically and truncated at 10,000 characters.
 
 ## read_file
 
