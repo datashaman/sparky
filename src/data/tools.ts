@@ -16,6 +16,7 @@ export const TOOLS: ToolDef[] = [
   { id: "grep", name: "Grep", description: "Search file contents with regex", dangerous: false },
   { id: "bash", name: "Bash", description: "Run a shell command", dangerous: true },
   { id: "use_skill", name: "Skill", description: "Load a skill by name for domain-specific knowledge", dangerous: false },
+  { id: "ask_user", name: "Ask User", description: "Ask the user a question for clarification or direction", dangerous: false },
 ];
 
 /** LLM-facing tool definitions with parameter schemas for function calling. */
@@ -109,6 +110,24 @@ export const TOOL_SCHEMAS: LLMToolDef[] = [
       additionalProperties: false,
     },
   },
+  {
+    name: "ask_user",
+    description: "Ask the user a question to clarify intent or get direction. Provide a list of options for the user to choose from. Use this when you need input before proceeding.",
+    parameters: {
+      type: "object",
+      properties: {
+        question: { type: "string", description: "The question to ask the user" },
+        options: {
+          type: "array",
+          items: { type: "string" },
+          description: "List of options for the user to choose from",
+        },
+        allow_multiple: { type: "boolean", description: "Whether the user can select multiple options (default: false)" },
+      },
+      required: ["question", "options"],
+      additionalProperties: false,
+    },
+  },
 ];
 
 /** Map tool IDs (read, write, etc.) to schema names (read_file, write_file, etc.) */
@@ -120,12 +139,16 @@ const TOOL_ID_TO_SCHEMA_NAME: Record<string, string> = {
   grep: "grep",
   bash: "bash",
   use_skill: "use_skill",
+  ask_user: "ask_user",
 };
 
-/** Filter TOOL_SCHEMAS to only those allowed by the given tool IDs. use_skill is always included. */
+/** Always-on tools that are included regardless of agent tool restrictions. */
+const ALWAYS_ON_TOOLS = new Set(["use_skill", "ask_user"]);
+
+/** Filter TOOL_SCHEMAS to only those allowed by the given tool IDs. Always-on tools are always included. */
 export function filterToolSchemas(toolIds: string[]): LLMToolDef[] {
   const allowedNames = new Set(toolIds.map((id) => TOOL_ID_TO_SCHEMA_NAME[id]).filter(Boolean));
-  allowedNames.add("use_skill");
+  for (const t of ALWAYS_ON_TOOLS) allowedNames.add(t);
   return TOOL_SCHEMAS.filter((t) => allowedNames.has(t.name));
 }
 
@@ -137,6 +160,14 @@ function truncate(s: string): string {
 }
 
 export type SkillResolver = (skillName: string, args?: string) => string | null;
+
+export interface AskUserRequest {
+  question: string;
+  options: string[];
+  allowMultiple: boolean;
+}
+
+export type AskUserHandler = (request: AskUserRequest) => Promise<string[]>;
 
 /**
  * Create a tool call handler that bridges LLM tool calls to Tauri invoke commands.
