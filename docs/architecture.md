@@ -25,6 +25,10 @@ The structured output includes:
 
 The analysis recommends skills and agents but does not create them automatically. The user reviews and creates them through the UI before planning begins.
 
+**Complexity-driven decomposition**: For high-complexity issues, the analysis LLM can decompose the issue into 2-5 smaller subissues using the `create_issue` tool. Each subissue is linked to the parent via "Part of #N" in the body. When decomposition occurs, the analysis result includes `decomposed: true` and a `subissues` array. The UI displays these with a purple "Decomposed" badge and links to the created subissues. Decomposed issues skip the planning and execution stages — each subissue is worked on independently.
+
+The `update_issue` and `close_issue` tools are also available during analysis, but restricted to issues created in the current session (the agent cannot modify arbitrary issues).
+
 ### 2. Plan Generation (`src/data/generatePlan.ts`)
 
 The planner takes the analysis result, available agents, and available skills, then produces a step-by-step execution plan. It uses the planning model with structured output.
@@ -124,17 +128,21 @@ The analysis stage recommends both skills and agents. The user reviews these rec
 
 ## Tool Sandbox
 
-Seven tools are available. Six are file/shell operations implemented as Tauri commands in Rust (`src-tauri/src/agent_tools.rs`), plus the `use_skill` tool which loads workspace skills on demand:
+Eleven tools are available. Six are file/shell operations implemented as Tauri commands in Rust (`src-tauri/src/agent_tools.rs`). Two are always-on interaction tools. Three are GitHub issue tools available only during analysis:
 
-| Tool | LLM Name | Description | Dangerous |
-|------|----------|-------------|-----------|
-| Read | `read_file` | Read a file's contents | No |
-| Write | `write_file` | Create or overwrite a file | Yes |
-| Edit | `edit_file` | Find-and-replace text in a file (old_text must be unique) | Yes |
-| Glob | `glob` | Find files matching a glob pattern | No |
-| Grep | `grep` | Search file contents with regex | No |
-| Bash | `bash` | Run a shell command | Yes |
-| Skill | `use_skill` | Load a skill's content by name (with optional arguments) | No |
+| Tool | LLM Name | Description | Dangerous | Availability |
+|------|----------|-------------|-----------|-------------|
+| Read | `read_file` | Read a file's contents | No | All phases |
+| Write | `write_file` | Create or overwrite a file | Yes | All phases |
+| Edit | `edit_file` | Find-and-replace text in a file (old_text must be unique) | Yes | All phases |
+| Glob | `glob` | Find files matching a glob pattern | No | All phases |
+| Grep | `grep` | Search file contents with regex | No | All phases |
+| Bash | `bash` | Run a shell command | Yes | All phases |
+| Skill | `use_skill` | Load a skill's content by name (with optional arguments) | No | All phases |
+| Ask User | `ask_user` | Ask the user a clarifying question | No | All phases |
+| Create Issue | `create_issue` | Create a GitHub subissue linked to the parent | Yes | Analysis only |
+| Update Issue | `update_issue` | Update a subissue's title or body (session-scoped) | Yes | Analysis only |
+| Close Issue | `close_issue` | Close a subissue created in this session | Yes | Analysis only |
 
 **Sandbox enforcement**: All file operations go through `sandbox_resolve`, which canonicalizes paths and verifies they do not escape the worktree root. For non-existent paths (write targets), it walks up to the nearest existing ancestor and validates that ancestor is within the sandbox.
 
