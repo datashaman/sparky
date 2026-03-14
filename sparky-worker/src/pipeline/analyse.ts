@@ -98,7 +98,7 @@ async function resolveWorktreePath(repoFullName: string, issueNumber: number, _t
 }
 
 function buildAnalysisSystemPrompt(skills: { name: string; description: string | null }[], agents: { name: string; description: string }[]): string {
-  const toolNames = "List Files, Read, Write, Edit, Glob, Grep, Bash, Skill, Ask User";
+  const toolNames = "List Files, Read, Glob, Grep, Bash, Skill, Ask User";
   return `You are a senior software engineer analysing a GitHub issue. Provide a concise, structured analysis. Be direct and practical. No filler.
 
 ## Tools available to you during analysis

@@ -12,12 +12,12 @@ export interface GrepMatch {
 export function listFiles(worktreePath: string, dirPath: string = "."): string[] {
   const root = realpathSync(worktreePath);
   const target = realpathSync(join(root, dirPath));
-  if (!target.startsWith(root)) {
+  if (!target.startsWith(root + "/") && target !== root) {
     throw new Error("Path is outside the worktree.");
   }
   const entries = readdirSync(target, { withFileTypes: true });
   return entries
-    .filter((e) => !e.name.startsWith(".git") || e.name === ".gitignore")
+    .filter((e) => e.name !== ".git")
     .map((e) => {
       const rel = relative(root, join(target, e.name));
       return e.isDirectory() ? `${rel}/` : rel;

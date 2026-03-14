@@ -12,7 +12,7 @@ List files and directories in a given path.
 | **Returns** | Newline-separated entries; directories have trailing `/` |
 | **Dangerous** | No |
 
-Hides `.git` directory. Results are sorted alphabetically and truncated at 10,000 characters.
+Hides the `.git` directory only (other dotfiles like `.gitignore`, `.gitmodules` are visible). Results are sorted alphabetically and truncated at 10,000 characters.
 
 ## read_file
 

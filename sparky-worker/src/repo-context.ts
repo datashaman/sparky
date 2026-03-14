@@ -1,4 +1,4 @@
-import { readFileSync, existsSync } from "node:fs";
+import { readFileSync, lstatSync, realpathSync } from "node:fs";
 import { join } from "node:path";
 
 /**
@@ -21,11 +21,28 @@ const MAX_FILE_SIZE = 8000;
  * or an empty string if no docs are found.
  */
 export function readRepoContext(worktreePath: string): string {
+  const root = realpathSync(worktreePath);
   const sections: string[] = [];
 
   for (const filename of CONTEXT_FILES) {
-    const filepath = join(worktreePath, filename);
-    if (!existsSync(filepath)) continue;
+    const filepath = join(root, filename);
+
+    // Reject symlinks to prevent reading files outside the worktree
+    try {
+      const stat = lstatSync(filepath);
+      if (stat.isSymbolicLink()) continue;
+      if (!stat.isFile()) continue;
+    } catch {
+      continue;
+    }
+
+    // Verify resolved path stays inside worktree
+    try {
+      const resolved = realpathSync(filepath);
+      if (!resolved.startsWith(root + "/") && resolved !== root) continue;
+    } catch {
+      continue;
+    }
 
     try {
       let content = readFileSync(filepath, "utf-8").trim();
