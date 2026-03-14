@@ -1,9 +1,12 @@
+use tauri::Manager;
+
 mod agent_tools;
 mod execution_log;
 mod git_ops;
 mod github_auth;
 mod litellm_proxy;
 mod ollama_proxy;
+mod worker_manager;
 
 #[tauri::command]
 async fn github_start_device_flow() -> Result<github_auth::DeviceFlowResult, String> {
@@ -31,6 +34,21 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_sql::Builder::default().build())
+        .setup(|app| {
+            let app_data_dir = app
+                .path()
+                .app_config_dir()
+                .expect("failed to resolve app config dir");
+            let resource_dir = app
+                .path()
+                .resource_dir()
+                .expect("failed to resolve resource dir");
+            app.manage(worker_manager::WorkerState::new(
+                app_data_dir,
+                resource_dir,
+            ));
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             github_start_device_flow,
             github_poll_token,
@@ -52,6 +70,9 @@ pub fn run() {
             ollama_proxy::ollama_list_models,
             litellm_proxy::litellm_chat,
             litellm_proxy::litellm_list_models,
+            worker_manager::worker_ensure_running,
+            worker_manager::worker_send,
+            worker_manager::worker_subscribe,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
