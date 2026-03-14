@@ -24,6 +24,23 @@ import { createAskUserHandler } from "../tools/ask-user-tool.js";
 import { isSessionCancelled } from "../session-manager.js";
 import { readRepoContext } from "../repo-context.js";
 
+const FINALIZE_TITLE = "Commit changes and create pull request";
+
+function makeFinalizeStep(existingSteps: ExecutionPlanStep[]): ExecutionPlanStep {
+  const lastOrder = existingSteps.length > 0 ? Math.max(...existingSteps.map((s) => s.order)) : 0;
+  return {
+    order: lastOrder + 1,
+    title: FINALIZE_TITLE,
+    description:
+      "Review what changed with 'git diff --stat', then call create_pull_request with a clear title and body describing the changes. If no changes exist, report STATUS: DONE.",
+    agent_name: null,
+    expected_output: "A pull request URL or confirmation that no changes were needed.",
+    depends_on: existingSteps.map((s) => s.order),
+    verification_command: null,
+    done_when: "A pull request has been created, or no changes exist.",
+  };
+}
+
 export interface ExecutionPipelineOpts {
   sessionId: string;
   payload: StartSessionPayload;
@@ -74,20 +91,8 @@ export async function runExecutionPipeline(opts: ExecutionPipelineOpts): Promise
   let steps = [...planResult.steps];
 
   // Inject finalize step: commit + push + create PR
-  const FINALIZE_TITLE = "Commit changes and create pull request";
   if (config.github_token && !steps.some((s) => s.title === FINALIZE_TITLE)) {
-    const lastOrder = steps.length > 0 ? Math.max(...steps.map((s) => s.order)) : 0;
-    steps.push({
-      order: lastOrder + 1,
-      title: FINALIZE_TITLE,
-      description:
-        "Review what changed with 'git diff --stat', then call create_pull_request with a clear title and body describing the changes. If no changes exist, report STATUS: DONE.",
-      agent_name: null,
-      expected_output: "A pull request URL or confirmation that no changes were needed.",
-      depends_on: steps.map((s) => s.order),
-      verification_command: null,
-      done_when: "A pull request has been created, or no changes exist.",
-    });
+    steps.push(makeFinalizeStep(steps));
   }
 
   const issueContext = `${payload.issue_title} (#${payload.issue_number}) in ${payload.repo_full_name}${payload.issue_body ? `\n${payload.issue_body}` : ""}`;
@@ -340,18 +345,7 @@ export async function runExecutionPipeline(opts: ExecutionPipelineOpts): Promise
 
             // Re-append finalize step if replanning removed it
             if (config.github_token && !steps.some((s) => s.title === FINALIZE_TITLE)) {
-              const lastOrder = Math.max(...steps.map((s) => s.order));
-              const finalizeStep: ExecutionPlanStep = {
-                order: lastOrder + 1,
-                title: FINALIZE_TITLE,
-                description:
-                  "Review what changed with 'git diff --stat', then call create_pull_request with a clear title and body describing the changes. If no changes exist, report STATUS: DONE.",
-                agent_name: null,
-                expected_output: "A pull request URL or confirmation that no changes were needed.",
-                depends_on: steps.map((s) => s.order),
-                verification_command: null,
-                done_when: "A pull request has been created, or no changes exist.",
-              };
+              const finalizeStep = makeFinalizeStep(steps);
               steps.push(finalizeStep);
               newSteps.push(finalizeStep);
             }
