@@ -15,6 +15,7 @@ export const TOOLS: ToolDef[] = [
   { id: "glob", name: "Glob", description: "Find files matching a pattern", dangerous: false },
   { id: "grep", name: "Grep", description: "Search file contents with regex", dangerous: false },
   { id: "bash", name: "Bash", description: "Run a shell command", dangerous: true },
+  { id: "use_skill", name: "Skill", description: "Load a skill by name for domain-specific knowledge", dangerous: false },
 ];
 
 /** LLM-facing tool definitions with parameter schemas for function calling. */
@@ -95,6 +96,19 @@ export const TOOL_SCHEMAS: LLMToolDef[] = [
       additionalProperties: false,
     },
   },
+  {
+    name: "use_skill",
+    description: "Load a skill by name. Skills provide domain-specific knowledge and instructions. Call this when a skill's expertise is relevant to your current task. Returns the skill's content.",
+    parameters: {
+      type: "object",
+      properties: {
+        skill_name: { type: "string", description: "Name of the skill to load (e.g. react-state-management)" },
+        arguments: { type: "string", description: "Optional arguments to pass to the skill" },
+      },
+      required: ["skill_name"],
+      additionalProperties: false,
+    },
+  },
 ];
 
 /** Map tool IDs (read, write, etc.) to schema names (read_file, write_file, etc.) */
@@ -105,11 +119,13 @@ const TOOL_ID_TO_SCHEMA_NAME: Record<string, string> = {
   glob: "glob",
   grep: "grep",
   bash: "bash",
+  use_skill: "use_skill",
 };
 
-/** Filter TOOL_SCHEMAS to only those allowed by the given tool IDs. */
+/** Filter TOOL_SCHEMAS to only those allowed by the given tool IDs. use_skill is always included. */
 export function filterToolSchemas(toolIds: string[]): LLMToolDef[] {
   const allowedNames = new Set(toolIds.map((id) => TOOL_ID_TO_SCHEMA_NAME[id]).filter(Boolean));
+  allowedNames.add("use_skill");
   return TOOL_SCHEMAS.filter((t) => allowedNames.has(t.name));
 }
 
@@ -120,12 +136,14 @@ function truncate(s: string): string {
   return s.slice(0, MAX_RESULT_LENGTH) + `\n... (truncated, ${s.length} chars total)`;
 }
 
+export type SkillResolver = (skillName: string, args?: string) => string | null;
+
 /**
  * Create a tool call handler that bridges LLM tool calls to Tauri invoke commands.
  * The handler takes a tool name and input, executes the corresponding Tauri command,
  * and returns the result as a string.
  */
-export function createToolCallHandler(worktreePath: string): (name: string, input: Record<string, unknown>) => Promise<string> {
+export function createToolCallHandler(worktreePath: string, skillResolver?: SkillResolver): (name: string, input: Record<string, unknown>) => Promise<string> {
   return async (name: string, input: Record<string, unknown>): Promise<string> => {
     try {
       switch (name) {
@@ -179,6 +197,14 @@ export function createToolCallHandler(worktreePath: string): (name: string, inpu
           if (result.stderr) output += (output ? "\n" : "") + "STDERR: " + result.stderr;
           output += (output ? "\n" : "") + `Exit code: ${result.exit_code}`;
           return truncate(output);
+        }
+        case "use_skill": {
+          if (!skillResolver) return "Error: no skills available in this context.";
+          const skillName = input.skill_name as string;
+          const args = input.arguments as string | undefined;
+          const content = skillResolver(skillName, args);
+          if (content === null) return `Error: skill "${skillName}" not found. Check the available skill names.`;
+          return content;
         }
         default:
           return `Unknown tool: ${name}`;

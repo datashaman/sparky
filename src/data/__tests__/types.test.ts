@@ -11,7 +11,6 @@ describe('types (compile-time shape validation)', () => {
           title: 'Step 1',
           description: 'Do something',
           agent_name: null,
-          skill_names: [],
           expected_output: 'output',
           depends_on: [],
         },

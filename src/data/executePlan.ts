@@ -1,5 +1,5 @@
 import { getDefaultProvider, getDefaultModel, getExecProvider, getExecModel, getApiKey } from "../components/UserSettings";
-import { listAgentsForWorkspace, getToolIdsForAgent, getSkillIdsForAgent } from "./agents";
+import { listAgentsForWorkspace, getToolIdsForAgent } from "./agents";
 import { listSkillsForWorkspace } from "./skills";
 import { ensureWorktree } from "./issueWorktrees";
 import { callLLMWithTools, KEYLESS_PROVIDERS } from "./llm";
@@ -8,7 +8,6 @@ import type {
   ExecutionPlanResult,
   StepExecutionStatus,
   Agent,
-  Skill,
   IssueWorktree,
 } from "./types";
 import { checkNeedReplan, regenerateRemainingSteps } from "./replanCheck";
@@ -60,7 +59,6 @@ export async function executePlan(opts: ExecutePlanOpts): Promise<void> {
   );
 
   const worktreePath = worktree.path;
-  const toolHandler = createToolCallHandler(worktreePath);
 
   // Load workspace agents and skills
   const [wsAgents, wsSkills] = await Promise.all([
@@ -70,6 +68,15 @@ export async function executePlan(opts: ExecutePlanOpts): Promise<void> {
 
   const agentsByName = new Map(wsAgents.map((a) => [a.name, a]));
   const skillsByName = new Map(wsSkills.map((s) => [s.name, s]));
+
+  // Skill resolver for the use_skill tool
+  const skillResolver = (skillName: string, args?: string): string | null => {
+    const skill = skillsByName.get(skillName);
+    if (!skill?.content) return null;
+    return args ? `${skill.content}\n\n## Arguments\n${args}` : skill.content;
+  };
+
+  const toolHandler = createToolCallHandler(worktreePath, skillResolver);
 
   // Track step outputs for context passing
   const stepOutputs = new Map<number, string>();
@@ -110,9 +117,6 @@ export async function executePlan(opts: ExecutePlanOpts): Promise<void> {
       let toolSchemas = TOOL_SCHEMAS;
       let agentContent = "";
 
-      // Build effective skill names list (without mutating the plan model)
-      const effectiveSkillNames = [...step.skill_names];
-
       if (step.agent_name) {
         agent = agentsByName.get(step.agent_name);
         if (agent) {
@@ -132,28 +136,8 @@ export async function executePlan(opts: ExecutePlanOpts): Promise<void> {
           } else {
             toolSchemas = filterToolSchemas(["read", "glob", "grep"]);
           }
-
-          // Load agent's skills too
-          const agentSkillIds = await getSkillIdsForAgent(agent.id);
-          const agentSkills = agentSkillIds
-            .map((id) => wsSkills.find((s) => s.id === id))
-            .filter((s): s is Skill => !!s);
-          for (const s of agentSkills) {
-            if (!effectiveSkillNames.includes(s.name) && s.content) {
-              effectiveSkillNames.push(s.name);
-            }
-          }
         }
       }
-
-      // Gather skill content
-      const skillContext = effectiveSkillNames
-        .map((name) => {
-          const skill = skillsByName.get(name);
-          return skill?.content ? `## Skill: ${skill.name}\n${skill.content}` : null;
-        })
-        .filter(Boolean)
-        .join("\n\n");
 
       // Build context from dependent step outputs
       const depsContext = step.depends_on
@@ -180,8 +164,13 @@ export async function executePlan(opts: ExecutePlanOpts): Promise<void> {
         systemParts.push("", "## Agent Instructions", agentContent);
       }
 
-      if (skillContext) {
-        systemParts.push("", skillContext);
+      // List available skills so the LLM knows what it can call via use_skill
+      if (wsSkills.length > 0) {
+        systemParts.push("", "## Available Skills");
+        systemParts.push("Call `use_skill(skill_name, arguments?)` to load a skill's content. Skills accept optional arguments to customize their output.");
+        for (const s of wsSkills) {
+          systemParts.push(`- **${s.name}**: ${s.description || "(no description)"}`);
+        }
       }
 
       const systemPrompt = systemParts.join("\n");

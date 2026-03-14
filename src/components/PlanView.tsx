@@ -93,13 +93,6 @@ export function PlanView({ result, criticReview, stepStatuses, executing, execut
                 {step.agent_name && <span className="pv-step-agent">{step.agent_name}</span>}
               </div>
               <p className="pv-step-description">{step.description}</p>
-              {step.skill_names.length > 0 && (
-                <div className="pv-step-skills">
-                  {step.skill_names.map((s) => (
-                    <span key={s} className="pv-skill-pill">{s}</span>
-                  ))}
-                </div>
-              )}
               <div className="pv-step-output">
                 <span className="pv-step-output-label">Expected output:</span> {step.expected_output}
               </div>
