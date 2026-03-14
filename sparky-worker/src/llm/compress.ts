@@ -6,8 +6,9 @@ import type { LogCallback } from "./index.js";
 
 const TRUNCATE_THRESHOLD = 2048;
 const SUMMARIZE_THRESHOLD = 256;
-const ASSISTANT_TEXT_PREVIEW_LENGTH = 200;
-const ASSISTANT_TEXT_OMIT_OVERSHOOT = 20;
+const ASSISTANT_TEXT_PREVIEW_LENGTH = 500;
+const ASSISTANT_TEXT_OMIT_OVERSHOOT = 30;
+const ASSISTANT_TEXT_MIN_LENGTH = 1000;
 const ASSISTANT_TEXT_OMITTED = "[assistant reasoning omitted]";
 const ASSISTANT_TEXT_SUFFIX = "\n... (assistant text compressed)";
 
@@ -142,7 +143,7 @@ function compressAssistantText(msg: any, provider: AgentProvider, currentPct: nu
     if (msg.role !== "model" || !Array.isArray(msg.parts)) return 0;
     let count = 0;
     for (const part of msg.parts) {
-      if (!part.text || typeof part.text !== "string" || part.text.length < SUMMARIZE_THRESHOLD) continue;
+      if (!part.text || typeof part.text !== "string" || part.text.length < ASSISTANT_TEXT_MIN_LENGTH) continue;
       part.text = compressAssistantContent(part.text, overshoot);
       count++;
     }
@@ -154,7 +155,7 @@ function compressAssistantText(msg: any, provider: AgentProvider, currentPct: nu
     if (msg.role !== "assistant" || !Array.isArray(msg.content)) return 0;
     let count = 0;
     for (const block of msg.content) {
-      if (block.type !== "text" || typeof block.text !== "string" || block.text.length < SUMMARIZE_THRESHOLD) continue;
+      if (block.type !== "text" || typeof block.text !== "string" || block.text.length < ASSISTANT_TEXT_MIN_LENGTH) continue;
       block.text = compressAssistantContent(block.text, overshoot);
       count++;
     }
@@ -162,7 +163,7 @@ function compressAssistantText(msg: any, provider: AgentProvider, currentPct: nu
   }
 
   // OpenAI-compatible: assistant messages with content string
-  if (msg.role !== "assistant" || typeof msg.content !== "string" || msg.content.length < SUMMARIZE_THRESHOLD) return 0;
+  if (msg.role !== "assistant" || typeof msg.content !== "string" || msg.content.length < ASSISTANT_TEXT_MIN_LENGTH) return 0;
   msg.content = compressAssistantContent(msg.content, overshoot);
   return 1;
 }
