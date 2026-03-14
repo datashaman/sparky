@@ -278,6 +278,19 @@ export async function runExecutionPipeline(opts: ExecutionPipelineOpts): Promise
         conversation_state: JSON.stringify({ messages, turn: actualTurn }),
       });
 
+      // Parse structured status from output
+      const stepStatus = parseStepStatus(output);
+      stepLog({
+        type: "info",
+        message: `Step completed: ${stepStatus.status}${stepStatus.reason ? ` — ${stepStatus.reason}` : ""}`,
+      });
+
+      if (stepStatus.status === "blocked") {
+        // Log as warning but don't fail — the step produced output that downstream
+        // steps may still use, and replanning can handle the gap.
+        stepLog({ type: "info", message: `Step reported BLOCKED: ${stepStatus.reason}` });
+      }
+
       stepOutputs.set(step.order, output);
       onStepUpdate(step.order, "done", output);
 
@@ -321,6 +334,27 @@ export async function runExecutionPipeline(opts: ExecutionPipelineOpts): Promise
   if (payload.plan_id) {
     updateExistingTable("execution_plans", payload.plan_id, { status: "done" });
   }
+}
+
+/**
+ * Parse the STATUS: DONE/BLOCKED pattern from step output.
+ * Falls back to "done" if no explicit status is found.
+ */
+function parseStepStatus(output: string): { status: "done" | "blocked"; reason?: string } {
+  // Check for STATUS: BLOCKED first (more specific)
+  const blockedMatch = output.match(/STATUS:\s*BLOCKED\b[:\s-]*(.*)/i);
+  if (blockedMatch) {
+    return { status: "blocked", reason: blockedMatch[1]?.trim() || "No reason provided" };
+  }
+
+  // Check for STATUS: DONE
+  const doneMatch = output.match(/STATUS:\s*DONE\b/i);
+  if (doneMatch) {
+    return { status: "done" };
+  }
+
+  // No explicit status — assume done (the model completed without reporting)
+  return { status: "done" };
 }
 
 async function resolveWorktreePath(repoFullName: string, issueNumber: number): Promise<string> {
