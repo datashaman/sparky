@@ -50,7 +50,7 @@
     "active": true,
     "targets": "all",
     "resources": [
-      "../sparky-worker/dist/*"
+      "../sparky-worker/dist/**/*"
     ],
     "icon": [
       "icons/32x32.png",

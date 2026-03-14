@@ -4,6 +4,7 @@ import { callLLM, callLLMWithTools, KEYLESS_PROVIDERS } from "../llm/index.js";
 import { TOOL_SCHEMAS, createToolHandler } from "../tools/index.js";
 import { buildSkillResolver } from "../tools/skill-tool.js";
 import { createAskUserHandler } from "../tools/ask-user-tool.js";
+import { isSessionCancelled } from "../session-manager.js";
 import { extractJSON } from "../util.js";
 
 const TOOL_IDS = ["read_file", "glob", "grep", "bash", "ask_user", "use_skill"];
@@ -25,6 +26,7 @@ export async function runPlanPipeline(opts: PlanPipelineOpts): Promise<void> {
 
   if (!provider || !modelId) throw new Error("No default provider/model configured.");
   if (!apiKey && !KEYLESS_PROVIDERS.has(provider)) throw new Error(`No API key for ${provider}.`);
+  if (isSessionCancelled(sessionId)) return;
 
   const analysisResult = payload.analysis_result;
   if (!analysisResult) throw new Error("Plan generation requires an analysis result.");

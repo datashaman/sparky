@@ -2,6 +2,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use tauri::{AppHandle, Emitter, Manager};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+use tokio::net::unix::OwnedWriteHalf;
 use tokio::net::UnixStream;
 use tokio::sync::Mutex;
 
@@ -10,7 +11,8 @@ pub struct WorkerState {
     socket_path: PathBuf,
     db_path: PathBuf,
     worker_script: PathBuf,
-    connection: Arc<Mutex<Option<UnixStream>>>,
+    /// Write half for sending commands to the worker.
+    writer: Arc<Mutex<Option<OwnedWriteHalf>>>,
 }
 
 impl WorkerState {
@@ -19,7 +21,7 @@ impl WorkerState {
             socket_path: app_data_dir.join("sparky.sock"),
             db_path: app_data_dir.join("sparky.db"),
             worker_script: resource_dir.join("sparky-worker").join("dist").join("main.js"),
-            connection: Arc::new(Mutex::new(None)),
+            writer: Arc::new(Mutex::new(None)),
         }
     }
 }
@@ -50,13 +52,7 @@ fn start_tmux_session(
     );
 
     let status = std::process::Command::new("tmux")
-        .args([
-            "new-session",
-            "-d",
-            "-s",
-            session_name,
-            &cmd,
-        ])
+        .args(["new-session", "-d", "-s", session_name, &cmd])
         .status()
         .map_err(|e| format!("Failed to start tmux: {}", e))?;
 
@@ -73,6 +69,7 @@ fn shell_escape(s: &str) -> String {
 const SESSION_NAME: &str = "sparky-worker";
 
 /// Ensure the worker process is running in tmux and connect to its socket.
+/// Waits for the socket connection before returning.
 #[tauri::command]
 pub async fn worker_ensure_running(app: AppHandle) -> Result<String, String> {
     let state = app.state::<WorkerState>();
@@ -83,14 +80,8 @@ pub async fn worker_ensure_running(app: AppHandle) -> Result<String, String> {
             .worker_script
             .to_str()
             .ok_or("Invalid worker script path")?;
-        let db = state
-            .db_path
-            .to_str()
-            .ok_or("Invalid db path")?;
-        let sock = state
-            .socket_path
-            .to_str()
-            .ok_or("Invalid socket path")?;
+        let db = state.db_path.to_str().ok_or("Invalid db path")?;
+        let sock = state.socket_path.to_str().ok_or("Invalid socket path")?;
 
         // Remove stale socket file
         let _ = std::fs::remove_file(&state.socket_path);
@@ -98,38 +89,54 @@ pub async fn worker_ensure_running(app: AppHandle) -> Result<String, String> {
         start_tmux_session(SESSION_NAME, script, db, sock)?;
     }
 
-    // Connect to socket with retry
+    // Connect to socket with retry — await until connected
     let sock_path = state.socket_path.clone();
-    let conn = state.connection.clone();
+    for attempt in 0..10 {
+        tokio::time::sleep(tokio::time::Duration::from_millis(500 * (attempt + 1))).await;
+        match UnixStream::connect(&sock_path).await {
+            Ok(stream) => {
+                let (reader, writer) = stream.into_split();
 
-    tokio::spawn(async move {
-        for attempt in 0..10 {
-            tokio::time::sleep(tokio::time::Duration::from_millis(500 * (attempt + 1))).await;
-            match UnixStream::connect(&sock_path).await {
-                Ok(stream) => {
-                    let mut guard = conn.lock().await;
-                    *guard = Some(stream);
-                    return;
+                // Store writer for worker_send
+                {
+                    let mut guard = state.writer.lock().await;
+                    *guard = Some(writer);
                 }
-                Err(_) if attempt < 9 => continue,
-                Err(e) => {
-                    eprintln!("[worker_manager] failed to connect after retries: {}", e);
-                }
+
+                // Spawn background reader that emits Tauri events
+                let app_handle = app.clone();
+                tokio::spawn(async move {
+                    let buf_reader = BufReader::new(reader);
+                    let mut lines = buf_reader.lines();
+
+                    while let Ok(Some(line)) = lines.next_line().await {
+                        let trimmed = line.trim();
+                        if trimmed.is_empty() {
+                            continue;
+                        }
+                        let _ = app_handle.emit("worker-event", trimmed.to_string());
+                    }
+                });
+
+                return Ok("Worker connected".into());
+            }
+            Err(_) if attempt < 9 => continue,
+            Err(e) => {
+                return Err(format!("Failed to connect to worker after retries: {}", e));
             }
         }
-    });
+    }
 
-    Ok("Worker starting".into())
+    Err("Failed to connect to worker socket".into())
 }
 
 /// Send a JSON command to the worker via the Unix socket.
 #[tauri::command]
 pub async fn worker_send(app: AppHandle, message: String) -> Result<(), String> {
     let state = app.state::<WorkerState>();
-    let conn = state.connection.clone();
-    let mut guard = conn.lock().await;
+    let mut guard = state.writer.lock().await;
 
-    let stream = guard
+    let writer = guard
         .as_mut()
         .ok_or("Worker not connected. Call worker_ensure_running first.")?;
 
@@ -139,7 +146,7 @@ pub async fn worker_send(app: AppHandle, message: String) -> Result<(), String> 
         format!("{}\n", message)
     };
 
-    stream
+    writer
         .write_all(msg.as_bytes())
         .await
         .map_err(|e| format!("Failed to send to worker: {}", e))?;
@@ -147,49 +154,10 @@ pub async fn worker_send(app: AppHandle, message: String) -> Result<(), String> 
     Ok(())
 }
 
-/// Subscribe to worker events by reading from the Unix socket and emitting Tauri events.
-/// This should be called once after connecting. It runs in the background.
+/// Subscribe to worker events. Now handled automatically by worker_ensure_running,
+/// which spawns a background reader. This command is kept for backward compatibility.
 #[tauri::command]
-pub async fn worker_subscribe(app: AppHandle) -> Result<(), String> {
-    let state = app.state::<WorkerState>();
-    let conn_arc = state.connection.clone();
-    let app_handle = app.clone();
-
-    tokio::spawn(async move {
-        loop {
-            // Wait for connection
-            let stream = {
-                let mut guard = conn_arc.lock().await;
-                guard.take()
-            };
-
-            let Some(stream) = stream else {
-                tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
-                continue;
-            };
-
-            let (reader, _writer) = stream.into_split();
-            let buf_reader = BufReader::new(reader);
-            let mut lines = buf_reader.lines();
-
-            // Store writer back so worker_send can use it
-            // We need a new connection for sending; this one is consumed by the reader
-            // Actually, for simplicity let's reconnect for sends
-            // The read half handles events, writes go through a separate connection
-
-            while let Ok(Some(line)) = lines.next_line().await {
-                let trimmed = line.trim();
-                if trimmed.is_empty() {
-                    continue;
-                }
-                // Emit as Tauri event
-                let _ = app_handle.emit("worker-event", trimmed.to_string());
-            }
-
-            // Connection lost — will retry
-            tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
-        }
-    });
-
+pub async fn worker_subscribe(_app: AppHandle) -> Result<(), String> {
+    // Event subscription is now set up automatically in worker_ensure_running.
     Ok(())
 }

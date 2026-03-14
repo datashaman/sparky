@@ -194,6 +194,8 @@ export interface SessionConfig {
   exec_api_key: string;
   github_token: string;
   ask_user_timeout_minutes: number | null;
+  /** API keys by provider for agent resolution. */
+  api_keys?: Partial<Record<AgentProvider, string>>;
 }
 
 // ─── IPC Types ───

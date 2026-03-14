@@ -25,6 +25,14 @@ export async function runBash(worktreePath: string, command: string): Promise<st
     );
   }
 
+  // Reject shell metacharacters that could bypass the allowlist
+  const DANGEROUS_CHARS = /[;|&$`()<>]/;
+  if (DANGEROUS_CHARS.test(command)) {
+    throw new Error(
+      "Command contains shell metacharacters (;|&$`()<>) which are not allowed for security.",
+    );
+  }
+
   try {
     const stdout = execSync(command, {
       cwd: root,

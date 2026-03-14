@@ -1,5 +1,5 @@
-import type { IPCCommand, IPCEvent, Session } from "./types.js";
-import { listSessions, listRunningSessions, answerAskUser } from "./db.js";
+import type { IPCCommand, IPCEvent } from "./types.js";
+import { listSessions, listRunningSessions, answerAskUser, updateSession } from "./db.js";
 import { startSession, resumeSession } from "./session-runner.js";
 
 /** Active session tracking. */
@@ -14,10 +14,10 @@ export function isSessionCancelled(sessionId: string): boolean {
 export function handleCommand(command: IPCCommand, send: (event: IPCEvent) => void): void {
   switch (command.type) {
     case "start_session": {
+      // session_started is broadcast from startSession() to all clients
       startSession(command.payload)
         .then((sessionId) => {
           activeSessions.add(sessionId);
-          send({ type: "session_started", session_id: sessionId });
         })
         .catch((err) => {
           send({ type: "error", error: `Failed to start session: ${err}` });
@@ -29,7 +29,8 @@ export function handleCommand(command: IPCCommand, send: (event: IPCEvent) => vo
       const { session_id } = command.payload;
       cancelledSessions.add(session_id);
       activeSessions.delete(session_id);
-      // The running pipeline checks isSessionCancelled() periodically
+      updateSession(session_id, { status: "cancelled" });
+      // Pipelines check isSessionCancelled() at each step boundary
       send({ type: "session_complete", session_id });
       break;
     }

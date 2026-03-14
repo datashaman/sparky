@@ -10,8 +10,10 @@ import {
   updateSession,
   insertLog,
   upsertStepState,
+  getStepState,
   getStepStatesForSession,
   upsertStepResult,
+  getExistingTableRow,
 } from "./db.js";
 import { broadcast } from "./ipc.js";
 import { runAnalysisPipeline } from "./pipeline/analyse.js";
@@ -110,20 +112,39 @@ export async function resumeSession(session: Session): Promise<void> {
   const config: SessionConfig = JSON.parse(session.config);
   const logFn = createLogFn(session.id);
 
-  // Reconstruct a minimal payload from the session record
-  // The pipeline implementations should read state from DB
+  // Load analysis/plan results from existing tables for resume
+  let analysisResult: unknown | undefined;
+  let planResult: unknown | undefined;
+  let issueTitle = "";
+  let issueBody: string | null = null;
+
+  if (session.analysis_id) {
+    const row = getExistingTableRow("issue_analyses", session.analysis_id);
+    if (row?.result) {
+      try { analysisResult = JSON.parse(row.result as string); } catch { /* skip */ }
+    }
+  }
+  if (session.plan_id) {
+    const row = getExistingTableRow("execution_plans", session.plan_id);
+    if (row?.result) {
+      try { planResult = JSON.parse(row.result as string); } catch { /* skip */ }
+    }
+  }
+
   const payload: StartSessionPayload = {
     session_type: session.session_type,
     workspace_id: session.workspace_id,
     repo_full_name: session.repo_full_name,
     issue_number: session.issue_number,
-    issue_title: "", // Will be fetched from context if needed
-    issue_body: null,
+    issue_title: issueTitle,
+    issue_body: issueBody,
     issue_state: "open",
     issue_labels: [],
     config,
     analysis_id: session.analysis_id ?? undefined,
     plan_id: session.plan_id ?? undefined,
+    analysis_result: analysisResult as any,
+    plan_result: planResult as any,
   };
 
   const onStepUpdate = createStepUpdateFn(session.id, session.plan_id);
@@ -192,14 +213,15 @@ function createStepUpdateFn(
   planId: string | null,
 ): (stepOrder: number, status: string, output?: string | null, error?: string | null) => void {
   return (stepOrder, status, output, error) => {
-    // Save to session_step_state
+    // Update only status/output/error — preserve existing conversation_state
+    const existing = getStepState(sessionId, stepOrder);
     upsertStepState({
       session_id: sessionId,
       step_order: stepOrder,
       status: status as "pending" | "running" | "done" | "error",
       output: output ?? null,
       error: error ?? null,
-      conversation_state: null,
+      conversation_state: existing?.conversation_state ?? null,
     });
 
     // Also update the existing execution_step_results table for frontend compatibility

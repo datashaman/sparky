@@ -212,6 +212,12 @@ export function getPendingAskUser(sessionId: string): SessionAskUser | undefined
     .get(sessionId) as SessionAskUser | undefined;
 }
 
+export function getAskUserById(promptId: string): SessionAskUser | undefined {
+  return getDb()
+    .prepare("SELECT * FROM session_ask_user WHERE id = ?")
+    .get(promptId) as SessionAskUser | undefined;
+}
+
 export function answerAskUser(promptId: string, answer: string[]): void {
   getDb()
     .prepare("UPDATE session_ask_user SET status = 'answered', answer = ?, answered_at = ? WHERE id = ?")
@@ -284,6 +290,12 @@ export function getSkillIdsForAgent(agentId: string): string[] {
 }
 
 // ─── Existing table reads (for analysis/plan status updates) ───
+
+export function getExistingTableRow(table: string, id: string): Record<string, unknown> | undefined {
+  return getDb()
+    .prepare(`SELECT * FROM ${table} WHERE id = ?`)
+    .get(id) as Record<string, unknown> | undefined;
+}
 
 export function updateExistingTable(table: string, id: string, updates: Record<string, unknown>): void {
   const allowed = new Set(["status", "result", "error"]);

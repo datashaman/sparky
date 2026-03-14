@@ -128,7 +128,12 @@ export async function runExecutionPipeline(opts: ExecutionPipelineOpts): Promise
         if (agent) {
           provider = agent.provider;
           modelId = agent.model;
-          apiKey = config.exec_api_key; // fallback
+          // Resolve API key for the agent's provider
+          const agentKey = config.api_keys?.[agent.provider] ?? (agent.provider === execProvider ? execApiKey : config.default_api_key);
+          if (!agentKey && !KEYLESS_PROVIDERS.has(agent.provider)) {
+            throw new Error(`No API key for agent provider ${agent.provider} (agent: ${agent.name}).`);
+          }
+          apiKey = agentKey;
           if (agent.content) agentContent = agent.content;
 
           const agentToolIds = getToolIdsForAgent(agent.id);
@@ -213,14 +218,15 @@ export async function runExecutionPipeline(opts: ExecutionPipelineOpts): Promise
         existingMessages,
       });
 
-      // Checkpoint after completion
+      // Checkpoint after completion — derive actual turn from message count
+      const actualTurn = Math.ceil(messages.length / 2);
       upsertStepState({
         session_id: sessionId,
         step_order: step.order,
         status: "done",
         output,
         error: null,
-        conversation_state: JSON.stringify({ messages, turn: maxTurns }),
+        conversation_state: JSON.stringify({ messages, turn: actualTurn }),
       });
 
       stepOutputs.set(step.order, output);

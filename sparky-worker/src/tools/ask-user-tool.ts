@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { insertAskUser, getPendingAskUser, timeoutAskUser } from "../db.js";
+import { insertAskUser, getAskUserById, timeoutAskUser } from "../db.js";
 import { broadcast } from "../ipc.js";
 import type { AskUserHandler, AskUserRequest } from "./index.js";
 
@@ -41,7 +41,7 @@ export function createAskUserHandler(
       allow_multiple: request.allowMultiple,
     });
 
-    // Poll DB for answer
+    // Poll DB for answer by specific promptId
     const deadline = timeoutMinutes
       ? Date.now() + timeoutMinutes * 60 * 1000
       : null;
@@ -49,23 +49,13 @@ export function createAskUserHandler(
     while (true) {
       await sleep(2000);
 
-      const prompt = getPendingAskUser(sessionId);
+      const prompt = getAskUserById(promptId);
+      if (!prompt) return [];
 
-      // If the prompt no longer exists or is answered
-      if (!prompt || prompt.id !== promptId) {
-        // Check if it was answered
-        const { getDb } = await import("../db.js");
-        const resolved = getDb()
-          .prepare("SELECT * FROM session_ask_user WHERE id = ?")
-          .get(promptId) as { status: string; answer: string | null } | undefined;
-
-        if (resolved?.status === "answered" && resolved.answer) {
-          return JSON.parse(resolved.answer) as string[];
-        }
-        if (resolved?.status === "timeout") {
-          return [];
-        }
-        // Answered or gone — return empty
+      if (prompt.status === "answered" && prompt.answer) {
+        return JSON.parse(prompt.answer) as string[];
+      }
+      if (prompt.status === "timeout") {
         return [];
       }
 
