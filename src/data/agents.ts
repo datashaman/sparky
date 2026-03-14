@@ -1,24 +1,11 @@
 import { isTauri } from "@tauri-apps/api/core";
 import { getDb } from "../db";
 import type { Agent, AgentProvider } from "./types";
+import { validateSlug, firstParagraph } from "./shared";
 
-const SLUG_REGEX = /^[a-z0-9\-]*$/;
-
-export function validateAgentSlug(name: string): boolean {
-  return SLUG_REGEX.test(name);
-}
+export const validateAgentSlug = validateSlug;
 
 export const AGENT_PROVIDERS: AgentProvider[] = ["openai", "anthropic", "gemini", "ollama", "openrouter", "litellm"];
-
-/** Extract the first non-empty paragraph from markdown content. */
-function firstParagraph(content: string | null | undefined): string | null {
-  if (!content) return null;
-  const para = content
-    .split(/\n\s*\n/)
-    .map((p) => p.replace(/^#+\s+/gm, "").trim())
-    .find((p) => p.length > 0);
-  return para || null;
-}
 
 export const AGENT_MODELS: Record<AgentProvider, string[]> = {
   openai: ["gpt-5.4", "gpt-5.2", "gpt-5-mini", "o4-mini", "o3", "o3-mini", "gpt-4.1", "gpt-4.1-mini", "gpt-4o", "gpt-4o-mini"],

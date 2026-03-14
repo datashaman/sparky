@@ -12,47 +12,47 @@ export const LITELLM_BASE_URL = "http://localhost:4000/v1";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
-/** Call LiteLLM via Tauri backend proxy to bypass CORS, or direct fetch in non-Tauri mode. */
-async function litellmFetch(body: string, apiKey: string): Promise<{ status: number; data: any }> {
+/** Parse a Tauri proxy response body as JSON, falling back to a raw wrapper. */
+function parseProxyBody(body: string): any {
+  try {
+    return JSON.parse(body);
+  } catch {
+    return { raw: body };
+  }
+}
+
+/** Call a local LLM proxy via Tauri backend (to bypass CORS), or direct fetch in non-Tauri mode. */
+async function localProxyFetch(
+  body: string,
+  opts: { tauriCommand: string; tauriArgs: Record<string, unknown>; fallbackUrl: string; apiKey?: string },
+): Promise<{ status: number; data: any }> {
   if (isTauri()) {
-    const res = await invoke<{ status: number; body: string }>("litellm_chat", { body, apiKey });
-    let data: any;
-    try {
-      data = JSON.parse(res.body);
-    } catch {
-      data = { raw: res.body };
-    }
-    return { status: res.status, data };
+    const res = await invoke<{ status: number; body: string }>(opts.tauriCommand, opts.tauriArgs);
+    return { status: res.status, data: parseProxyBody(res.body) };
   }
   const headers: Record<string, string> = { "content-type": "application/json" };
-  if (apiKey) headers.authorization = `Bearer ${apiKey}`;
-  const res = await fetch(`${LITELLM_BASE_URL}/chat/completions`, {
-    method: "POST",
-    headers,
-    body,
-  });
+  if (opts.apiKey) headers.authorization = `Bearer ${opts.apiKey}`;
+  const res = await fetch(opts.fallbackUrl, { method: "POST", headers, body });
   return { status: res.status, data: await res.json() };
+}
+
+/** Call LiteLLM via Tauri backend proxy to bypass CORS, or direct fetch in non-Tauri mode. */
+async function litellmFetch(body: string, apiKey: string): Promise<{ status: number; data: any }> {
+  return localProxyFetch(body, {
+    tauriCommand: "litellm_chat",
+    tauriArgs: { body, apiKey },
+    fallbackUrl: `${LITELLM_BASE_URL}/chat/completions`,
+    apiKey,
+  });
 }
 
 /** Call Ollama via Tauri backend proxy to bypass CORS, or direct fetch in non-Tauri mode. */
 async function ollamaFetch(body: string): Promise<{ status: number; data: any }> {
-  if (isTauri()) {
-    const res = await invoke<{ status: number; body: string }>("ollama_chat", { body });
-    let data: any;
-    try {
-      data = JSON.parse(res.body);
-    } catch {
-      data = { raw: res.body };
-    }
-    return { status: res.status, data };
-  }
-  // Fallback: direct fetch (works if CORS is configured)
-  const res = await fetch(`${OLLAMA_BASE_URL}/chat/completions`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body,
+  return localProxyFetch(body, {
+    tauriCommand: "ollama_chat",
+    tauriArgs: { body },
+    fallbackUrl: `${OLLAMA_BASE_URL}/chat/completions`,
   });
-  return { status: res.status, data: await res.json() };
 }
 
 /** Providers that don't require an API key. */
@@ -229,8 +229,6 @@ export async function callLLM(opts: {
 }
 
 // ─── Tool-use loop ───
-
-/* eslint-disable @typescript-eslint/no-explicit-any */
 
 const DEFAULT_MAX_TURNS = 25;
 

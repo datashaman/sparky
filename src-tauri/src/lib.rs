@@ -5,12 +5,6 @@ mod github_auth;
 mod litellm_proxy;
 mod ollama_proxy;
 
-// Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
-#[tauri::command]
-fn greet(name: &str) -> String {
-    format!("Hello, {}! You've been greeted from Rust!", name)
-}
-
 #[tauri::command]
 async fn github_start_device_flow() -> Result<github_auth::DeviceFlowResult, String> {
     github_auth::start_device_flow().await
@@ -38,7 +32,6 @@ pub fn run() {
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_sql::Builder::default().build())
         .invoke_handler(tauri::generate_handler![
-            greet,
             github_start_device_flow,
             github_poll_token,
             github_login_web,

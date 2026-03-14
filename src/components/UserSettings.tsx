@@ -4,6 +4,7 @@ import { fetchOllamaModels } from "../data/ollamaModels";
 import { fetchOpenRouterModels } from "../data/openrouterModels";
 import { fetchLitellmModels } from "../data/litellmModels";
 import { KEYLESS_PROVIDERS } from "../data/llm";
+import { getModelsForProvider, shouldShowModelInput, getModelInputPlaceholder } from "../data/shared";
 import type { AgentProvider } from "../data/types";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
@@ -32,12 +33,18 @@ export function getDisplayMode(): DisplayMode {
   return "system";
 }
 
-export function getDefaultProvider(): AgentProvider | "" {
+const VALID_PROVIDERS = new Set<string>(AGENT_PROVIDERS);
+
+function readProvider(key: string): AgentProvider | "" {
   try {
-    const stored = localStorage.getItem(DEFAULT_PROVIDER_KEY);
-    if (stored === "openai" || stored === "anthropic" || stored === "gemini" || stored === "ollama" || stored === "openrouter" || stored === "litellm") return stored;
+    const stored = localStorage.getItem(key);
+    if (stored && VALID_PROVIDERS.has(stored)) return stored as AgentProvider;
   } catch { /* ignore */ }
   return "";
+}
+
+export function getDefaultProvider(): AgentProvider | "" {
+  return readProvider(DEFAULT_PROVIDER_KEY);
 }
 
 export function getDefaultModel(): string {
@@ -47,11 +54,7 @@ export function getDefaultModel(): string {
 }
 
 export function getExecProvider(): AgentProvider | "" {
-  try {
-    const stored = localStorage.getItem(EXEC_PROVIDER_KEY);
-    if (stored === "openai" || stored === "anthropic" || stored === "gemini" || stored === "ollama" || stored === "openrouter" || stored === "litellm") return stored;
-  } catch { /* ignore */ }
-  return "";
+  return readProvider(EXEC_PROVIDER_KEY);
 }
 
 export function getExecModel(): string {
@@ -129,8 +132,8 @@ export function UserSettings({ open, onClose }: Props) {
     }
   }, [provider, execProvider]);
 
-  const models = provider === "ollama" ? ollamaModels : provider === "openrouter" ? openrouterModels : provider === "litellm" ? litellmModels : provider ? AGENT_MODELS[provider] : [];
-  const execModels = execProvider === "ollama" ? ollamaModels : execProvider === "openrouter" ? openrouterModels : execProvider === "litellm" ? litellmModels : execProvider ? AGENT_MODELS[execProvider] : [];
+  const models = getModelsForProvider(provider, ollamaModels, openrouterModels, litellmModels, AGENT_MODELS);
+  const execModels = getModelsForProvider(execProvider, ollamaModels, openrouterModels, litellmModels, AGENT_MODELS);
 
   useEffect(() => {
     applyDisplayMode(displayMode);
@@ -246,9 +249,9 @@ export function UserSettings({ open, onClose }: Props) {
                 </div>
                 <div className="flex flex-col gap-1.5 flex-1 min-w-0">
                   <Label>Model</Label>
-                  {(provider === "openrouter" && openrouterModels.length === 0) || (provider === "ollama" && models.length === 0) || (provider === "litellm" && models.length === 0) ? (
+                  {shouldShowModelInput(provider, models) ? (
                     <Input
-                      placeholder={provider === "ollama" ? "e.g. qwen2.5:latest" : provider === "litellm" ? "e.g. gpt-4o" : "e.g. anthropic/claude-sonnet-4"}
+                      placeholder={getModelInputPlaceholder(provider)}
                       value={model}
                       onChange={(e) => setModel(e.target.value)}
                     />
@@ -291,9 +294,9 @@ export function UserSettings({ open, onClose }: Props) {
                 </div>
                 <div className="flex flex-col gap-1.5 flex-1 min-w-0">
                   <Label>Model</Label>
-                  {(execProvider === "openrouter" && openrouterModels.length === 0) || (execProvider === "ollama" && execModels.length === 0) || (execProvider === "litellm" && execModels.length === 0) ? (
+                  {shouldShowModelInput(execProvider, execModels) ? (
                     <Input
-                      placeholder={execProvider === "ollama" ? "e.g. qwen2.5:latest" : execProvider === "litellm" ? "e.g. gpt-4o" : "e.g. anthropic/claude-sonnet-4"}
+                      placeholder={getModelInputPlaceholder(execProvider)}
                       value={execModel}
                       onChange={(e) => setExecModel(e.target.value)}
                     />

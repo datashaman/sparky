@@ -4,8 +4,8 @@ import { AGENT_PROVIDERS, AGENT_MODELS } from "../data/agents";
 import { fetchOllamaModels } from "../data/ollamaModels";
 import { fetchOpenRouterModels } from "../data/openrouterModels";
 import { fetchLitellmModels } from "../data/litellmModels";
-import type { AgentProvider } from "../data/types";
-import type { Skill } from "../data/types";
+import { PROVIDER_COLORS, getModelsForProvider, shouldShowModelInput, getModelInputPlaceholder } from "../data/shared";
+import type { AgentProvider, Skill } from "../data/types";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
@@ -22,15 +22,6 @@ interface Props {
   workspaceId: string;
   onSelectSkill?: (id: string) => void;
 }
-
-const PROVIDER_COLORS: Record<AgentProvider, string> = {
-  openai: "#10a37f",
-  anthropic: "#d4a27f",
-  gemini: "#4285f4",
-  ollama: "#1d1d1d",
-  openrouter: "#b364e9",
-  litellm: "#2563eb",
-};
 
 export function SkillsList({ workspaceId, onSelectSkill }: Props) {
   const [skills, setSkills] = useState<Skill[]>([]);
@@ -77,7 +68,7 @@ export function SkillsList({ workspaceId, onSelectSkill }: Props) {
     }
   }, [formProvider]);
 
-  const models = formProvider === "ollama" ? ollamaModels : formProvider === "openrouter" ? openrouterModels : formProvider === "litellm" ? litellmModels : formProvider ? AGENT_MODELS[formProvider] : [];
+  const models = getModelsForProvider(formProvider, ollamaModels, openrouterModels, litellmModels, AGENT_MODELS);
 
   async function load() {
     setLoading(true);
@@ -295,9 +286,9 @@ export function SkillsList({ workspaceId, onSelectSkill }: Props) {
                 </div>
                 <div className="flex flex-col gap-1.5 flex-1 min-w-0">
                   <Label>Model</Label>
-                  {(formProvider === "openrouter" && openrouterModels.length === 0) || (formProvider === "ollama" && models.length === 0) || (formProvider === "litellm" && models.length === 0) ? (
+                  {shouldShowModelInput(formProvider, models) ? (
                     <Input
-                      placeholder={formProvider === "ollama" ? "e.g. qwen2.5:latest" : formProvider === "litellm" ? "e.g. gpt-4o" : "e.g. anthropic/claude-sonnet-4"}
+                      placeholder={getModelInputPlaceholder(formProvider)}
                       value={formModel}
                       onChange={(e) => setFormModel(e.target.value)}
                       disabled={creating}
