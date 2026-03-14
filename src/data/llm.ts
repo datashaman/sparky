@@ -2,7 +2,7 @@ import { invoke, isTauri } from "@tauri-apps/api/core";
 import type { AgentProvider, LLMToolDef } from "./types";
 
 const OLLAMA_BASE_URL = "http://localhost:11434/v1";
-const LITELLM_BASE_URL = "http://localhost:4000/v1";
+export const LITELLM_BASE_URL = "http://localhost:4000/v1";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -50,7 +50,7 @@ async function ollamaFetch(body: string): Promise<{ status: number; data: any }>
 }
 
 /** Providers that don't require an API key. */
-export const KEYLESS_PROVIDERS = new Set<AgentProvider>(["ollama"]);
+export const KEYLESS_PROVIDERS = new Set<AgentProvider>(["ollama", "litellm"]);
 
 export async function callLLM(opts: {
   provider: AgentProvider;
@@ -244,13 +244,13 @@ export async function callLLMWithTools(opts: {
     case "anthropic":
       return anthropicToolLoop({ modelId, apiKey, systemPrompt, userPrompt, tools, maxTurns, onToolCall });
     case "openai":
-      return openaiToolLoop({ modelId, apiKey, systemPrompt, userPrompt, tools, maxTurns, onToolCall, baseUrl: "https://api.openai.com/v1" });
+      return openaiToolLoop({ modelId, apiKey, systemPrompt, userPrompt, tools, maxTurns, onToolCall, baseUrl: "https://api.openai.com/v1", label: "OpenAI" });
     case "ollama":
-      return openaiToolLoop({ modelId, apiKey, systemPrompt, userPrompt, tools, maxTurns, onToolCall, baseUrl: OLLAMA_BASE_URL, useProxy: true });
+      return openaiToolLoop({ modelId, apiKey, systemPrompt, userPrompt, tools, maxTurns, onToolCall, baseUrl: OLLAMA_BASE_URL, useProxy: true, label: "Ollama" });
     case "openrouter":
-      return openaiToolLoop({ modelId, apiKey, systemPrompt, userPrompt, tools, maxTurns, onToolCall, baseUrl: "https://openrouter.ai/api/v1" });
+      return openaiToolLoop({ modelId, apiKey, systemPrompt, userPrompt, tools, maxTurns, onToolCall, baseUrl: "https://openrouter.ai/api/v1", label: "OpenRouter" });
     case "litellm":
-      return openaiToolLoop({ modelId, apiKey, systemPrompt, userPrompt, tools, maxTurns, onToolCall, baseUrl: LITELLM_BASE_URL, useProxy: true, proxyFn: litellmFetch });
+      return openaiToolLoop({ modelId, apiKey, systemPrompt, userPrompt, tools, maxTurns, onToolCall, baseUrl: LITELLM_BASE_URL, useProxy: true, proxyFn: litellmFetch, label: "LiteLLM" });
     case "gemini":
       return geminiToolLoop({ modelId, apiKey, systemPrompt, userPrompt, tools, maxTurns, onToolCall });
   }
@@ -348,12 +348,9 @@ async function openaiToolLoop(opts: {
   baseUrl?: string;
   useProxy?: boolean;
   proxyFn?: (body: string, apiKey: string) => Promise<{ status: number; data: any }>;
+  label?: string;
 }): Promise<string> {
-  const { modelId, apiKey, systemPrompt, tools, maxTurns, onToolCall, baseUrl = "https://api.openai.com/v1", useProxy = false, proxyFn } = opts;
-
-  const providerLabel = useProxy
-    ? (baseUrl.includes("4000") ? "LiteLLM" : "Ollama")
-    : baseUrl.includes("openai.com") ? "OpenAI" : baseUrl.includes("openrouter") ? "OpenRouter" : "API";
+  const { modelId, apiKey, systemPrompt, tools, maxTurns, onToolCall, baseUrl = "https://api.openai.com/v1", useProxy = false, proxyFn, label = "API" } = opts;
 
   const openaiTools = tools.map((t) => ({
     type: "function" as const,
@@ -384,7 +381,7 @@ async function openaiToolLoop(opts: {
       const fetchFn = proxyFn ?? ((b: string) => ollamaFetch(b));
       const proxyRes = await fetchFn(reqBody, apiKey);
       if (proxyRes.status !== 200) {
-        throw new Error(`${providerLabel} API ${proxyRes.status}: ${JSON.stringify(proxyRes.data)}`);
+        throw new Error(`${label} API ${proxyRes.status}: ${JSON.stringify(proxyRes.data)}`);
       }
       data = proxyRes.data;
     } else {
@@ -399,13 +396,13 @@ async function openaiToolLoop(opts: {
 
       if (!res.ok) {
         const body = await res.text();
-        throw new Error(`${providerLabel} API ${res.status}: ${body}`);
+        throw new Error(`${label} API ${res.status}: ${body}`);
       }
       data = await res.json();
     }
 
     const choice = data.choices?.[0];
-    if (!choice) throw new Error(`No choices in ${providerLabel} response`);
+    if (!choice) throw new Error(`No choices in ${label} response`);
 
     const msg = choice.message;
     messages.push(msg);

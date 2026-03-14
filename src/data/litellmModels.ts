@@ -1,5 +1,6 @@
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { getApiKey } from "../components/UserSettings";
+import { LITELLM_BASE_URL } from "./llm";
 
 let cachedModels: string[] | null = null;
 
@@ -16,7 +17,7 @@ export async function fetchLitellmModels(): Promise<string[]> {
     } else {
       const headers: Record<string, string> = { "content-type": "application/json" };
       if (apiKey) headers.authorization = `Bearer ${apiKey}`;
-      const res = await fetch("http://localhost:4000/v1/models", { headers });
+      const res = await fetch(`${LITELLM_BASE_URL}/models`, { headers });
       if (!res.ok) return [];
       const data = await res.json();
       models = (data.data ?? []).map((m: { id: string }) => m.id);
