@@ -95,7 +95,7 @@ export async function openaiToolLoop(opts: {
   if (apiKey) headers.authorization = `Bearer ${apiKey}`;
 
   let toolResultCount = 0;
-  let hintInjected = false;
+  let hintLevel = 0; // 0=none, 1=info, 2=urgent
 
   for (let turn = 0; turn < maxTurns; turn++) {
     const isLastTurn = turn === maxTurns - 1;
@@ -182,11 +182,15 @@ export async function openaiToolLoop(opts: {
       compressMessages(messages, label.toLowerCase() as any, modelId, onLog);
     }
 
-    // Proactive degradation hints
+    // Remaining turns awareness — two-stage hints
+    const remaining = maxTurns - turn - 1;
     const turnsUsedPct = ((turn + 1) / maxTurns) * 100;
-    if ((turnsUsedPct >= 80 || budget.utilizationPct >= 85) && !hintInjected) {
-      messages.push({ role: "user", content: "You are running low on remaining actions. Prioritize completing the most critical work. Leave the codebase in a working state." });
-      hintInjected = true;
+    if ((turnsUsedPct >= 80 || budget.utilizationPct >= 85) && hintLevel < 2) {
+      messages.push({ role: "user", content: `⚠ ${remaining} actions remaining (context: ${budget.utilizationPct}% used). Prioritize completing the most critical work. Leave the codebase in a working state. Skip nice-to-haves.` });
+      hintLevel = 2;
+    } else if (turnsUsedPct >= 75 && hintLevel < 1) {
+      messages.push({ role: "user", content: `Note: ${remaining} of ${maxTurns} actions remaining. Plan your remaining work accordingly.` });
+      hintLevel = 1;
     }
 
     if (onCheckpoint && toolResultCount % 3 === 0) {
