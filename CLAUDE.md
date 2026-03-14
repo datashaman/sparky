@@ -1,6 +1,9 @@
 # Sparky — AI-Powered GitHub Issue Resolution
 
-Tauri v2 desktop app. Frontend: React 18 + TypeScript + Vite + Tailwind CSS v4. Backend: Rust (Tauri commands). Worker: Node.js process for pipeline execution. Database: SQLite via better-sqlite3 (worker) and @tauri-apps/plugin-sql (frontend).
+- **Frontend:** React 18 + TypeScript + Vite + Tailwind CSS v4
+- **Backend:** Rust (Tauri v2 commands)
+- **Worker:** Node.js process for pipeline execution
+- **Database:** SQLite via better-sqlite3 (worker) and @tauri-apps/plugin-sql (frontend)
 
 ## Commands
 
