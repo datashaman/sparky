@@ -33,6 +33,7 @@ Each agent has:
 | **provider / model** | Which LLM provider and model the agent uses (can differ from workspace defaults) |
 | **max_turns** | Maximum number of tool-use turns (default 25) |
 | **background** | Boolean flag — when true, the agent runs without direct user interaction |
+| **skills** | Skills associated with the agent (via `agent_skills`) for organization. All workspace skills are accessible at runtime via `use_skill`. |
 | **tools** | Controls what the agent can do (via `agent_tools`); `use_skill` is always available |
 
 By default, agents have **read-only** tool access: `read`, `glob`, and `grep`, plus `use_skill` (always available). Granting `write`, `edit`, or `bash` gives the agent the ability to modify the codebase, so do so deliberately.

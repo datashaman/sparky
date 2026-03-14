@@ -94,9 +94,9 @@ Always available, even when an agent has restricted tools. The LLM decides at ru
 2. **Unique match requirement** -- `edit_file` requires `old_text` to match exactly once, preventing accidental bulk changes.
 3. **Safe defaults for agents** -- Agents default to read-only tools (`read_file`, `glob`, `grep`), plus `use_skill`.
 4. **Explicit dangerous tool grants** -- Dangerous tools (`write_file`, `edit_file`, `bash`) must be explicitly granted to agents.
-7. **Always-available skill access** -- `use_skill` is included in all tool sets regardless of agent restrictions.
 5. **Bash command allowlist** -- Prevents arbitrary program execution.
 6. **Output truncation** -- Output truncated to 10,000 characters to prevent context overflow.
+7. **Always-available skill access** -- `use_skill` is included in all tool sets regardless of agent restrictions.
 
 ## Agent Tool Configuration
 

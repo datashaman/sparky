@@ -115,6 +115,7 @@ Sparky separates planning from execution at the model level, configured independ
 **Agents** are specialized workers with their own configuration:
 - **System prompt** (`content` field) -- defines the agent's role, behavior, constraints, and workflow
 - **Provider and model** -- can differ from the default execution model
+- **Skills** -- skills can be associated with an agent (via `agent_skills`) for organization. All workspace skills are accessible at runtime via `use_skill`.
 - **Tools** -- the subset of sandbox tools the agent can access (see Tool Sandbox below); `use_skill` is always available
 - **Max turns** -- per-agent turn limit for the tool-use loop
 - **Background flag** -- for future use
