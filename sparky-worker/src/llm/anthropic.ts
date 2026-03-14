@@ -2,6 +2,7 @@ import type { LLMToolDef } from "../types.js";
 import type { LogCallback, CheckpointCallback } from "./index.js";
 import { getContextBudget } from "./context-budget.js";
 import { compressMessages } from "./compress.js";
+import { fetchWithRetry } from "./retry.js";
 
 function truncate(s: string, max = 200): string {
   return s.length > max ? s.slice(0, max) + "..." : s;
@@ -19,7 +20,7 @@ export async function anthropicStructured(opts: {
 }): Promise<string> {
   const { modelId, apiKey, systemPrompt, userPrompt, schema, maxTokens } = opts;
 
-  const res = await fetch("https://api.anthropic.com/v1/messages", {
+  const res = await fetchWithRetry("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: {
       "content-type": "application/json",
@@ -35,7 +36,7 @@ export async function anthropicStructured(opts: {
         format: { type: "json_schema", schema },
       },
     }),
-  });
+  }, { label: "Anthropic" });
 
   if (!res.ok) {
     const body = await res.text();
@@ -84,7 +85,7 @@ export async function anthropicToolLoop(opts: {
       message: turn === 0 && !opts.existingMessages ? truncate(opts.userPrompt, 150) : `turn ${turn + 1} (with tool results)`,
     });
 
-    const res = await fetch("https://api.anthropic.com/v1/messages", {
+    const res = await fetchWithRetry("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: {
         "content-type": "application/json",
@@ -100,7 +101,7 @@ export async function anthropicToolLoop(opts: {
         messages,
         ...(isLastTurn ? {} : { tools: anthropicTools }),
       }),
-    });
+    }, { label: "Anthropic", onLog });
 
     if (!res.ok) {
       const body = await res.text();

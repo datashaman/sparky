@@ -2,6 +2,7 @@ import type { LLMToolDef } from "../types.js";
 import type { LogCallback, CheckpointCallback } from "./index.js";
 import { getContextBudget } from "./context-budget.js";
 import { compressMessages } from "./compress.js";
+import { fetchWithRetry } from "./retry.js";
 
 function truncate(s: string, max = 200): string {
   return s.length > max ? s.slice(0, max) + "..." : s;
@@ -47,11 +48,11 @@ export async function openaiStructured(opts: {
   const headers: Record<string, string> = { "content-type": "application/json" };
   if (apiKey) headers.authorization = `Bearer ${apiKey}`;
 
-  const res = await fetch(`${baseUrl}/chat/completions`, {
+  const res = await fetchWithRetry(`${baseUrl}/chat/completions`, {
     method: "POST",
     headers,
     body: JSON.stringify(body),
-  });
+  }, { label: "OpenAI" });
 
   if (!res.ok) {
     const text = await res.text();
@@ -118,11 +119,11 @@ export async function openaiToolLoop(opts: {
       ...(isLastTurn ? {} : { tools: openaiTools }),
     });
 
-    const res = await fetch(`${baseUrl}/chat/completions`, {
+    const res = await fetchWithRetry(`${baseUrl}/chat/completions`, {
       method: "POST",
       headers,
       body: reqBody,
-    });
+    }, { label, onLog });
 
     if (!res.ok) {
       const body = await res.text();
