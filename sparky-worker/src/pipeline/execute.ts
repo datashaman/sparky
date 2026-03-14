@@ -201,9 +201,9 @@ export async function runExecutionPipeline(opts: ExecutionPipelineOpts): Promise
         `- Before each tool call, state what you expect to find or accomplish.`,
         `- After each tool result, assess whether it matched your expectation.`,
         `- If a tool call fails with the same error 3 times, STOP and try a different approach or report the issue.`,
-        `- If a bash command fails (linter, test, build), do NOT run it more than 3 times. After 2 failures, read the error carefully and fix the root cause before retrying.`,
+        `- If a bash command returns a non-zero exit code (look for "Exit code: N" in the output), do NOT run it more than 3 times. After 2 failures, read the error carefully and fix the root cause before retrying.`,
         `- If an edit_file call fails (no match), re-read the file to get current content before retrying.`,
-        step.verification_command ? `- After completing the task, run the verification command: \`${step.verification_command}\`. If it fails, fix the issue. If it still fails after 2 fix attempts, report what's failing and move on.` : "",
+        step.verification_command ? `- After completing the task, run the verification command: \`${step.verification_command}\`. If it fails, fix the issue. If it still fails after 2 fix attempts, end with STATUS: BLOCKED and include the failing output.` : "",
         `- End your final response with STATUS: DONE if the task is complete, or STATUS: BLOCKED with a reason if you cannot proceed.`,
       ].filter(Boolean);
 
