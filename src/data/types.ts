@@ -44,7 +44,7 @@ export interface Skill {
   created_at: string;
 }
 
-export type AnalysisStatus = "pending" | "running" | "done" | "error";
+export type AnalysisStatus = "pending" | "running" | "done" | "decomposed" | "error";
 
 export interface IssueAnalysis {
   id: string;
@@ -81,6 +81,8 @@ export interface AnalysisResult {
   approach: string;
   skills: AnalysisResultSkill[];
   agents: AnalysisResultAgent[];
+  decomposed?: boolean;
+  subissues?: Array<{ number: number; title: string }>;
 }
 
 export interface ExecutionPlanStep {

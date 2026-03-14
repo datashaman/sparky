@@ -7,7 +7,7 @@ import { createAskUserHandler } from "../tools/ask-user-tool.js";
 import { isSessionCancelled } from "../session-manager.js";
 import { extractJSON } from "../util.js";
 
-const TOOL_IDS = ["read_file", "glob", "grep", "bash", "ask_user", "use_skill"];
+const TOOL_IDS = ["read_file", "glob", "grep", "bash", "ask_user", "use_skill", "create_issue", "update_issue", "close_issue"];
 
 export interface AnalysisPipelineOpts {
   sessionId: string;
@@ -44,7 +44,8 @@ export async function runAnalysisPipeline(opts: AnalysisPipelineOpts): Promise<v
 
   const skillResolver = buildSkillResolver(workspace_id);
   const askUserHandler = createAskUserHandler(sessionId, 0, config.ask_user_timeout_minutes);
-  const toolHandler = createToolHandler(worktreePath, skillResolver, askUserHandler);
+  const githubContext = { token: config.github_token, repoFullName: repo_full_name, parentIssueNumber: issue_number };
+  const toolHandler = createToolHandler(worktreePath, skillResolver, askUserHandler, githubContext);
 
   const analysisTools = TOOL_SCHEMAS.filter((t) => TOOL_IDS.includes(t.name));
 
@@ -74,9 +75,10 @@ export async function runAnalysisPipeline(opts: AnalysisPipelineOpts): Promise<v
   }
 
   const result = JSON.stringify(parsed);
+  const status = parsed.decomposed === true ? "decomposed" : "done";
 
   if (payload.analysis_id) {
-    updateExistingTable("issue_analyses", payload.analysis_id, { status: "done", result });
+    updateExistingTable("issue_analyses", payload.analysis_id, { status, result });
   }
 }
 
@@ -104,6 +106,9 @@ You have access to tools during analysis:
 - **use_skill** — Load domain-specific knowledge from available skills.
 - **read_file**, **glob**, **grep** — Explore the codebase.
 - **bash** — Run shell commands.
+- **create_issue** — Create a GitHub subissue linked to the parent issue.
+- **update_issue** — Update a subissue's title or body.
+- **close_issue** — Close a subissue you created (cannot close other issues).
 
 ## Investigation steps
 
@@ -130,7 +135,16 @@ The issue LLM can activate **agents** and **skills**:
 
 ## When recommending skills and agents
 - Check existing ones first. Prefer referencing existing ones by name.
-- Only recommend new ones when existing ones don't cover the need.`;
+- Only recommend new ones when existing ones don't cover the need.
+
+## Complexity-driven decomposition
+
+If you determine the issue is **high** complexity, decompose it into smaller, independently resolvable subissues:
+1. Identify 2-5 logical subissues that together resolve the parent issue.
+2. Use \`create_issue\` for each subissue. Include enough context in each body for it to be worked on independently.
+3. In your final JSON response, set \`decomposed\` to \`true\` and list the created subissue numbers in \`subissues\`.
+
+Do NOT decompose low or medium complexity issues.`;
 }
 
 function buildAnalysisUserPrompt(
@@ -191,6 +205,19 @@ const ANALYSIS_SCHEMA = {
           tool_names: { type: "array" as const, items: { type: "string" as const } },
         },
         required: ["name", "description", "content", "skill_names", "tool_names"],
+        additionalProperties: false,
+      },
+    },
+    decomposed: { type: "boolean" as const },
+    subissues: {
+      type: "array" as const,
+      items: {
+        type: "object" as const,
+        properties: {
+          number: { type: "number" as const },
+          title: { type: "string" as const },
+        },
+        required: ["number", "title"],
         additionalProperties: false,
       },
     },

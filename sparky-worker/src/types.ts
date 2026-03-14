@@ -37,6 +37,8 @@ export interface AnalysisResult {
   approach: string;
   skills: AnalysisResultSkill[];
   agents: AnalysisResultAgent[];
+  decomposed?: boolean;
+  subissues?: Array<{ number: number; title: string }>;
 }
 
 export interface AnalysisResultSkill {

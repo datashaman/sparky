@@ -4,7 +4,7 @@ import type { GitHubIssue } from "../github";
 import { listSkillsForWorkspace } from "./skills";
 import { listAgentsForWorkspace } from "./agents";
 import { callLLMWithTools, KEYLESS_PROVIDERS } from "./llm";
-import { TOOLS, TOOL_SCHEMAS, createToolCallHandler, createAskUserInterceptor, type AskUserHandler, type SkillResolver } from "./tools";
+import { TOOLS, TOOL_SCHEMAS, createToolCallHandler, createAskUserInterceptor, type AskUserHandler, type SkillResolver, type GitHubToolContext } from "./tools";
 import { ensureWorktree } from "./issueWorktrees";
 import { extractJSON } from "./jsonExtract";
 import { dynamicUpdate } from "./dbUtils";
@@ -18,6 +18,9 @@ You have access to tools during analysis:
 - **use_skill** — Load domain-specific knowledge from available skills.
 - **read_file**, **glob**, **grep** — Explore the codebase to understand the project structure, existing code patterns, and relevant files before making your analysis.
 - **bash** — Run shell commands (e.g. to check dependencies, build configuration, or project setup).
+- **create_issue** — Create a GitHub subissue linked to the parent issue.
+- **update_issue** — Update a subissue's title or body.
+- **close_issue** — Close a subissue you created (cannot close other issues).
 
 ## Investigation steps
 
@@ -49,7 +52,16 @@ The issue LLM can optionally activate **agents** and **skills** based on their d
 - Skills should be specific, reusable knowledge areas (e.g. "react-state-management", "cache-invalidation", "github-api"). Each has a name, a description of when to use it, and a content body with the actual knowledge/instructions in markdown.
 - Agents should only be recommended when a specialized, focused worker adds value beyond what the issue LLM does on its own. Each has a name, a description of when to delegate to it, a content body with detailed system prompt, a list of skill names, and a list of tool IDs.
 - An agent's skill_names should reference skills from the skills list you recommend (or existing skills).
-- An agent's tool_names should be the minimal set needed. Read-only agents need Read, Glob, Grep. Code-modifying agents need Write/Edit. Command-running agents need Bash.`;
+- An agent's tool_names should be the minimal set needed. Read-only agents need Read, Glob, Grep. Code-modifying agents need Write/Edit. Command-running agents need Bash.
+
+## Complexity-driven decomposition
+
+If you determine the issue is **high** complexity, decompose it into smaller, independently resolvable subissues:
+1. Identify 2-5 logical subissues that together resolve the parent issue.
+2. Use \`create_issue\` for each subissue. Include enough context in each body for it to be worked on independently.
+3. In your final JSON response, set \`decomposed\` to \`true\` and list the created subissue numbers in \`subissues\`.
+
+Do NOT decompose low or medium complexity issues.`;
 
 const ANALYSIS_SCHEMA = {
   type: "object" as const,
@@ -97,6 +109,20 @@ const ANALYSIS_SCHEMA = {
         additionalProperties: false,
       },
       description: "1-3 autonomous agents that would help",
+    },
+    decomposed: { type: "boolean" as const, description: "Set to true if the issue was decomposed into subissues" },
+    subissues: {
+      type: "array" as const,
+      items: {
+        type: "object" as const,
+        properties: {
+          number: { type: "number" as const, description: "Subissue number" },
+          title: { type: "string" as const, description: "Subissue title" },
+        },
+        required: ["number", "title"],
+        additionalProperties: false,
+      },
+      description: "Subissues created during decomposition",
     },
   },
   required: ["summary", "type", "complexity", "complexity_reason", "considerations", "approach", "skills", "agents"],
@@ -207,11 +233,16 @@ export async function runAnalysis(
       return args ? `${skill.content}\n\n## Arguments\n${args}` : skill.content;
     };
 
-    // Analysis tools: read-only file tools + bash + always-on tools
-    const ANALYSIS_TOOL_NAMES = new Set(["read_file", "glob", "grep", "bash", "ask_user", "use_skill"]);
+    // Analysis tools: read-only file tools + bash + always-on tools + GitHub issue tools
+    const ANALYSIS_TOOL_NAMES = new Set(["read_file", "glob", "grep", "bash", "ask_user", "use_skill", "create_issue", "update_issue", "close_issue"]);
     const analysisTools = TOOL_SCHEMAS.filter((t) => ANALYSIS_TOOL_NAMES.has(t.name));
 
-    const baseHandler = createToolCallHandler(worktree.path, skillResolver);
+    const githubContext: GitHubToolContext = {
+      token: accessToken,
+      repoFullName: issue.full_name,
+      parentIssueNumber: issue.number,
+    };
+    const baseHandler = createToolCallHandler(worktree.path, skillResolver, githubContext);
     const toolHandler = createAskUserInterceptor(onAskUser, baseHandler);
 
     const schemaInstruction = `\n\nWhen you are ready to provide your final analysis, respond with a JSON object matching this schema:\n${JSON.stringify(ANALYSIS_SCHEMA, null, 2)}`;
@@ -233,9 +264,10 @@ export async function runAnalysis(
       throw new Error("Invalid analysis response: missing required fields");
     }
     const result = JSON.stringify(parsed);
+    const status = parsed.decomposed === true ? "decomposed" as const : "done" as const;
 
-    await updateAnalysis(analysis.id, { status: "done", result });
-    onUpdate({ ...analysis, status: "done", result });
+    await updateAnalysis(analysis.id, { status, result });
+    onUpdate({ ...analysis, status, result });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     console.error("[analyse] error:", message);
