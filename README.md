@@ -19,6 +19,8 @@ Work happens in sandboxed git worktrees, so your main branch stays clean.
 - **Agents & Skills** -- Define reusable AI agents and callable skills scoped to your workspace for domain-specific automation
 - **Critic Review** -- Plans are automatically reviewed and refined by a critic agent before execution begins
 - **Adaptive Replanning** -- If execution hits a wall, the agent re-plans on the fly instead of failing
+- **Context Management** -- Token budget tracking, asymmetric message compression, and proactive degradation hints keep small-context models from silently exceeding limits
+- **Resilient API Calls** -- Automatic retry with exponential backoff for transient failures, with classified error messages that tell you exactly what went wrong
 - **Subissue Decomposition** -- High-complexity issues are automatically broken into smaller, linked subissues on GitHub
 - **Interactive Clarification** -- The agent can ask you questions mid-analysis or mid-execution when it encounters ambiguity
 - **Session Durability** -- Pipeline execution runs in a background worker process, surviving app restarts
@@ -92,8 +94,9 @@ sparky/
 ├── sparky-worker/        # Node.js worker process (pipeline execution)
 │   └── src/
 │       ├── pipeline/     # Analysis, plan, and execution pipelines
-│       ├── llm/          # LLM provider integrations (Anthropic, OpenAI, Gemini)
-│       └── tools/        # Sandboxed tool implementations
+│       ├── llm/          # LLM providers, context budget, compression, retry
+│       ├── tools/        # Sandboxed tool implementations
+│       └── *.ts          # Session management, error classification, IPC
 ├── src-tauri/            # Rust backend
 │   └── src/
 │       ├── lib.rs        # Tauri command handlers

@@ -86,7 +86,11 @@ For each step:
 
 **Execution logging**: The execution engine emits real-time log events via an `onLog` callback. Events include LLM requests/responses, tool calls/results, and replan checks/decisions. Each entry carries a timestamp, step order, and type-specific metadata. The UI displays these in a collapsible, auto-scrolling log panel per step.
 
-**Max turns**: Each step has a turn limit (agent's `max_turns` or default 25). On the last turn, the LLM is told to summarize what it accomplished and what remains rather than making more tool calls.
+**Max turns**: Each step has a turn limit (agent's `max_turns` or default 25). On the last turn, the LLM is asked for structured output: what is done (with file paths), what remains, and the codebase state (compiles? tests pass?).
+
+**Remaining turns awareness**: At 75% of max turns, an informational message is injected with the exact remaining count. At 80% of turns or 85% of context utilization, an urgent warning is injected telling the model to skip nice-to-haves and prioritize completing critical work. Both hints can fire independently (tracked via a `hintLevel`).
+
+**Pipeline metrics**: Each pipeline stage logs duration on completion. Execution steps additionally log turn count and estimated token usage.
 
 ### 5. Adaptive Replanning (`src/data/replanCheck.ts`)
 
@@ -128,10 +132,11 @@ The analysis stage recommends both skills and agents. The user reviews these rec
 
 ## Tool Sandbox
 
-Eleven tools are available. Six are file/shell operations implemented as Tauri commands in Rust (`src-tauri/src/agent_tools.rs`). Two are always-on interaction tools. Three are GitHub issue tools available only during analysis:
+Twelve tools are available. Seven are file/shell operations implemented as Tauri commands in Rust (`src-tauri/src/agent_tools.rs`). Two are always-on interaction tools. Three are GitHub issue tools available only during analysis:
 
 | Tool | LLM Name | Description | Dangerous | Availability |
 |------|----------|-------------|-----------|-------------|
+| List | `list_files` | List files and directories in a path | No | All phases |
 | Read | `read_file` | Read a file's contents | No | All phases |
 | Write | `write_file` | Create or overwrite a file | Yes | Execution only |
 | Edit | `edit_file` | Find-and-replace text in a file (old_text must be unique) | Yes | Execution only |
@@ -150,7 +155,7 @@ Eleven tools are available. Six are file/shell operations implemented as Tauri c
 
 **Bash command allowlist**: The bash tool validates that the command starts with an allowed program. The allowlist includes common filesystem commands (`ls`, `find`, `cat`, `cp`, `mv`, `rm`), build tools (`npm`, `cargo`, `make`, `python`), git, and text processing utilities (`sed`, `awk`, `grep`). Commands not on the list are rejected. The command runs with a restricted `PATH` (`/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin`) and `HOME` set to the worktree root.
 
-**Result truncation**: All tool results are truncated to 10,000 characters to avoid overwhelming the LLM context.
+**Result truncation**: All tool results are truncated to 10,000 characters using head+tail preservation (first 9KB + last 1KB), ensuring error messages and status at the end of output are not lost.
 
 ## Git Worktree Isolation
 
@@ -206,3 +211,32 @@ Sparky supports six LLM providers:
 **Local provider proxying**: Ollama and LiteLLM run locally and do not set CORS headers. When running inside Tauri, requests are routed through Rust backend commands (`ollama_chat`, `litellm_chat`) that make the HTTP call server-side. Outside Tauri (development), direct fetch is attempted as a fallback.
 
 **Dynamic model lists**: Ollama, OpenRouter, and LiteLLM support fetching available models at runtime (`src/data/ollamaModels.ts`, `src/data/openrouterModels.ts`, `src/data/litellmModels.ts`), so the user sees what is actually available rather than a hardcoded list.
+
+## Context Management
+
+The tool-use loops accumulate messages without any inherent awareness of context window limits. Several layers work together to prevent context overflow:
+
+### Token Budget Tracking (`sparky-worker/src/llm/context-budget.ts`)
+
+Each model has a known context window size (looked up by model prefix, with provider-specific defaults for unknown models — e.g. Ollama defaults to 8K). Token usage is estimated using the chars/4 heuristic. After each tool result is added, the budget is logged as a `context_budget` entry showing utilization percentage.
+
+### Message Compression (`sparky-worker/src/llm/compress.ts`)
+
+When context utilization exceeds 75%, messages are compressed oldest-first (last 6 messages are always protected). Compression is **asymmetric** — assistant text is compressed first since tool calls and user messages carry the actual execution state:
+
+1. **Assistant text** (min 1000 chars): truncated to 500-char preview at moderate pressure, fully omitted at severe pressure (30%+ overshoot)
+2. **Tool results**: truncated to 2KB, then summarized to a short tag, then dropped entirely
+
+At 90% utilization, aggressive compression targets 50% utilization.
+
+### Bounded Dependency Context
+
+When building context from dependency step outputs, each dependency is capped at a share of 20% of the context window. Repository documentation injection (`readRepoContext`) is budgeted at 5% of the context window, clamped between 2000-10000 chars.
+
+### API Retry (`sparky-worker/src/llm/retry.ts`)
+
+All LLM API calls use `fetchWithRetry` with exponential backoff and jitter. Retries on 429 (rate limit, respects `Retry-After` header as seconds or HTTP-date), 500, 502, 503, 529. Does not retry client errors (400, 401, 403, 404). Response bodies are cancelled before retry to prevent connection leaks.
+
+### Error Classification (`sparky-worker/src/error-classifier.ts`)
+
+Pipeline errors are classified into 10 categories (`rate_limit`, `auth`, `config`, `context_overflow`, `server_error`, `invalid_request`, `network`, `tool_error`, `cancelled`, `unknown`), each with a human-readable suggestion and `retryable` flag. This is wired into session error broadcasts so users see actionable guidance rather than raw error strings.
