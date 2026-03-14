@@ -2,6 +2,7 @@ mod agent_tools;
 mod execution_log;
 mod git_ops;
 mod github_auth;
+mod litellm_proxy;
 mod ollama_proxy;
 
 // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
@@ -56,6 +57,8 @@ pub fn run() {
             execution_log::get_execution_log_path,
             ollama_proxy::ollama_chat,
             ollama_proxy::ollama_list_models,
+            litellm_proxy::litellm_chat,
+            litellm_proxy::litellm_list_models,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
