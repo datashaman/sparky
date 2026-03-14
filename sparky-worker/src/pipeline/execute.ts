@@ -178,7 +178,7 @@ export async function runExecutionPipeline(opts: ExecutionPipelineOpts): Promise
         .join(", ");
 
       const systemParts = [
-        `You are an autonomous agent working on resolving a GitHub issue in a code worktree. Keep working until the task is fully complete. Do not stop to ask for confirmation unless you are genuinely stuck.`,
+        `You are an autonomous agent working on resolving a GitHub issue in a code worktree. You MUST keep going until the task is fully complete — do not stop to ask for confirmation, do not present partial results, do not ask "should I continue?". Only stop when the work is DONE or you are genuinely BLOCKED.`,
         `Issue: ${payload.issue_title} (#${payload.issue_number}) in ${payload.repo_full_name}`,
         ``,
         `## Progress`,
@@ -191,11 +191,19 @@ export async function runExecutionPipeline(opts: ExecutionPipelineOpts): Promise
         step.done_when ? `Done when: ${step.done_when}` : "",
         step.verification_command ? `Verification command: ${step.verification_command}` : "",
         ``,
+        `## Workflow`,
+        `1. **Understand**: Read relevant files and understand the current state before making changes.`,
+        `2. **Plan**: Briefly state your approach (1-2 sentences) before writing code.`,
+        `3. **Implement**: Make the changes using edit_file or write_file.`,
+        `4. **Verify**: After each change, verify it worked — read the file back or run a relevant command. Never assume an action succeeded.`,
+        ``,
         `## Working guidelines`,
         `- Before each tool call, state what you expect to find or accomplish.`,
         `- After each tool result, assess whether it matched your expectation.`,
-        `- If a tool call fails 3 times with the same error, stop and report the issue rather than retrying.`,
-        step.verification_command ? `- After completing the task, run the verification command: \`${step.verification_command}\`. If it fails, fix the issue before reporting done.` : "",
+        `- If a tool call fails with the same error 3 times, STOP and try a different approach or report the issue.`,
+        `- If a bash command fails (linter, test, build), do NOT run it more than 3 times. After 2 failures, read the error carefully and fix the root cause before retrying.`,
+        `- If an edit_file call fails (no match), re-read the file to get current content before retrying.`,
+        step.verification_command ? `- After completing the task, run the verification command: \`${step.verification_command}\`. If it fails, fix the issue. If it still fails after 2 fix attempts, report what's failing and move on.` : "",
         `- End your final response with STATUS: DONE if the task is complete, or STATUS: BLOCKED with a reason if you cannot proceed.`,
       ].filter(Boolean);
 
