@@ -51,12 +51,14 @@ export function readRepoContext(worktreePath: string, maxSize: number = DEFAULT_
     try {
       let content = readFileSync(filepath, "utf-8").trim();
       if (!content) continue;
-      const remaining = maxSize - totalSize;
+      const headerPrefix = `### ${filename}\n\n`;
+      const truncationMarker = "\n... (truncated)";
+      const remaining = maxSize - totalSize - headerPrefix.length;
       if (remaining <= 0) break;
       if (content.length > remaining) {
-        content = content.slice(0, remaining) + "\n... (truncated)";
+        content = content.slice(0, remaining - truncationMarker.length) + truncationMarker;
       }
-      const section = `### ${filename}\n\n${content}`;
+      const section = headerPrefix + content;
       totalSize += section.length;
       sections.push(section);
     } catch {

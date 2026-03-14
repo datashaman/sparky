@@ -1,11 +1,11 @@
 import type { SessionConfig, StartSessionPayload, ExecutionLogEntry } from "../types.js";
 import { updateSession, updateExistingTable, getSkillsForWorkspace, getAgentsForWorkspace } from "../db.js";
-import { callLLM, callLLMWithTools, KEYLESS_PROVIDERS } from "../llm/index.js";
+import { callLLMWithTools, KEYLESS_PROVIDERS } from "../llm/index.js";
 import { TOOL_SCHEMAS, createToolHandler } from "../tools/index.js";
 import { buildSkillResolver } from "../tools/skill-tool.js";
 import { createAskUserHandler } from "../tools/ask-user-tool.js";
 import { isSessionCancelled } from "../session-manager.js";
-import { extractJSON } from "../util.js";
+import { extractJSONWithRetry } from "../util.js";
 import { readRepoContext } from "../repo-context.js";
 
 const TOOL_IDS = ["list_files", "read_file", "glob", "grep", "bash", "ask_user", "use_skill", "create_issue", "update_issue", "close_issue"];
@@ -72,24 +72,15 @@ export async function runAnalysisPipeline(opts: AnalysisPipelineOpts): Promise<v
     onLog: stepLog,
   });
 
-  let parsed: Record<string, unknown>;
-  try {
-    parsed = extractJSON(text) as Record<string, unknown>;
-  } catch {
-    // JSON extraction failed — retry with a focused prompt
-    stepLog({ type: "info", message: "JSON extraction failed, retrying with focused prompt" });
-    const retryText = await callLLM({
-      provider,
-      modelId,
-      apiKey,
-      systemPrompt: "You are a JSON formatter. Convert the analysis below into a valid JSON object. Output ONLY the JSON, nothing else.",
-      userPrompt: `Convert this analysis into JSON matching this schema:\n${JSON.stringify(ANALYSIS_SCHEMA, null, 2)}\n\nAnalysis to convert:\n${text.slice(0, 4000)}`,
-      schema: ANALYSIS_SCHEMA,
-      schemaName: "analysis",
-      maxTokens: 2048,
-    });
-    parsed = extractJSON(retryText) as Record<string, unknown>;
-  }
+  const parsed = await extractJSONWithRetry({
+    text,
+    schema: ANALYSIS_SCHEMA,
+    schemaName: "analysis",
+    provider,
+    modelId,
+    apiKey,
+    onRetry: () => stepLog({ type: "info", message: "JSON extraction failed, retrying with focused prompt" }),
+  }) as Record<string, unknown>;
   if (!parsed.summary || !parsed.type || !parsed.complexity) {
     throw new Error("Invalid analysis response: missing required fields");
   }

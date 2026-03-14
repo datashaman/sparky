@@ -5,7 +5,7 @@ import { TOOL_SCHEMAS, createToolHandler } from "../tools/index.js";
 import { buildSkillResolver } from "../tools/skill-tool.js";
 import { createAskUserHandler } from "../tools/ask-user-tool.js";
 import { isSessionCancelled } from "../session-manager.js";
-import { extractJSON } from "../util.js";
+import { extractJSONWithRetry } from "../util.js";
 import { readRepoContext } from "../repo-context.js";
 
 const TOOL_IDS = ["list_files", "read_file", "glob", "grep", "bash", "ask_user", "use_skill"];
@@ -71,24 +71,15 @@ export async function runPlanPipeline(opts: PlanPipelineOpts): Promise<void> {
     onLog: stepLog,
   });
 
-  let parsed: Record<string, unknown>;
-  try {
-    parsed = extractJSON(text) as Record<string, unknown>;
-  } catch {
-    // JSON extraction failed — retry with a focused prompt
-    stepLog({ type: "info", message: "JSON extraction failed, retrying with focused prompt" });
-    const retryText = await callLLM({
-      provider,
-      modelId,
-      apiKey,
-      systemPrompt: "You are a JSON formatter. Convert the plan below into a valid JSON object. Output ONLY the JSON, nothing else.",
-      userPrompt: `Convert this plan into JSON matching this schema:\n${JSON.stringify(PLAN_SCHEMA, null, 2)}\n\nPlan to convert:\n${text.slice(0, 4000)}`,
-      schema: PLAN_SCHEMA,
-      schemaName: "execution_plan",
-      maxTokens: 2048,
-    });
-    parsed = extractJSON(retryText) as Record<string, unknown>;
-  }
+  let parsed = await extractJSONWithRetry({
+    text,
+    schema: PLAN_SCHEMA,
+    schemaName: "execution_plan",
+    provider,
+    modelId,
+    apiKey,
+    onRetry: () => stepLog({ type: "info", message: "JSON extraction failed, retrying with focused prompt" }),
+  }) as Record<string, unknown>;
   if (!parsed.goal || !parsed.steps || !parsed.success_criteria) {
     throw new Error("Invalid plan response: missing required fields");
   }
