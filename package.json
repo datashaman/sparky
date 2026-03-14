@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
-    "tauri": "dotenv -e .env -- tauri",
+    "tauri": "export $(grep -v '^#' .env | xargs) && tauri",
     "test": "vitest run",
     "test:watch": "vitest"
   },

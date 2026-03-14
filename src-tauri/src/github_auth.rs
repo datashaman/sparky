@@ -12,7 +12,7 @@ use axum::{
     Router,
 };
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
-use rand::Rng;
+use rand::{Rng, RngExt};
 use reqwest::header::{ACCEPT, USER_AGENT};
 use serde::Deserialize;
 use sha2::{Digest, Sha256};
@@ -196,7 +196,7 @@ pub async fn poll_for_token(device_code: &str, interval_secs: u64) -> Result<Str
 /// PKCE code_verifier: 43-128 chars, generate random base64url
 fn pkce_code_verifier() -> String {
     let mut bytes = [0u8; 32];
-    rand::thread_rng().fill(&mut bytes);
+    rand::rng().fill_bytes(&mut bytes);
     URL_SAFE_NO_PAD.encode(bytes)
 }
 
@@ -235,7 +235,10 @@ pub async fn login_with_web_flow() -> Result<String, String> {
     let client_id = github_client_id()?;
     let client_secret = github_client_secret()?;
 
-    let state: String = rand::thread_rng().sample_iter(rand::distributions::Alphanumeric).take(32).map(char::from).collect();
+    let state: String = {
+        let mut rng = rand::rng();
+        (0..32).map(|_| char::from(rng.random_range(b'a'..=b'z'))).collect()
+    };
     let code_verifier = pkce_code_verifier();
     let code_challenge = pkce_code_challenge(&code_verifier);
 
