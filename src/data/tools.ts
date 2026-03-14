@@ -169,6 +169,38 @@ export interface AskUserRequest {
 
 export type AskUserHandler = (request: AskUserRequest) => Promise<string[]>;
 
+/** Validate and parse ask_user tool input from the LLM. */
+export function parseAskUserInput(input: Record<string, unknown>): AskUserRequest {
+  const question = input.question;
+  if (typeof question !== "string" || question.length === 0) {
+    throw new Error("ask_user: 'question' must be a non-empty string");
+  }
+  const options = input.options;
+  if (!Array.isArray(options) || options.length === 0 || !options.every((o) => typeof o === "string")) {
+    throw new Error("ask_user: 'options' must be a non-empty array of strings");
+  }
+  const allowMultiple = input.allow_multiple === true;
+  return { question, options: options as string[], allowMultiple };
+}
+
+/** Create a tool handler that intercepts ask_user calls and delegates the rest. */
+export function createAskUserInterceptor(
+  onAskUser: AskUserHandler | undefined,
+  baseHandler: (name: string, input: Record<string, unknown>) => Promise<string>,
+): (name: string, input: Record<string, unknown>) => Promise<string> {
+  return async (name, input) => {
+    if (name === "ask_user") {
+      if (!onAskUser) return "Error: user interaction not available.";
+      const request = parseAskUserInput(input);
+      const selected = await onAskUser(request);
+      return selected.length === 0
+        ? "User did not select any option."
+        : `User selected: ${selected.join(", ")}`;
+    }
+    return baseHandler(name, input);
+  };
+}
+
 /**
  * Create a tool call handler that bridges LLM tool calls to Tauri invoke commands.
  * The handler takes a tool name and input, executes the corresponding Tauri command,

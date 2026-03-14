@@ -159,14 +159,6 @@ export interface ExecutionLogEntry {
   message?: string;
 }
 
-export interface AskUserPrompt {
-  question: string;
-  options: string[];
-  allowMultiple: boolean;
-  stepOrder: number;
-  resolve: (selected: string[]) => void;
-}
-
 export type WorktreeStatus = "creating" | "ready" | "error" | "removing";
 
 export interface IssueWorktree {

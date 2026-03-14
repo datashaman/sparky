@@ -13,11 +13,11 @@ import { getPlanForIssue, createPlan, deletePlansForIssue } from "../data/execut
 import { getWorktreeForIssue, removeWorktree } from "../data/issueWorktrees";
 import { runAnalysis } from "../data/analyseIssue";
 import { runPlanGeneration } from "../data/generatePlan";
-import type { AskUserPrompt, ExecutionLogEntry, IssueAnalysis, AnalysisResult, ExecutionPlan, ExecutionPlanResult, IssueWorktree, StepExecutionStatus, CriticReview } from "../data/types";
+import type { ExecutionLogEntry, IssueAnalysis, AnalysisResult, ExecutionPlan, ExecutionPlanResult, IssueWorktree, StepExecutionStatus, CriticReview } from "../data/types";
 import { executePlan } from "../data/executePlan";
 import { marked } from "marked";
 import { AnalysisView } from "./AnalysisView";
-import { PlanView, AskUserPanel } from "./PlanView";
+import { PlanView, AskUserPanel, type AskUserPrompt } from "./PlanView";
 import { SkillDetail } from "./SkillDetail";
 import { AgentDetail } from "./AgentDetail";
 
@@ -122,19 +122,37 @@ export function WorkspaceDetail({ workspaceId, onSwitchWorkspace, onDeleted, onW
   }, [flushLogs]);
 
   // Reusable ask-user handler that bridges execution/analysis to the UI
+  const pendingResolveRef = useRef<((selected: string[]) => void) | null>(null);
   const createAskUserBridge = useCallback((stepOrder: number) => {
     return (request: { question: string; options: string[]; allowMultiple: boolean }) =>
       new Promise<string[]>((resolve) => {
+        // Cancel any previous pending prompt
+        if (pendingResolveRef.current) {
+          pendingResolveRef.current([]);
+        }
+        pendingResolveRef.current = resolve;
         setAskUserPrompt({
           ...request,
           stepOrder,
           resolve: (selected) => {
+            pendingResolveRef.current = null;
             setAskUserPrompt(null);
             resolve(selected);
           },
         });
       });
   }, []);
+
+  // Cleanup pending ask-user prompt on issue change or unmount
+  useEffect(() => {
+    return () => {
+      if (pendingResolveRef.current) {
+        pendingResolveRef.current([]);
+        pendingResolveRef.current = null;
+      }
+      setAskUserPrompt(null);
+    };
+  }, [selectedIssue]);
 
   useEffect(() => {
     load();

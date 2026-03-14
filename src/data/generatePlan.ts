@@ -3,8 +3,9 @@ import { getDb } from "../db";
 import type { ExecutionPlan, ExecutionPlanResult, AnalysisResult, Agent, Skill } from "./types";
 import type { GitHubIssue } from "../github";
 import { callLLMWithTools, KEYLESS_PROVIDERS } from "./llm";
-import { TOOLS, TOOL_SCHEMAS, createToolCallHandler, type AskUserHandler, type SkillResolver } from "./tools";
+import { TOOLS, TOOL_SCHEMAS, createToolCallHandler, createAskUserInterceptor, type AskUserHandler, type SkillResolver } from "./tools";
 import { ensureWorktree } from "./issueWorktrees";
+import { extractJSON } from "./jsonExtract";
 import { reviewPlan, refinePlan } from "./criticPlan";
 
 const PLAN_SYSTEM_PROMPT = `You are a senior software engineering project manager. Given a GitHub issue analysis, available agents, and available skills, create a concrete step-by-step execution plan to resolve the issue.
@@ -193,19 +194,7 @@ export async function runPlanGeneration(
     const planTools = TOOL_SCHEMAS.filter((t) => PLAN_TOOL_NAMES.has(t.name));
 
     const baseHandler = createToolCallHandler(worktree.path, skillResolver);
-    const toolHandler = async (name: string, input: Record<string, unknown>): Promise<string> => {
-      if (name === "ask_user") {
-        if (!onAskUser) return "Error: user interaction not available.";
-        const question = input.question as string;
-        const options = input.options as string[];
-        const allowMultiple = (input.allow_multiple as boolean) ?? false;
-        const selected = await onAskUser({ question, options, allowMultiple });
-        return selected.length === 0
-          ? "User did not select any option."
-          : `User selected: ${selected.join(", ")}`;
-      }
-      return baseHandler(name, input);
-    };
+    const toolHandler = createAskUserInterceptor(onAskUser, baseHandler);
 
     const schemaInstruction = `\n\nWhen you are ready to provide your final plan, respond with a JSON object matching this schema:\n${JSON.stringify(PLAN_SCHEMA, null, 2)}`;
 
@@ -221,10 +210,7 @@ export async function runPlanGeneration(
     });
     console.log("[plan] success, response length:", text.length);
 
-    // Extract JSON from the response (may be wrapped in code fences)
-    const jsonMatch = text.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/) ?? [null, text];
-    const jsonText = (jsonMatch[1] ?? text).trim();
-    let parsed: ExecutionPlanResult = JSON.parse(jsonText);
+    let parsed = extractJSON(text) as ExecutionPlanResult;
     if (!parsed.goal || !parsed.steps || !parsed.success_criteria) {
       throw new Error("Invalid plan response: missing required fields");
     }

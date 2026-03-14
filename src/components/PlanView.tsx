@@ -1,5 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { AskUserPrompt, ExecutionLogEntry, ExecutionPlanResult, StepExecutionStatus, CriticReview } from "../data/types";
+import type { ExecutionLogEntry, ExecutionPlanResult, StepExecutionStatus, CriticReview } from "../data/types";
+import type { AskUserRequest } from "../data/tools";
+
+export interface AskUserPrompt extends AskUserRequest {
+  stepOrder: number;
+  resolve: (selected: string[]) => void;
+}
 
 interface PlanViewProps {
   result: ExecutionPlanResult;
@@ -153,11 +159,11 @@ export function AskUserPanel({ prompt }: { prompt: AskUserPrompt }) {
     <div className="pv-ask-user">
       <div className="pv-ask-user-question">{prompt.question}</div>
       <div className="pv-ask-user-options">
-        {prompt.options.map((option) => (
-          <label key={option} className="pv-ask-user-option">
+        {prompt.options.map((option, idx) => (
+          <label key={idx} className="pv-ask-user-option">
             <input
               type={prompt.allowMultiple ? "checkbox" : "radio"}
-              name="ask-user"
+              name={`ask-user-${prompt.stepOrder}`}
               checked={selected.has(option)}
               onChange={() => toggle(option)}
             />

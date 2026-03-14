@@ -3,7 +3,7 @@ import { listAgentsForWorkspace, getToolIdsForAgent } from "./agents";
 import { listSkillsForWorkspace } from "./skills";
 import { ensureWorktree } from "./issueWorktrees";
 import { callLLMWithTools, KEYLESS_PROVIDERS } from "./llm";
-import { TOOL_SCHEMAS, filterToolSchemas, createToolCallHandler } from "./tools";
+import { TOOL_SCHEMAS, filterToolSchemas, createToolCallHandler, createAskUserInterceptor } from "./tools";
 import type { AskUserRequest } from "./tools";
 import type {
   ExecutionLogEntry,
@@ -204,20 +204,11 @@ export async function executePlan(opts: ExecutePlanOpts): Promise<void> {
 
       stepLog?.({ type: "info", message: `Starting: ${step.title} (${provider}/${modelId})` });
 
-      // Wrap tool handler to intercept ask_user calls
-      const stepToolHandler = async (name: string, input: Record<string, unknown>): Promise<string> => {
-        if (name === "ask_user") {
-          if (!onAskUser) return "Error: user interaction not available in this context.";
-          const question = input.question as string;
-          const options = input.options as string[];
-          const allowMultiple = (input.allow_multiple as boolean) ?? false;
-          const selected = await onAskUser(step.order, { question, options, allowMultiple });
-          return selected.length === 0
-            ? "User did not select any option."
-            : `User selected: ${selected.join(", ")}`;
-        }
-        return toolHandler(name, input);
-      };
+      // Wrap tool handler to intercept ask_user calls with step-scoped onAskUser
+      const askHandler = onAskUser
+        ? (req: AskUserRequest) => onAskUser(step.order, req)
+        : undefined;
+      const stepToolHandler = createAskUserInterceptor(askHandler, toolHandler);
 
       const output = await callLLMWithTools({
         provider,

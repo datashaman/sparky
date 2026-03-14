@@ -5,8 +5,9 @@ import type { GitHubIssue } from "../github";
 import { listSkillsForWorkspace } from "./skills";
 import { listAgentsForWorkspace } from "./agents";
 import { callLLMWithTools, KEYLESS_PROVIDERS } from "./llm";
-import { TOOLS, TOOL_SCHEMAS, createToolCallHandler, type AskUserHandler, type SkillResolver } from "./tools";
+import { TOOLS, TOOL_SCHEMAS, createToolCallHandler, createAskUserInterceptor, type AskUserHandler, type SkillResolver } from "./tools";
 import { ensureWorktree } from "./issueWorktrees";
+import { extractJSON } from "./jsonExtract";
 
 const SYSTEM_PROMPT = `You are a senior software engineer analysing a GitHub issue. Provide a concise, structured analysis. Be direct and practical. No filler.
 
@@ -210,21 +211,8 @@ export async function runAnalysis(
     const ANALYSIS_TOOL_NAMES = new Set(["read_file", "glob", "grep", "bash", "ask_user", "use_skill"]);
     const analysisTools = TOOL_SCHEMAS.filter((t) => ANALYSIS_TOOL_NAMES.has(t.name));
 
-    // Base handler for file/shell/skill tools, with ask_user interception
     const baseHandler = createToolCallHandler(worktree.path, skillResolver);
-    const toolHandler = async (name: string, input: Record<string, unknown>): Promise<string> => {
-      if (name === "ask_user") {
-        if (!onAskUser) return "Error: user interaction not available.";
-        const question = input.question as string;
-        const options = input.options as string[];
-        const allowMultiple = (input.allow_multiple as boolean) ?? false;
-        const selected = await onAskUser({ question, options, allowMultiple });
-        return selected.length === 0
-          ? "User did not select any option."
-          : `User selected: ${selected.join(", ")}`;
-      }
-      return baseHandler(name, input);
-    };
+    const toolHandler = createAskUserInterceptor(onAskUser, baseHandler);
 
     const schemaInstruction = `\n\nWhen you are ready to provide your final analysis, respond with a JSON object matching this schema:\n${JSON.stringify(ANALYSIS_SCHEMA, null, 2)}`;
 
@@ -240,10 +228,7 @@ export async function runAnalysis(
     });
     console.log("[analyse] success, response length:", text.length);
 
-    // Extract JSON from the response (may be wrapped in code fences)
-    const jsonMatch = text.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/) ?? [null, text];
-    const jsonText = (jsonMatch[1] ?? text).trim();
-    const parsed = JSON.parse(jsonText);
+    const parsed = extractJSON(text) as Record<string, unknown>;
     if (!parsed.summary || !parsed.type || !parsed.complexity) {
       throw new Error("Invalid analysis response: missing required fields");
     }
