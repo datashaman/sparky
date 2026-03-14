@@ -71,7 +71,7 @@ export async function anthropicToolLoop(opts: {
     : [{ role: "user", content: opts.userPrompt }];
 
   let toolResultCount = 0;
-  let hintInjected = false;
+  let hintLevel = 0; // 0=none, 1=info, 2=urgent
 
   for (let turn = 0; turn < maxTurns; turn++) {
     const isLastTurn = turn === maxTurns - 1;
@@ -151,16 +151,15 @@ export async function anthropicToolLoop(opts: {
       compressMessages(messages, "anthropic", modelId, onLog);
     }
 
-    // Remaining turns awareness — inject at key thresholds
+    // Remaining turns awareness — two-stage hints
     const remaining = maxTurns - turn - 1;
     const turnsUsedPct = ((turn + 1) / maxTurns) * 100;
-    if (turnsUsedPct >= 50 && !hintInjected) {
-      if (turnsUsedPct >= 80 || budget.utilizationPct >= 85) {
-        messages.push({ role: "user", content: [{ type: "text", text: `⚠ ${remaining} actions remaining (context: ${budget.utilizationPct}% used). Prioritize completing the most critical work. Leave the codebase in a working state. Skip nice-to-haves.` }] });
-      } else {
-        messages.push({ role: "user", content: [{ type: "text", text: `Note: ${remaining} of ${maxTurns} actions remaining. Plan your remaining work accordingly.` }] });
-      }
-      hintInjected = true;
+    if ((turnsUsedPct >= 80 || budget.utilizationPct >= 85) && hintLevel < 2) {
+      messages.push({ role: "user", content: [{ type: "text", text: `⚠ ${remaining} actions remaining (context: ${budget.utilizationPct}% used). Prioritize completing the most critical work. Leave the codebase in a working state. Skip nice-to-haves.` }] });
+      hintLevel = 2;
+    } else if (turnsUsedPct >= 75 && hintLevel < 1) {
+      messages.push({ role: "user", content: [{ type: "text", text: `Note: ${remaining} of ${maxTurns} actions remaining. Plan your remaining work accordingly.` }] });
+      hintLevel = 1;
     }
 
     if (onCheckpoint && toolResultCount % 3 === 0) {
