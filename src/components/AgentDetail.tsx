@@ -323,9 +323,9 @@ export function AgentDetail({ agentId, workspaceId, onBack, onDeleted }: AgentDe
             </div>
             <div className="flex flex-col gap-1.5 flex-1 min-w-0">
               <Label>Model</Label>
-              {formProvider === "openrouter" ? (
+              {formProvider === "openrouter" || (formProvider === "ollama" && models.length === 0) ? (
                 <Input
-                  placeholder="e.g. anthropic/claude-sonnet-4"
+                  placeholder={formProvider === "ollama" ? "e.g. qwen2.5:latest" : "e.g. anthropic/claude-sonnet-4"}
                   value={formModel}
                   onChange={(e) => setFormModel(e.target.value)}
                   disabled={saving}

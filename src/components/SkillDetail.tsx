@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { getSkill, updateSkill, deleteSkill } from "../data/skills";
 import { AGENT_PROVIDERS, AGENT_MODELS } from "../data/agents";
 import { fetchOllamaModels } from "../data/ollamaModels";
@@ -44,10 +44,16 @@ export function SkillDetail({ skillId, onBack, onDeleted }: SkillDetailProps) {
   const [formModel, setFormModel] = useState("");
 
   const [ollamaModels, setOllamaModels] = useState<string[]>([]);
+  const providerRef = useRef(formProvider);
+  providerRef.current = formProvider;
 
   useEffect(() => {
-    if (formProvider === "ollama") {
-      fetchOllamaModels().then(setOllamaModels);
+    const current = formProvider;
+    if (current === "ollama") {
+      fetchOllamaModels().then((m) => {
+        if (providerRef.current !== current) return;
+        setOllamaModels(m);
+      });
     }
   }, [formProvider]);
 
@@ -240,9 +246,9 @@ export function SkillDetail({ skillId, onBack, onDeleted }: SkillDetailProps) {
 
         <div className="detail-field">
           <Label>Model</Label>
-          {formProvider === "openrouter" ? (
+          {formProvider === "openrouter" || (formProvider === "ollama" && models.length === 0) ? (
             <Input
-              placeholder="e.g. anthropic/claude-sonnet-4"
+              placeholder={formProvider === "ollama" ? "e.g. qwen2.5:latest" : "e.g. anthropic/claude-sonnet-4"}
               value={formModel}
               onChange={(e) => setFormModel(e.target.value)}
               disabled={saving}

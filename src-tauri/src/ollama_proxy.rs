@@ -45,9 +45,16 @@ struct OllamaModelEntry {
     name: String,
 }
 
+static OLLAMA_LIST_CLIENT: LazyLock<Client> = LazyLock::new(|| {
+    Client::builder()
+        .timeout(Duration::from_secs(10))
+        .build()
+        .expect("Failed to create Ollama list client")
+});
+
 #[tauri::command]
 pub async fn ollama_list_models() -> Result<Vec<String>, String> {
-    let res = OLLAMA_CLIENT
+    let res = OLLAMA_LIST_CLIENT
         .get("http://localhost:11434/api/tags")
         .send()
         .await
