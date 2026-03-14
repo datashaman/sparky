@@ -6,13 +6,19 @@ import type { LogCallback } from "./index.js";
 
 const TRUNCATE_THRESHOLD = 2048;
 const SUMMARIZE_THRESHOLD = 256;
+const ASSISTANT_TEXT_PREVIEW_LENGTH = 500;
+const ASSISTANT_TEXT_OMIT_OVERSHOOT = 30;
+const ASSISTANT_TEXT_MIN_LENGTH = 1000;
+const ASSISTANT_TEXT_OMITTED = "[assistant reasoning omitted]";
+const ASSISTANT_TEXT_SUFFIX = "\n... (assistant text compressed)";
 
 /**
- * Compress older tool results in the message array when context utilization
- * exceeds a threshold. Mutates the array in place.
+ * Compress older messages when context utilization exceeds a threshold.
+ * Mutates the array in place.
  *
  * Protected: the last `protectedTail` messages are never touched.
- * Compression is applied oldest-first in three tiers:
+ * Assistant text is compressed first (truncate or omit), then tool results
+ * are compressed in three tiers:
  *   1. Truncate content to 2KB
  *   2. Summarize to a short tag
  *   3. Drop entirely (replace with placeholder)
@@ -51,12 +57,18 @@ export function compressMessages(
   if (compressed > 0) {
     onLog?.({
       type: "info",
-      message: `Compressed ${compressed} tool results: ${budget.utilizationPct}% → ${currentPct}% utilization`,
+      message: `Compressed ${compressed} messages: ${budget.utilizationPct}% → ${currentPct}% utilization`,
     });
   }
 }
 
 function compressMessage(msg: any, provider: AgentProvider, currentPct: number, targetPct: number): number {
+  // Asymmetric compression: compress assistant text blocks first (cheaper to lose
+  // than user messages). Inspired by ChatGPT's approach of keeping user messages
+  // but dropping assistant responses for ~50% token savings.
+  const assistantCount = compressAssistantText(msg, provider, currentPct, targetPct);
+  if (assistantCount > 0) return assistantCount;
+
   switch (provider) {
     case "anthropic":
       return compressAnthropicMessage(msg, currentPct, targetPct);
@@ -115,6 +127,52 @@ function compressGeminiMessage(msg: any, currentPct: number, targetPct: number):
     }
   }
   return count;
+}
+
+/**
+ * Compress assistant text blocks. Assistant reasoning/narration is the least
+ * valuable content to preserve — the tool calls and user messages carry the
+ * actual state. At moderate overshoot, text is truncated to a preview. At
+ * severe overshoot, text is replaced with a placeholder.
+ */
+function compressAssistantText(msg: any, provider: AgentProvider, currentPct: number, targetPct: number): number {
+  const overshoot = currentPct - targetPct;
+
+  if (provider === "gemini") {
+    // Gemini: model messages with text parts
+    if (msg.role !== "model" || !Array.isArray(msg.parts)) return 0;
+    let count = 0;
+    for (const part of msg.parts) {
+      if (!part.text || typeof part.text !== "string" || part.text.length < ASSISTANT_TEXT_MIN_LENGTH) continue;
+      part.text = compressAssistantContent(part.text, overshoot);
+      count++;
+    }
+    return count;
+  }
+
+  // Anthropic: assistant messages with content array of text blocks
+  if (provider === "anthropic") {
+    if (msg.role !== "assistant" || !Array.isArray(msg.content)) return 0;
+    let count = 0;
+    for (const block of msg.content) {
+      if (block.type !== "text" || typeof block.text !== "string" || block.text.length < ASSISTANT_TEXT_MIN_LENGTH) continue;
+      block.text = compressAssistantContent(block.text, overshoot);
+      count++;
+    }
+    return count;
+  }
+
+  // OpenAI-compatible: assistant messages with content string
+  if (msg.role !== "assistant" || typeof msg.content !== "string" || msg.content.length < ASSISTANT_TEXT_MIN_LENGTH) return 0;
+  msg.content = compressAssistantContent(msg.content, overshoot);
+  return 1;
+}
+
+function compressAssistantContent(text: string, overshoot: number): string {
+  if (overshoot > ASSISTANT_TEXT_OMIT_OVERSHOOT) {
+    return ASSISTANT_TEXT_OMITTED;
+  }
+  return text.slice(0, ASSISTANT_TEXT_PREVIEW_LENGTH) + ASSISTANT_TEXT_SUFFIX;
 }
 
 /**
