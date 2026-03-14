@@ -4,7 +4,7 @@ Sparky uses **skills** and **agents** to bring focused knowledge and specialized
 
 ## Skills
 
-A skill is a reusable body of knowledge written in markdown. When a plan step references a skill, its content is injected into the LLM's context so the model has the right domain knowledge at hand.
+A skill is a reusable body of knowledge written in markdown. During execution, the LLM can load any workspace skill on demand by calling the `use_skill` tool. The LLM decides at runtime which skills are relevant to its current task.
 
 Skills are scoped to a workspace. Each skill has:
 
@@ -17,7 +17,7 @@ Skills are scoped to a workspace. Each skill has:
 
 ### Example
 
-A skill named `react-best-practices` might contain component-naming conventions, hook usage rules, and performance guidelines. Any plan step that references this skill will have those guidelines available in context.
+A skill named `react-best-practices` might contain component-naming conventions, hook usage rules, and performance guidelines. The LLM can call `use_skill` with `skill_name: "react-best-practices"` to load these guidelines when working on React-related steps. An optional `arguments` field can customize the skill's output.
 
 ## Agents
 
@@ -33,17 +33,16 @@ Each agent has:
 | **provider / model** | Which LLM provider and model the agent uses (can differ from workspace defaults) |
 | **max_turns** | Maximum number of tool-use turns (default 25) |
 | **background** | Boolean flag — when true, the agent runs without direct user interaction |
-| **skills** | Associated skills loaded into the agent's context (via `agent_skills`) |
-| **tools** | Controls what the agent can do (via `agent_tools`) |
+| **tools** | Controls what the agent can do (via `agent_tools`); `use_skill` is always available |
 
-By default, agents have **read-only** tool access: `read`, `glob`, and `grep`. Granting `write`, `edit`, or `bash` gives the agent the ability to modify the codebase, so do so deliberately.
+By default, agents have **read-only** tool access: `read`, `glob`, and `grep`, plus `use_skill` (always available). Granting `write`, `edit`, or `bash` gives the agent the ability to modify the codebase, so do so deliberately.
 
 ## How They Fit in the Pipeline
 
 1. **Analysis** — The issue analysis step recommends skills and agents based on the issue content.
 2. **Review and creation** — You review the recommendations and create the ones you want (or create custom ones from scratch).
-3. **Planning** — The plan generator references skills and agents by name in individual plan steps.
-4. **Execution** — For each step, the system loads the assigned agent's system prompt, injects the referenced skills into context, and restricts the available tools to the agent's configured set.
+3. **Planning** — The plan generator references agents by name in individual plan steps. Skills are not allocated to steps -- they are available to all steps at runtime.
+4. **Execution** — For each step, the system lists available skills in the prompt, loads the assigned agent's system prompt (if any), and restricts the available tools to the agent's configured set (plus `use_skill`). The LLM calls `use_skill` when it needs domain knowledge.
 
 ### The Issue LLM vs Agents
 
@@ -74,9 +73,8 @@ Most steps should have `agent_name: null`, meaning the issue LLM handles them. O
 4. Write the **system prompt** in the content field. This defines the agent's behavior, role, constraints, and expected output format.
 5. Select a **provider** and **model**. Agents can use a different model from the workspace default — use a stronger model for reasoning-heavy agents and a faster model for straightforward tasks.
 6. Set **max turns** (default 25). Lower this for simple, bounded tasks.
-7. **Assign skills** — any skills the agent should have loaded into its context.
-8. **Assign tools** — controls what the agent can do. Start with the read-only defaults and only add write/edit/bash when the agent genuinely needs them.
-9. Save.
+7. **Assign tools** — controls what the agent can do. Start with the read-only defaults and only add write/edit/bash when the agent genuinely needs them. `use_skill` is always available.
+8. Save.
 
 ## Best Practices
 
