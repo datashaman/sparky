@@ -88,7 +88,6 @@ export interface ExecutionPlanStep {
   title: string;
   description: string;
   agent_name: string | null;
-  skill_names: string[];
   expected_output: string;
   depends_on: number[];
 }

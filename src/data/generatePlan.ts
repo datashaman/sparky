@@ -6,18 +6,19 @@ import { callLLM, KEYLESS_PROVIDERS } from "./llm";
 import { TOOLS } from "./tools";
 import { reviewPlan, refinePlan } from "./criticPlan";
 
-const PLAN_SYSTEM_PROMPT = `You are a senior software engineering project manager. Given a GitHub issue analysis, available agents, and their skills, create a concrete step-by-step execution plan to resolve the issue.
+const PLAN_SYSTEM_PROMPT = `You are a senior software engineering project manager. Given a GitHub issue analysis, available agents, and available skills, create a concrete step-by-step execution plan to resolve the issue.
 
-The plan is executed by an **issue LLM** (the controlling LLM) that has access to all sandboxed tools (${TOOLS.map((t) => t.name).join(", ")}) and works directly in the issue's worktree. The issue LLM does most of the work itself. It can optionally delegate specific steps to specialized agents when their focused expertise adds value.
+The plan is executed by an **issue LLM** (the controlling LLM) that has access to sandboxed tools (${TOOLS.map((t) => t.name).join(", ")}) and works directly in the issue's worktree. The issue LLM does most of the work itself. It can optionally delegate specific steps to specialized agents when their focused expertise adds value.
+
+The issue LLM also has a **use_skill** tool that lets it load any available skill on demand during execution. Skills provide domain-specific knowledge and instructions. The LLM decides at runtime which skills to call — you do NOT need to plan for skill loading.
 
 Steps can depend on other steps. Be practical and direct — no filler.
 
-The plan should be minimal: only include steps that are necessary to resolve the issue. Prefer fewer, well-scoped steps over many granular ones.
+The plan should be minimal: only include steps that are necessary to resolve the issue. Prefer fewer, well-scoped steps over many granular ones. Every step must represent real work (exploring code, making changes, running tests).
 
 For each step:
 - Most steps should be done by the issue LLM directly (leave agent_name null).
-- Only assign an agent_name when a specialized agent would do the step better than the issue LLM working alone.
-- skill_names can reference skills the issue LLM should load for context on that step, regardless of whether an agent is assigned.`;
+- Only assign an agent_name when a specialized agent would do the step better than the issue LLM working alone.`;
 
 export const PLAN_SCHEMA = {
   type: "object" as const,
@@ -32,11 +33,6 @@ export const PLAN_SCHEMA = {
           title: { type: "string" as const, description: "Short step title" },
           description: { type: "string" as const, description: "What should be done in this step" },
           agent_name: { type: ["string", "null"] as const, description: "Name of a specialized agent to delegate to, or null if the issue LLM handles this step directly" },
-          skill_names: {
-            type: "array" as const,
-            items: { type: "string" as const },
-            description: "Skills to load for context on this step (used by the issue LLM or the assigned agent)",
-          },
           expected_output: { type: "string" as const, description: "What this step should produce" },
           depends_on: {
             type: "array" as const,
@@ -44,7 +40,7 @@ export const PLAN_SCHEMA = {
             description: "Order numbers of prerequisite steps",
           },
         },
-        required: ["order", "title", "description", "agent_name", "skill_names", "expected_output", "depends_on"],
+        required: ["order", "title", "description", "agent_name", "expected_output", "depends_on"],
         additionalProperties: false,
       },
       description: "Ordered execution steps",
@@ -92,7 +88,8 @@ export function buildPlanPrompt(
   }
 
   if (skills.length > 0) {
-    parts.push("", "## Available Skills");
+    parts.push("", "## Available Skills (accessible at runtime via use_skill tool)");
+    parts.push("The issue LLM can call the `use_skill` tool at any time during execution to load a skill's content. The tool takes a required `skill_name` field and an optional `arguments` field to customize the skill's output. You do NOT need to plan skill usage — the LLM will invoke skills as needed.");
     for (const s of skills) {
       parts.push(`- **${s.name}**: ${s.description || "(no description)"}`);
     }
@@ -100,7 +97,7 @@ export function buildPlanPrompt(
 
   parts.push(
     "",
-    "Create an execution plan. Most steps should be handled directly by the issue LLM (agent_name: null). Only delegate to a named agent when its specialization adds clear value. Only reference skills and agents that exist above.",
+    "Create an execution plan. Every step must be real work (exploring code, making edits, running tests). Only delegate to a named agent when its specialization adds clear value. Only reference agents that exist above.",
   );
 
   return parts.join("\n");

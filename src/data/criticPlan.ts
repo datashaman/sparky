@@ -69,7 +69,7 @@ export async function reviewPlan(
     "### Steps",
     ...planResult.steps.map(
       (s) =>
-        `${s.order}. **${s.title}** — ${s.description}\n   Agent: ${s.agent_name ?? "issue LLM"} | Skills: ${s.skill_names.join(", ") || "none"} | Depends on: ${s.depends_on.join(", ") || "none"}\n   Expected: ${s.expected_output}`,
+        `${s.order}. **${s.title}** — ${s.description}\n   Agent: ${s.agent_name ?? "issue LLM"} | Depends on: ${s.depends_on.join(", ") || "none"}\n   Expected: ${s.expected_output}`,
     ),
     "",
     "Review this plan. Only fail it if there are serious issues.",
