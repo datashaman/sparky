@@ -11,6 +11,7 @@ describe('TOOL_SCHEMAS', () => {
     expect(names).toContain('grep')
     expect(names).toContain('bash')
     expect(names).toContain('use_skill')
+    expect(names).toContain('ask_user')
   })
 
   it('each schema has name, description, and parameters', () => {
@@ -23,30 +24,35 @@ describe('TOOL_SCHEMAS', () => {
 })
 
 describe('filterToolSchemas', () => {
-  it('returns correct subset for given tool ids (use_skill always included)', () => {
+  it('returns correct subset plus always-on tools', () => {
     const result = filterToolSchemas(['read', 'glob'])
     const names = result.map((t) => t.name)
     expect(names).toContain('read_file')
     expect(names).toContain('glob')
     expect(names).toContain('use_skill')
+    expect(names).toContain('ask_user')
   })
 
-  it('returns only use_skill for empty input', () => {
+  it('returns only always-on tools for empty input', () => {
     const result = filterToolSchemas([])
-    expect(result).toHaveLength(1)
-    expect(result[0].name).toBe('use_skill')
+    expect(result).toHaveLength(2)
+    const names = result.map((t) => t.name)
+    expect(names).toContain('use_skill')
+    expect(names).toContain('ask_user')
   })
 
-  it('ignores unknown tool ids (use_skill still included)', () => {
+  it('ignores unknown tool ids (always-on tools still included)', () => {
     const result = filterToolSchemas(['read', 'nonexistent'])
-    expect(result).toHaveLength(2)
-    expect(result[0].name).toBe('read_file')
-    expect(result[1].name).toBe('use_skill')
+    expect(result).toHaveLength(3)
+    const names = result.map((t) => t.name)
+    expect(names).toContain('read_file')
+    expect(names).toContain('use_skill')
+    expect(names).toContain('ask_user')
   })
 
   it('returns all schemas when all ids provided', () => {
-    const result = filterToolSchemas(['read', 'write', 'edit', 'glob', 'grep', 'bash', 'use_skill'])
-    expect(result).toHaveLength(7)
+    const result = filterToolSchemas(['read', 'write', 'edit', 'glob', 'grep', 'bash', 'use_skill', 'ask_user'])
+    expect(result).toHaveLength(8)
   })
 })
 
