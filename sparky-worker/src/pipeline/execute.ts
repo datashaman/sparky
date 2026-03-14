@@ -17,7 +17,7 @@ import {
   updateExistingTable,
 } from "../db.js";
 import { callLLM, callLLMWithTools, KEYLESS_PROVIDERS } from "../llm/index.js";
-import { getContextWindowSize } from "../llm/context-budget.js";
+import { getContextWindowSize, estimateMessageTokens } from "../llm/context-budget.js";
 import { TOOL_SCHEMAS, filterToolSchemas, createToolHandler } from "../tools/index.js";
 import { buildSkillResolver } from "../tools/skill-tool.js";
 import { createAskUserHandler } from "../tools/ask-user-tool.js";
@@ -281,12 +281,10 @@ export async function runExecutionPipeline(opts: ExecutionPipelineOpts): Promise
 
       // Log step metrics
       const stepDuration = Math.round((Date.now() - stepStartTime) / 1000);
-      const turnCount = Math.ceil(messages.length / 2);
-      const contextChars = JSON.stringify(messages).length;
-      const estimatedTokens = Math.ceil(contextChars / 4);
+      const estimatedTokens = estimateMessageTokens(messages);
       stepLog({
         type: "info",
-        message: `Step completed in ${stepDuration}s, ${turnCount} turns, ~${estimatedTokens.toLocaleString()} tokens used`,
+        message: `Step completed in ${stepDuration}s, ${actualTurn} turns, ~${estimatedTokens.toLocaleString()} tokens used`,
       });
 
       stepOutputs.set(step.order, output);

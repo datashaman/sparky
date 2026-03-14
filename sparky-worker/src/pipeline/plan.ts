@@ -96,8 +96,8 @@ export async function runPlanPipeline(opts: PlanPipelineOpts): Promise<void> {
   }
 
   const duration = Math.round((Date.now() - startTime) / 1000);
-  const stepCount = (parsed as Record<string, unknown>).steps;
-  stepLog({ type: "info", message: `Plan completed in ${duration}s — ${Array.isArray(stepCount) ? stepCount.length : "?"} steps` });
+  const planSteps = (parsed as Record<string, unknown>).steps;
+  stepLog({ type: "info", message: `Plan completed in ${duration}s — ${Array.isArray(planSteps) ? planSteps.length : "?"} steps` });
 
   (parsed as Record<string, unknown>).critic_review = criticReview;
   const result = JSON.stringify(parsed);
