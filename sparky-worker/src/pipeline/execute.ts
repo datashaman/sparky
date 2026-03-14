@@ -226,6 +226,7 @@ export async function runExecutionPipeline(opts: ExecutionPipelineOpts): Promise
       const maxTurns = agent?.max_turns ?? 25;
 
       const stepLog = (partial: Omit<ExecutionLogEntry, "timestamp" | "stepOrder">) => onLog(step.order, partial);
+      const stepStartTime = Date.now();
       stepLog({ type: "info", message: `Starting: ${step.title} (${provider}/${modelId})` });
 
       const askUserHandler = createAskUserHandler(sessionId, step.order, config.ask_user_timeout_minutes);
@@ -276,6 +277,16 @@ export async function runExecutionPipeline(opts: ExecutionPipelineOpts): Promise
         output,
         error: null,
         conversation_state: JSON.stringify({ messages, turn: actualTurn }),
+      });
+
+      // Log step metrics
+      const stepDuration = Math.round((Date.now() - stepStartTime) / 1000);
+      const turnCount = Math.ceil(messages.length / 2);
+      const contextChars = JSON.stringify(messages).length;
+      const estimatedTokens = Math.ceil(contextChars / 4);
+      stepLog({
+        type: "info",
+        message: `Step completed in ${stepDuration}s, ${turnCount} turns, ~${estimatedTokens.toLocaleString()} tokens used`,
       });
 
       stepOutputs.set(step.order, output);
