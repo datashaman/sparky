@@ -16,6 +16,16 @@ jobs:
       - run: npm ci
       - run: npx tsc --noEmit
 
+  typecheck-worker:
+    name: TypeScript (Worker)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+      - run: cd sparky-worker && npm ci && npx tsc --noEmit
+
   test:
     name: Tests
     runs-on: ubuntu-latest
@@ -33,6 +43,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
         with:
@@ -41,5 +54,10 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+      - name: Build worker
+        run: |
+          cd sparky-worker
+          npm ci
+          npm run build
       - run: cargo check
         working-directory: src-tauri

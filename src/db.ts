@@ -144,6 +144,78 @@ CREATE TABLE IF NOT EXISTS execution_step_results (
 );
 
 CREATE INDEX IF NOT EXISTS idx_step_results_plan ON execution_step_results(plan_id);
+
+CREATE TABLE IF NOT EXISTS sessions (
+  id TEXT PRIMARY KEY,
+  workspace_id TEXT NOT NULL,
+  repo_full_name TEXT NOT NULL,
+  issue_number INTEGER NOT NULL,
+  session_type TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'pending',
+  config TEXT NOT NULL,
+  conversation_state TEXT,
+  current_phase TEXT,
+  current_step_order INTEGER,
+  analysis_id TEXT,
+  plan_id TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_sessions_workspace ON sessions(workspace_id);
+CREATE INDEX IF NOT EXISTS idx_sessions_status ON sessions(status);
+
+CREATE TABLE IF NOT EXISTS session_logs (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  session_id TEXT NOT NULL,
+  step_order INTEGER NOT NULL DEFAULT 0,
+  log_type TEXT NOT NULL,
+  turn INTEGER,
+  provider TEXT,
+  model TEXT,
+  tool_name TEXT,
+  tool_input TEXT,
+  tool_result TEXT,
+  tool_error TEXT,
+  decision TEXT,
+  reason TEXT,
+  message TEXT,
+  created_at TEXT NOT NULL,
+  FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_session_logs_session ON session_logs(session_id);
+
+CREATE TABLE IF NOT EXISTS session_ask_user (
+  id TEXT PRIMARY KEY,
+  session_id TEXT NOT NULL,
+  step_order INTEGER NOT NULL DEFAULT 0,
+  question TEXT NOT NULL,
+  options TEXT NOT NULL,
+  allow_multiple INTEGER NOT NULL DEFAULT 0,
+  status TEXT NOT NULL DEFAULT 'pending',
+  answer TEXT,
+  timeout_minutes INTEGER,
+  created_at TEXT NOT NULL,
+  answered_at TEXT,
+  FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_session_ask_user_session ON session_ask_user(session_id);
+CREATE INDEX IF NOT EXISTS idx_session_ask_user_status ON session_ask_user(status);
+
+CREATE TABLE IF NOT EXISTS session_step_state (
+  session_id TEXT NOT NULL,
+  step_order INTEGER NOT NULL,
+  status TEXT NOT NULL DEFAULT 'pending',
+  output TEXT,
+  error TEXT,
+  conversation_state TEXT,
+  PRIMARY KEY (session_id, step_order),
+  FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_session_step_state_session ON session_step_state(session_id);
 `;
 
 /** Standard location: AppConfig (e.g. ~/Library/Application Support/{bundle-id}/ on macOS) */
