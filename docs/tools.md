@@ -143,14 +143,14 @@ Restricted to issues created by the agent in the current session. The `reason` m
 
 1. **Path sandboxing** -- All paths resolved against worktree root; no escape possible.
 2. **Unique match requirement** -- `edit_file` requires `old_text` to match exactly once, preventing accidental bulk changes.
-3. **Safe defaults for agents** -- Agents default to read-only tools (`read_file`, `glob`, `grep`), plus `use_skill`.
+3. **Safe defaults for agents** -- Agents default to read-only tools (`read_file`, `glob`, `grep`), plus `use_skill` and `ask_user`.
 4. **Explicit dangerous tool grants** -- Dangerous tools (`write_file`, `edit_file`, `bash`) must be explicitly granted to agents.
 5. **Bash command allowlist** -- Prevents arbitrary program execution.
 6. **Output truncation** -- Output truncated to 10,000 characters to prevent context overflow.
-7. **Always-available skill access** -- `use_skill` is included in all tool sets regardless of agent restrictions.
+7. **Always-available interaction tools** -- `use_skill` and `ask_user` are included in all tool sets regardless of agent restrictions.
 8. **GitHub tool session scoping** -- `update_issue` and `close_issue` can only operate on issues created by the agent in the current session, preventing modification of arbitrary issues.
 9. **GitHub tools restricted to analysis** -- `create_issue`, `update_issue`, and `close_issue` are only available during the analysis phase, not during planning or execution.
 
 ## Agent Tool Configuration
 
-When creating an agent, select which tools it can use. If no tools are configured, the agent gets safe defaults: `read_file`, `glob`, `grep`. The `use_skill` tool is always included regardless of configuration. The issue LLM (non-agent steps) gets all tools.
+When creating an agent, select which tools it can use. If no tools are configured, the agent gets safe defaults: `read_file`, `glob`, `grep`. The `use_skill` and `ask_user` tools are always included regardless of configuration. The issue LLM (non-agent steps) gets all tools.

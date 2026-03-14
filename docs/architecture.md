@@ -133,20 +133,20 @@ Eleven tools are available. Six are file/shell operations implemented as Tauri c
 | Tool | LLM Name | Description | Dangerous | Availability |
 |------|----------|-------------|-----------|-------------|
 | Read | `read_file` | Read a file's contents | No | All phases |
-| Write | `write_file` | Create or overwrite a file | Yes | All phases |
-| Edit | `edit_file` | Find-and-replace text in a file (old_text must be unique) | Yes | All phases |
+| Write | `write_file` | Create or overwrite a file | Yes | Execution only |
+| Edit | `edit_file` | Find-and-replace text in a file (old_text must be unique) | Yes | Execution only |
 | Glob | `glob` | Find files matching a glob pattern | No | All phases |
 | Grep | `grep` | Search file contents with regex | No | All phases |
 | Bash | `bash` | Run a shell command | Yes | All phases |
-| Skill | `use_skill` | Load a skill's content by name (with optional arguments) | No | All phases |
-| Ask User | `ask_user` | Ask the user a clarifying question | No | All phases |
+| Skill | `use_skill` | Load a skill's content by name (with optional arguments) | No | All phases (always-on) |
+| Ask User | `ask_user` | Ask the user a clarifying question | No | All phases (always-on) |
 | Create Issue | `create_issue` | Create a GitHub subissue linked to the parent | Yes | Analysis only |
 | Update Issue | `update_issue` | Update a subissue's title or body (session-scoped) | Yes | Analysis only |
 | Close Issue | `close_issue` | Close a subissue created in this session | Yes | Analysis only |
 
 **Sandbox enforcement**: All file operations go through `sandbox_resolve`, which canonicalizes paths and verifies they do not escape the worktree root. For non-existent paths (write targets), it walks up to the nearest existing ancestor and validates that ancestor is within the sandbox.
 
-**Agent tool restriction**: When a step is delegated to an agent, only the agent's configured tools are provided to the LLM. Agents with no tools configured default to read-only: read, glob, and grep. The `use_skill` tool is always included regardless of agent restrictions. This prevents an unconfigured agent from accidentally modifying files while still allowing skill access.
+**Agent tool restriction**: When a step is delegated to an agent, only the agent's configured tools are provided to the LLM. Agents with no tools configured default to read-only: read, glob, and grep. The `use_skill` and `ask_user` tools are always included regardless of agent restrictions. This prevents an unconfigured agent from accidentally modifying files while still allowing skill access.
 
 **Bash command allowlist**: The bash tool validates that the command starts with an allowed program. The allowlist includes common filesystem commands (`ls`, `find`, `cat`, `cp`, `mv`, `rm`), build tools (`npm`, `cargo`, `make`, `python`), git, and text processing utilities (`sed`, `awk`, `grep`). Commands not on the list are rejected. The command runs with a restricted `PATH` (`/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin`) and `HOME` set to the worktree root.
 
