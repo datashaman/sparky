@@ -1,11 +1,11 @@
 import { getDefaultProvider, getDefaultModel, getApiKey } from "../components/UserSettings";
-import { getDb } from "../db";
 import type { IssueAnalysis, Skill, Agent } from "./types";
 import type { GitHubIssue } from "../github";
 import { listSkillsForWorkspace } from "./skills";
 import { listAgentsForWorkspace } from "./agents";
 import { callLLM, KEYLESS_PROVIDERS } from "./llm";
 import { TOOLS } from "./tools";
+import { dynamicUpdate } from "./dbUtils";
 
 const SYSTEM_PROMPT = `You are a senior software engineer analysing a GitHub issue. Provide a concise, structured analysis. Be direct and practical. No filler.
 
@@ -117,18 +117,7 @@ function buildPrompt(
 
 
 async function updateAnalysis(id: string, updates: Partial<IssueAnalysis>): Promise<void> {
-  const db = await getDb();
-  const sets: string[] = [];
-  const values: unknown[] = [];
-  let i = 1;
-  for (const [key, val] of Object.entries(updates)) {
-    sets.push(`${key} = $${i++}`);
-    values.push(val);
-  }
-  sets.push(`updated_at = $${i++}`);
-  values.push(new Date().toISOString());
-  values.push(id);
-  await db.execute(`UPDATE issue_analyses SET ${sets.join(", ")} WHERE id = $${i}`, values);
+  await dynamicUpdate("issue_analyses", id, updates);
 }
 
 export async function runAnalysis(

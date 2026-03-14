@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { getDb } from "../db";
 import type { IssueWorktree } from "./types";
+import { dynamicUpdate } from "./dbUtils";
 
 export async function getWorktreeForIssue(
   workspaceId: string,
@@ -47,18 +48,12 @@ async function updateWorktreeRecord(
   id: string,
   updates: Partial<Pick<IssueWorktree, "status" | "error" | "path" | "branch_name">>,
 ): Promise<void> {
-  const db = await getDb();
-  const sets: string[] = [];
-  const values: unknown[] = [];
-  let i = 1;
+  // Normalize undefined values to null for database storage
+  const normalized: Record<string, unknown> = {};
   for (const [key, val] of Object.entries(updates)) {
-    sets.push(`${key} = $${i++}`);
-    values.push(val ?? null);
+    normalized[key] = val ?? null;
   }
-  sets.push(`updated_at = $${i++}`);
-  values.push(new Date().toISOString());
-  values.push(id);
-  await db.execute(`UPDATE issue_worktrees SET ${sets.join(", ")} WHERE id = $${i}`, values);
+  await dynamicUpdate("issue_worktrees", id, normalized);
 }
 
 async function deleteWorktreeRecord(id: string): Promise<void> {

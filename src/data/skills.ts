@@ -1,22 +1,9 @@
 import { isTauri } from "@tauri-apps/api/core";
 import { getDb } from "../db";
 import type { Skill, AgentProvider } from "./types";
+import { validateSlug, firstParagraph } from "./shared";
 
-const SLUG_REGEX = /^[a-z0-9\-]*$/;
-
-export function validateSkillSlug(name: string): boolean {
-  return SLUG_REGEX.test(name);
-}
-
-/** Extract the first non-empty paragraph from markdown content. */
-function firstParagraph(content: string | null | undefined): string | null {
-  if (!content) return null;
-  const para = content
-    .split(/\n\s*\n/)
-    .map((p) => p.replace(/^#+\s+/gm, "").trim())
-    .find((p) => p.length > 0);
-  return para || null;
-}
+export const validateSkillSlug = validateSlug;
 
 let mockSkills: Skill[] = [];
 

@@ -4,6 +4,7 @@ import { AGENT_PROVIDERS, AGENT_MODELS } from "../data/agents";
 import { fetchOllamaModels } from "../data/ollamaModels";
 import { fetchOpenRouterModels } from "../data/openrouterModels";
 import { fetchLitellmModels } from "../data/litellmModels";
+import { PROVIDER_COLORS, getModelsForProvider, shouldShowModelInput, getModelInputPlaceholder } from "../data/shared";
 import type { AgentProvider, Skill } from "../data/types";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -22,15 +23,6 @@ interface SkillDetailProps {
   onBack: () => void;
   onDeleted: () => void;
 }
-
-const PROVIDER_COLORS: Record<AgentProvider, string> = {
-  openai: "#10a37f",
-  anthropic: "#d4a27f",
-  gemini: "#4285f4",
-  ollama: "#1d1d1d",
-  openrouter: "#b364e9",
-  litellm: "#2563eb",
-};
 
 export function SkillDetail({ skillId, onBack, onDeleted }: SkillDetailProps) {
   const [skill, setSkill] = useState<Skill | null>(null);
@@ -72,7 +64,7 @@ export function SkillDetail({ skillId, onBack, onDeleted }: SkillDetailProps) {
     }
   }, [formProvider]);
 
-  const models = formProvider === "ollama" ? ollamaModels : formProvider === "openrouter" ? openrouterModels : formProvider === "litellm" ? litellmModels : formProvider ? AGENT_MODELS[formProvider] : [];
+  const models = getModelsForProvider(formProvider, ollamaModels, openrouterModels, litellmModels, AGENT_MODELS);
 
   useEffect(() => {
     let cancelled = false;
@@ -261,9 +253,9 @@ export function SkillDetail({ skillId, onBack, onDeleted }: SkillDetailProps) {
 
         <div className="detail-field">
           <Label>Model</Label>
-          {(formProvider === "openrouter" && openrouterModels.length === 0) || (formProvider === "ollama" && models.length === 0) || (formProvider === "litellm" && models.length === 0) ? (
+          {shouldShowModelInput(formProvider, models) ? (
             <Input
-              placeholder={formProvider === "ollama" ? "e.g. qwen2.5:latest" : formProvider === "litellm" ? "e.g. gpt-4o" : "e.g. anthropic/claude-sonnet-4"}
+              placeholder={getModelInputPlaceholder(formProvider)}
               value={formModel}
               onChange={(e) => setFormModel(e.target.value)}
               disabled={saving}

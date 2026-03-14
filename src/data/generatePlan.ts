@@ -1,10 +1,10 @@
 import { getDefaultProvider, getDefaultModel, getApiKey } from "../components/UserSettings";
-import { getDb } from "../db";
 import type { ExecutionPlan, ExecutionPlanResult, AnalysisResult, Agent, Skill } from "./types";
 import type { GitHubIssue } from "../github";
 import { callLLM, KEYLESS_PROVIDERS } from "./llm";
 import { TOOLS } from "./tools";
 import { reviewPlan, refinePlan } from "./criticPlan";
+import { dynamicUpdate } from "./dbUtils";
 
 const PLAN_SYSTEM_PROMPT = `You are a senior software engineering project manager. Given a GitHub issue analysis, available agents, and available skills, create a concrete step-by-step execution plan to resolve the issue.
 
@@ -104,18 +104,7 @@ export function buildPlanPrompt(
 }
 
 async function updatePlan(id: string, updates: Partial<ExecutionPlan>): Promise<void> {
-  const db = await getDb();
-  const sets: string[] = [];
-  const values: unknown[] = [];
-  let i = 1;
-  for (const [key, val] of Object.entries(updates)) {
-    sets.push(`${key} = $${i++}`);
-    values.push(val);
-  }
-  sets.push(`updated_at = $${i++}`);
-  values.push(new Date().toISOString());
-  values.push(id);
-  await db.execute(`UPDATE execution_plans SET ${sets.join(", ")} WHERE id = $${i}`, values);
+  await dynamicUpdate("execution_plans", id, updates);
 }
 
 export async function runPlanGeneration(
