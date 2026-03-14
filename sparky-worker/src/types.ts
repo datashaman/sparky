@@ -110,7 +110,7 @@ export interface LLMToolDef {
 export interface ExecutionLogEntry {
   timestamp: number;
   stepOrder: number;
-  type: "llm_request" | "llm_response" | "tool_call" | "tool_result" | "replan_check" | "replan_decision" | "info";
+  type: "llm_request" | "llm_response" | "tool_call" | "tool_result" | "replan_check" | "replan_decision" | "info" | "context_budget";
   turn?: number;
   provider?: string;
   model?: string;
