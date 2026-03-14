@@ -4734,6 +4734,7 @@ button.user-code:focus-visible {
 
   .pv-log-toggle {
     color: #818cf8;
+    background: none;
   }
 
   .pv-log-container {

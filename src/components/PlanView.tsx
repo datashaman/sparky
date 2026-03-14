@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { ExecutionLogEntry, ExecutionPlanResult, StepExecutionStatus, CriticReview } from "../data/types";
 
 interface PlanViewProps {
@@ -171,15 +171,18 @@ export function PlanView({ result, criticReview, stepStatuses, executing, execut
     });
   };
 
-  // Group logs by stepOrder
-  const logsByStep = new Map<number, ExecutionLogEntry[]>();
-  if (executionLogs) {
-    for (const entry of executionLogs) {
-      const arr = logsByStep.get(entry.stepOrder) ?? [];
-      arr.push(entry);
-      logsByStep.set(entry.stepOrder, arr);
+  // Group logs by stepOrder (memoized to avoid O(n) rebuild on every render)
+  const logsByStep = useMemo(() => {
+    const map = new Map<number, ExecutionLogEntry[]>();
+    if (executionLogs) {
+      for (const entry of executionLogs) {
+        const arr = map.get(entry.stepOrder) ?? [];
+        arr.push(entry);
+        map.set(entry.stepOrder, arr);
+      }
     }
-  }
+    return map;
+  }, [executionLogs]);
 
   return (
     <div className="pv-root">
@@ -220,7 +223,7 @@ export function PlanView({ result, criticReview, stepStatuses, executing, execut
                   Depends on: {step.depends_on.map((d) => `Step ${d}`).join(", ")}
                 </div>
               )}
-              {(status?.status === "running" || status?.status === "done") && stepLogs.length > 0 && (
+              {(status?.status === "running" || status?.status === "done" || status?.status === "error") && stepLogs.length > 0 && (
                 <StepLogPanel logs={stepLogs} />
               )}
               {status?.status === "error" && status.error && (

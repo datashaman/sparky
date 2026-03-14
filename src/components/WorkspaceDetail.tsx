@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { getWorkspace, deleteWorkspace, updateWorkspaceName } from "../data/workspaces";
 import {
   getOrCreateRepo,
@@ -101,6 +101,24 @@ export function WorkspaceDetail({ workspaceId, onSwitchWorkspace, onDeleted, onW
   const [stepStatuses, setStepStatuses] = useState<Map<number, StepExecutionStatus>>(new Map());
   const [executionError, setExecutionError] = useState<string | null>(null);
   const [executionLogs, setExecutionLogs] = useState<ExecutionLogEntry[]>([]);
+
+  // Batch log updates to avoid per-entry React re-renders during rapid streaming
+  const logBufferRef = useRef<ExecutionLogEntry[]>([]);
+  const logRafRef = useRef<number>(0);
+  const flushLogs = useCallback(() => {
+    logRafRef.current = 0;
+    if (logBufferRef.current.length > 0) {
+      const batch = logBufferRef.current;
+      logBufferRef.current = [];
+      setExecutionLogs(prev => [...prev, ...batch]);
+    }
+  }, []);
+  const appendLog = useCallback((entry: ExecutionLogEntry) => {
+    logBufferRef.current.push(entry);
+    if (!logRafRef.current) {
+      logRafRef.current = requestAnimationFrame(flushLogs);
+    }
+  }, [flushLogs]);
 
   useEffect(() => {
     load();
@@ -857,7 +875,7 @@ export function WorkspaceDetail({ workspaceId, onSwitchWorkspace, onDeleted, onW
                               },
                               onWorktreeUpdate: setWorktree,
                               onPlanUpdate: (updated) => setPlan(prev => prev ? { ...prev, result: JSON.stringify(updated) } : prev),
-                              onLog: (entry) => setExecutionLogs(prev => [...prev, entry]),
+                              onLog: appendLog,
                             })
                               .catch((e) => {
                                 const msg = e instanceof Error ? e.message : String(e);
