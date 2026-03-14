@@ -12,7 +12,7 @@ Work happens in sandboxed git worktrees, so your main branch stays clean.
 
 ### Prerequisites
 
-- [Node.js](https://nodejs.org/) (v18+)
+- [Node.js](https://nodejs.org/) (v24+)
 - [Rust](https://rustup.rs/) (stable)
 
 ### Install and run
@@ -67,8 +67,13 @@ sparky/
 ├── src/                  # React frontend (TypeScript)
 │   ├── components/       # UI components (workspace, analysis, plan views)
 │   ├── data/             # Data layer and type definitions
-│   ├── lib/              # LLM pipeline logic (agents, skills, tools)
+│   ├── lib/              # Shared utilities
 │   └── db.ts             # SQLite database interface
+├── sparky-worker/        # Node.js worker process (pipeline execution)
+│   └── src/
+│       ├── pipeline/     # Analysis, plan, and execution pipelines
+│       ├── llm/          # LLM provider integrations (Anthropic, OpenAI, Gemini)
+│       └── tools/        # Sandboxed tool implementations
 ├── src-tauri/            # Rust backend
 │   └── src/
 │       ├── lib.rs        # Tauri command handlers

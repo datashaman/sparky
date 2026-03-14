@@ -4,7 +4,7 @@
 
 Before you begin, make sure you have:
 
-- **Node.js 18+** — check with `node --version`
+- **Node.js 24+** — check with `node --version`
 - **Rust (latest stable)** — install via [rustup](https://rustup.rs/)
 - **A GitHub account** — for authentication and repo integration
 - **At least one LLM provider configured** — see [Provider Configuration](#provider-configuration) below

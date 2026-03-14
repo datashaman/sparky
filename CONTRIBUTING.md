@@ -11,7 +11,7 @@ Thanks for your interest in contributing! This guide will help you get started.
    ```
 
 2. Install prerequisites:
-   - [Node.js 18+](https://nodejs.org/)
+   - [Node.js 24+](https://nodejs.org/)
    - [Rust (stable)](https://rustup.rs/)
 
 3. Install dependencies and start the dev server:
