@@ -154,15 +154,33 @@ export async function runExecutionPipeline(opts: ExecutionPipelineOpts): Promise
         .join("\n\n");
 
       // Build prompts
+      const totalSteps = steps.length;
+      const completedStepsList = steps
+        .filter((s) => stepOutputs.has(s.order))
+        .map((s) => `${s.order}. ${s.title}`)
+        .join(", ");
+
       const systemParts = [
-        `You are working on resolving a GitHub issue in a code worktree.`,
+        `You are an autonomous agent working on resolving a GitHub issue in a code worktree. Keep working until the task is fully complete. Do not stop to ask for confirmation unless you are genuinely stuck.`,
         `Issue: ${payload.issue_title} (#${payload.issue_number}) in ${payload.repo_full_name}`,
         ``,
-        `Your current task (step ${step.order}): ${step.title}`,
+        `## Progress`,
+        `You are on step ${step.order} of ${totalSteps}.${completedStepsList ? ` Completed: ${completedStepsList}.` : ""} Focus only on YOUR step.`,
+        ``,
+        `## Your current task: ${step.title}`,
         `${step.description}`,
         ``,
         `Expected output: ${step.expected_output}`,
-      ];
+        step.done_when ? `Done when: ${step.done_when}` : "",
+        step.verification_command ? `Verification command: ${step.verification_command}` : "",
+        ``,
+        `## Working guidelines`,
+        `- Before each tool call, state what you expect to find or accomplish.`,
+        `- After each tool result, assess whether it matched your expectation.`,
+        `- If a tool call fails 3 times with the same error, stop and report the issue rather than retrying.`,
+        step.verification_command ? `- After completing the task, run the verification command: \`${step.verification_command}\`. If it fails, fix the issue before reporting done.` : "",
+        `- End your final response with STATUS: DONE if the task is complete, or STATUS: BLOCKED with a reason if you cannot proceed.`,
+      ].filter(Boolean);
 
       if (agentContent) {
         systemParts.push("", "## Agent Instructions", agentContent);
@@ -216,6 +234,16 @@ export async function runExecutionPipeline(opts: ExecutionPipelineOpts): Promise
         onToolCall: toolHandler,
         onLog: stepLog,
         existingMessages,
+        onCheckpoint: (msgs, turn) => {
+          upsertStepState({
+            session_id: sessionId,
+            step_order: step.order,
+            status: "running",
+            output: null,
+            error: null,
+            conversation_state: JSON.stringify({ messages: msgs, turn }),
+          });
+        },
       });
 
       // Checkpoint after completion — derive actual turn from message count
@@ -309,8 +337,10 @@ const REPLAN_STEPS_SCHEMA = {
           agent_name: { type: ["string", "null"] as const },
           expected_output: { type: "string" as const },
           depends_on: { type: "array" as const, items: { type: "number" as const } },
+          verification_command: { type: ["string", "null"] as const },
+          done_when: { type: "string" as const },
         },
-        required: ["order", "title", "description", "agent_name", "expected_output", "depends_on"],
+        required: ["order", "title", "description", "agent_name", "expected_output", "depends_on", "verification_command", "done_when"],
         additionalProperties: false,
       },
     },
@@ -350,7 +380,14 @@ async function checkNeedReplan(
     provider,
     modelId,
     apiKey,
-    systemPrompt: "You are evaluating whether remaining execution plan steps are still valid. Be conservative — only recommend replan if there is a clear mismatch.",
+    systemPrompt: `You are evaluating whether remaining execution plan steps are still valid.
+
+Only recommend replan if:
+(a) a step discovered the codebase structure is fundamentally different than assumed,
+(b) a step completed the work of a future step as a side effect, or
+(c) a step failed in a way that invalidates the approach.
+
+Replanning costs time and tokens. Default to "continue" unless there is a clear, specific reason to change course.`,
     userPrompt: prompt,
     schema: REPLAN_CHECK_SCHEMA,
     schemaName: "replan_check",

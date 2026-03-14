@@ -1,5 +1,5 @@
 import type { LLMToolDef } from "../types.js";
-import type { LogCallback } from "./index.js";
+import type { LogCallback, CheckpointCallback } from "./index.js";
 
 function truncate(s: string, max = 200): string {
   return s.length > max ? s.slice(0, max) + "..." : s;
@@ -54,8 +54,9 @@ export async function anthropicToolLoop(opts: {
   onToolCall: (name: string, input: Record<string, unknown>) => Promise<string>;
   onLog?: LogCallback;
   existingMessages?: any[];
+  onCheckpoint?: CheckpointCallback;
 }): Promise<{ text: string; messages: any[] }> {
-  const { modelId, apiKey, systemPrompt, tools, maxTurns, onToolCall, onLog } = opts;
+  const { modelId, apiKey, systemPrompt, tools, maxTurns, onToolCall, onLog, onCheckpoint } = opts;
 
   const anthropicTools = tools.map((t) => ({
     name: t.name,
@@ -66,6 +67,8 @@ export async function anthropicToolLoop(opts: {
   const messages: any[] = opts.existingMessages
     ? [...opts.existingMessages]
     : [{ role: "user", content: opts.userPrompt }];
+
+  let toolResultCount = 0;
 
   for (let turn = 0; turn < maxTurns; turn++) {
     const isLastTurn = turn === maxTurns - 1;
@@ -131,8 +134,12 @@ export async function anthropicToolLoop(opts: {
         tool_use_id: tu.id,
         content: result,
       });
+      toolResultCount++;
     }
     messages.push({ role: "user", content: toolResults });
+    if (onCheckpoint && toolResultCount % 3 === 0) {
+      onCheckpoint(messages, turn + 1);
+    }
   }
 
   return { text: "(max turns reached)", messages };

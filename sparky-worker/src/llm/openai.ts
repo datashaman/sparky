@@ -1,5 +1,5 @@
 import type { LLMToolDef } from "../types.js";
-import type { LogCallback } from "./index.js";
+import type { LogCallback, CheckpointCallback } from "./index.js";
 
 function truncate(s: string, max = 200): string {
   return s.length > max ? s.slice(0, max) + "..." : s;
@@ -72,8 +72,9 @@ export async function openaiToolLoop(opts: {
   baseUrl: string;
   label: string;
   existingMessages?: any[];
+  onCheckpoint?: CheckpointCallback;
 }): Promise<{ text: string; messages: any[] }> {
-  const { modelId, apiKey, systemPrompt, tools, maxTurns, onToolCall, onLog, baseUrl, label } = opts;
+  const { modelId, apiKey, systemPrompt, tools, maxTurns, onToolCall, onLog, baseUrl, label, onCheckpoint } = opts;
 
   const openaiTools = tools.map((t) => ({
     type: "function" as const,
@@ -89,6 +90,8 @@ export async function openaiToolLoop(opts: {
 
   const headers: Record<string, string> = { "content-type": "application/json" };
   if (apiKey) headers.authorization = `Bearer ${apiKey}`;
+
+  let toolResultCount = 0;
 
   for (let turn = 0; turn < maxTurns; turn++) {
     const isLastTurn = turn === maxTurns - 1;
@@ -162,6 +165,10 @@ export async function openaiToolLoop(opts: {
         tool_call_id: tc.id,
         content: result,
       });
+      toolResultCount++;
+    }
+    if (onCheckpoint && toolResultCount % 3 === 0) {
+      onCheckpoint(messages, turn + 1);
     }
   }
 

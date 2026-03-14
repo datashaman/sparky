@@ -3,12 +3,12 @@ import type { AgentProvider, ExecutionPlanStep, ReplanCheck } from "./types";
 
 const REPLAN_CHECK_SYSTEM_PROMPT = `You are evaluating whether an execution plan's remaining steps are still valid after a step just completed.
 
-Consider:
-- Did the step output reveal something unexpected that invalidates remaining steps?
-- Are the remaining steps still relevant and correctly ordered?
-- Did the step accomplish more or less than expected?
+Only recommend replan if:
+(a) a step discovered the codebase structure is fundamentally different than assumed,
+(b) a step completed the work of a future step as a side effect, or
+(c) a step failed in a way that invalidates the approach.
 
-Be conservative: only recommend replanning if there is a clear mismatch. Minor deviations are fine. Most of the time, the answer should be "continue".`;
+Replanning costs time and tokens. Default to "continue" unless there is a clear, specific reason to change course.`;
 
 const REPLAN_CHECK_SCHEMA = {
   type: "object" as const,
@@ -46,8 +46,10 @@ const REPLAN_STEPS_SCHEMA = {
           agent_name: { type: ["string", "null"] as const },
           expected_output: { type: "string" as const },
           depends_on: { type: "array" as const, items: { type: "number" as const } },
+          verification_command: { type: ["string", "null"] as const },
+          done_when: { type: "string" as const },
         },
-        required: ["order", "title", "description", "agent_name", "expected_output", "depends_on"],
+        required: ["order", "title", "description", "agent_name", "expected_output", "depends_on", "verification_command", "done_when"],
         additionalProperties: false,
       },
     },

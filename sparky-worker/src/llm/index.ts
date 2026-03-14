@@ -38,6 +38,8 @@ export async function callLLM(opts: {
   }
 }
 
+export type CheckpointCallback = (messages: unknown[], turn: number) => void;
+
 export async function callLLMWithTools(opts: {
   provider: AgentProvider;
   modelId: string;
@@ -49,21 +51,22 @@ export async function callLLMWithTools(opts: {
   onToolCall: (name: string, input: Record<string, unknown>) => Promise<string>;
   onLog?: LogCallback;
   existingMessages?: unknown[];
+  onCheckpoint?: CheckpointCallback;
 }): Promise<{ text: string; messages: unknown[] }> {
-  const { provider, modelId, apiKey, systemPrompt, userPrompt, tools, maxTurns = 25, onToolCall, onLog, existingMessages } = opts;
+  const { provider, modelId, apiKey, systemPrompt, userPrompt, tools, maxTurns = 25, onToolCall, onLog, existingMessages, onCheckpoint } = opts;
 
   switch (provider) {
     case "anthropic":
-      return anthropicToolLoop({ modelId, apiKey, systemPrompt, userPrompt, tools, maxTurns, onToolCall, onLog, existingMessages: existingMessages as any[] });
+      return anthropicToolLoop({ modelId, apiKey, systemPrompt, userPrompt, tools, maxTurns, onToolCall, onLog, existingMessages: existingMessages as any[], onCheckpoint });
     case "openai":
-      return openaiToolLoop({ modelId, apiKey, systemPrompt, userPrompt, tools, maxTurns, onToolCall, onLog, baseUrl: "https://api.openai.com/v1", label: "OpenAI", existingMessages: existingMessages as any[] });
+      return openaiToolLoop({ modelId, apiKey, systemPrompt, userPrompt, tools, maxTurns, onToolCall, onLog, baseUrl: "https://api.openai.com/v1", label: "OpenAI", existingMessages: existingMessages as any[], onCheckpoint });
     case "ollama":
-      return openaiToolLoop({ modelId, apiKey: "", systemPrompt, userPrompt, tools, maxTurns, onToolCall, onLog, baseUrl: OLLAMA_BASE_URL, label: "Ollama", existingMessages: existingMessages as any[] });
+      return openaiToolLoop({ modelId, apiKey: "", systemPrompt, userPrompt, tools, maxTurns, onToolCall, onLog, baseUrl: OLLAMA_BASE_URL, label: "Ollama", existingMessages: existingMessages as any[], onCheckpoint });
     case "openrouter":
-      return openaiToolLoop({ modelId, apiKey, systemPrompt, userPrompt, tools, maxTurns, onToolCall, onLog, baseUrl: "https://openrouter.ai/api/v1", label: "OpenRouter", existingMessages: existingMessages as any[] });
+      return openaiToolLoop({ modelId, apiKey, systemPrompt, userPrompt, tools, maxTurns, onToolCall, onLog, baseUrl: "https://openrouter.ai/api/v1", label: "OpenRouter", existingMessages: existingMessages as any[], onCheckpoint });
     case "litellm":
-      return openaiToolLoop({ modelId, apiKey, systemPrompt, userPrompt, tools, maxTurns, onToolCall, onLog, baseUrl: LITELLM_BASE_URL, label: "LiteLLM", existingMessages: existingMessages as any[] });
+      return openaiToolLoop({ modelId, apiKey, systemPrompt, userPrompt, tools, maxTurns, onToolCall, onLog, baseUrl: LITELLM_BASE_URL, label: "LiteLLM", existingMessages: existingMessages as any[], onCheckpoint });
     case "gemini":
-      return geminiToolLoop({ modelId, apiKey, systemPrompt, userPrompt, tools, maxTurns, onToolCall, onLog, existingMessages: existingMessages as any[] });
+      return geminiToolLoop({ modelId, apiKey, systemPrompt, userPrompt, tools, maxTurns, onToolCall, onLog, existingMessages: existingMessages as any[], onCheckpoint });
   }
 }

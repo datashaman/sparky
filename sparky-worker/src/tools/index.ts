@@ -9,7 +9,7 @@ import { runBash } from "./bash-tool.js";
 export const TOOL_SCHEMAS: LLMToolDef[] = [
   {
     name: "read_file",
-    description: "Read a file's contents. Returns the file text.",
+    description: "Read a file's contents. Returns the full file text. Use this to understand existing code before making changes. Do NOT use to check if a file exists — use glob instead.",
     parameters: {
       type: "object",
       properties: {
@@ -21,7 +21,7 @@ export const TOOL_SCHEMAS: LLMToolDef[] = [
   },
   {
     name: "write_file",
-    description: "Create or overwrite a file with the given content.",
+    description: "Create or overwrite a file with the given content. Use for NEW files or when rewriting most of an existing file. For surgical edits to existing files, use edit_file instead.",
     parameters: {
       type: "object",
       properties: {
@@ -34,7 +34,7 @@ export const TOOL_SCHEMAS: LLMToolDef[] = [
   },
   {
     name: "edit_file",
-    description: "Find-and-replace text in a file. old_text must appear exactly once.",
+    description: "Find-and-replace text in a file. old_text must appear exactly once. Best for targeted changes to existing files. If old_text is not found, re-read the file first — it may have changed.",
     parameters: {
       type: "object",
       properties: {
@@ -48,7 +48,7 @@ export const TOOL_SCHEMAS: LLMToolDef[] = [
   },
   {
     name: "glob",
-    description: "Find files matching a glob pattern. Returns list of relative paths.",
+    description: "Find files matching a glob pattern. Returns relative paths. Use to discover file structure and check if files exist before reading them.",
     parameters: {
       type: "object",
       properties: {
@@ -60,7 +60,7 @@ export const TOOL_SCHEMAS: LLMToolDef[] = [
   },
   {
     name: "grep",
-    description: "Search file contents with regex. Returns matching lines with file paths and line numbers.",
+    description: "Search file contents with regex. Returns file:line:text matches. Use to find where things are defined or used across the codebase.",
     parameters: {
       type: "object",
       properties: {
@@ -73,7 +73,7 @@ export const TOOL_SCHEMAS: LLMToolDef[] = [
   },
   {
     name: "bash",
-    description: "Run a shell command in the worktree directory. Returns stdout, stderr, and exit code.",
+    description: "Run a shell command in the worktree directory. Returns stdout, stderr, and exit code. Use for: running tests, checking build status, git operations. Do NOT use for reading files (use read_file) or searching code (use grep/glob). Commands are validated against an allowlist.",
     parameters: {
       type: "object",
       properties: {

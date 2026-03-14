@@ -154,15 +154,33 @@ export async function executePlan(opts: ExecutePlanOpts): Promise<void> {
         .join("\n\n");
 
       // Build system prompt
+      const totalSteps = steps.length;
+      const completedStepsList = steps
+        .filter((s) => stepOutputs.has(s.order))
+        .map((s) => `${s.order}. ${s.title}`)
+        .join(", ");
+
       const systemParts = [
-        `You are working on resolving a GitHub issue in a code worktree.`,
+        `You are an autonomous agent working on resolving a GitHub issue in a code worktree. Keep working until the task is fully complete. Do not stop to ask for confirmation unless you are genuinely stuck.`,
         `Issue: ${issue.title} (#${issue.number}) in ${issue.full_name}`,
         ``,
-        `Your current task (step ${step.order}): ${step.title}`,
+        `## Progress`,
+        `You are on step ${step.order} of ${totalSteps}.${completedStepsList ? ` Completed: ${completedStepsList}.` : ""} Focus only on YOUR step.`,
+        ``,
+        `## Your current task: ${step.title}`,
         `${step.description}`,
         ``,
         `Expected output: ${step.expected_output}`,
-      ];
+        step.done_when ? `Done when: ${step.done_when}` : "",
+        step.verification_command ? `Verification command: ${step.verification_command}` : "",
+        ``,
+        `## Working guidelines`,
+        `- Before each tool call, state what you expect to find or accomplish.`,
+        `- After each tool result, assess whether it matched your expectation.`,
+        `- If a tool call fails 3 times with the same error, stop and report the issue rather than retrying.`,
+        step.verification_command ? `- After completing the task, run the verification command: \`${step.verification_command}\`. If it fails, fix the issue before reporting done.` : "",
+        `- End your final response with STATUS: DONE if the task is complete, or STATUS: BLOCKED with a reason if you cannot proceed.`,
+      ].filter(Boolean);
 
       if (agentContent) {
         systemParts.push("", "## Agent Instructions", agentContent);

@@ -1,5 +1,5 @@
 import type { LLMToolDef } from "../types.js";
-import type { LogCallback } from "./index.js";
+import type { LogCallback, CheckpointCallback } from "./index.js";
 
 function truncate(s: string, max = 200): string {
   return s.length > max ? s.slice(0, max) + "..." : s;
@@ -52,8 +52,9 @@ export async function geminiToolLoop(opts: {
   onToolCall: (name: string, input: Record<string, unknown>) => Promise<string>;
   onLog?: LogCallback;
   existingMessages?: any[];
+  onCheckpoint?: CheckpointCallback;
 }): Promise<{ text: string; messages: any[] }> {
-  const { modelId, apiKey, systemPrompt, tools, maxTurns, onToolCall, onLog } = opts;
+  const { modelId, apiKey, systemPrompt, tools, maxTurns, onToolCall, onLog, onCheckpoint } = opts;
 
   const declarations = tools.map((t) => {
     const params = { ...t.parameters };
@@ -64,6 +65,8 @@ export async function geminiToolLoop(opts: {
   const contents: any[] = opts.existingMessages
     ? [...opts.existingMessages]
     : [{ role: "user", parts: [{ text: opts.userPrompt }] }];
+
+  let toolResultCount = 0;
 
   for (let turn = 0; turn < maxTurns; turn++) {
     const isLastTurn = turn === maxTurns - 1;
@@ -129,8 +132,12 @@ export async function geminiToolLoop(opts: {
           response: { result },
         },
       });
+      toolResultCount++;
     }
     contents.push({ role: "user", parts: responseParts });
+    if (onCheckpoint && toolResultCount % 3 === 0) {
+      onCheckpoint(contents, turn + 1);
+    }
   }
 
   return { text: "(max turns reached)", messages: contents };
