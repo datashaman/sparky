@@ -4705,5 +4705,112 @@ button.user-code:focus-visible {
   .pv-critic-suggestion {
     color: #94a3b8;
   }
+
+  /* AnalysisView dark mode */
+  .av-root,
+  .av-summary {
+    color: #e2e8f0;
+  }
+
+  .av-section-header {
+    color: #e2e8f0;
+  }
+
+  .av-complexity-reason {
+    color: #94a3b8;
+  }
+
+  .av-consideration-card {
+    background: #1e1e2e;
+    border-color: #334155;
+    color: #e2e8f0;
+  }
+
+  .av-approach {
+    background: #1c1305;
+    border-left-color: #c2410c;
+    color: #e2e8f0;
+  }
+
+  .av-pills-label {
+    color: #94a3b8;
+  }
+
+  .av-pill {
+    background: #1e1e2e;
+    border-color: #334155;
+    color: #e2e8f0;
+  }
+
+  .av-pill::before {
+    border-color: #475569;
+    background: #1e1e2e;
+  }
+
+  .av-pill:hover:not(:disabled) {
+    border-color: #475569;
+    background: #262637;
+  }
+
+  .av-pill-selected {
+    border-color: #c2410c;
+  }
+
+  .av-pill-selected::before {
+    background: #c2410c;
+    border-color: #c2410c;
+  }
+
+  .av-pill-selected:hover:not(:disabled) {
+    border-color: #ea580c;
+    background: #1c1305;
+  }
+
+  .av-pill-selected:hover:not(:disabled)::before {
+    background: #ea580c;
+    border-color: #ea580c;
+  }
+
+  .av-pill-dangerous {
+    border-color: #991b1b;
+    color: #fca5a5;
+  }
+
+  .av-pill-dangerous::before {
+    border-color: #991b1b;
+    background: #1e1e2e;
+  }
+
+  .av-pill-dangerous:hover:not(:disabled) {
+    border-color: #dc2626;
+    background: #1a0505;
+  }
+
+  .av-pill-dangerous:hover:not(:disabled)::before {
+    background: #dc2626;
+    border-color: #dc2626;
+  }
+
+  .av-pill-exists {
+    background: #1a2e1a;
+    border-color: #166534;
+    color: #86efac;
+  }
+
+  .av-agent-skills-hint {
+    color: #64748b;
+  }
+
+  .av-create-btn {
+    background: #c2410c;
+  }
+
+  .av-create-btn:hover:not(:disabled) {
+    background: #ea580c;
+  }
+
+  .av-created-msg {
+    color: #86efac;
+  }
 }
 
