@@ -107,16 +107,14 @@ export function UserSettings({ open, onClose }: Props) {
 
   useEffect(() => {
     if (provider === "ollama" || execProvider === "ollama") {
-      const snapshot = { p: provider, ep: execProvider };
       fetchOllamaModels().then((m) => {
-        if (providerRef.current !== snapshot.p && execProviderRef.current !== snapshot.ep) return;
+        if (providerRef.current !== "ollama" && execProviderRef.current !== "ollama") return;
         setOllamaModels(m);
       });
     }
     if (provider === "openrouter" || execProvider === "openrouter") {
-      const snapshot = { p: provider, ep: execProvider };
       fetchOpenRouterModels().then((m) => {
-        if (providerRef.current !== snapshot.p && execProviderRef.current !== snapshot.ep) return;
+        if (providerRef.current !== "openrouter" && execProviderRef.current !== "openrouter") return;
         setOpenrouterModels(m);
       });
     }
@@ -132,8 +130,8 @@ export function UserSettings({ open, onClose }: Props) {
 
   useEffect(() => {
     try { localStorage.setItem(DEFAULT_PROVIDER_KEY, provider); } catch { /* ignore */ }
-    // For ollama: clear stale model, default will be set when models load.
-    // For openrouter: keep free-text. For others: reset to first in list.
+    // For ollama/openrouter: sync model with dynamic list when loaded.
+    // For others: reset to first in fixed list.
     if (!provider) return;
     if (provider === "ollama") {
       if (!ollamaModels.includes(model)) setModel(ollamaModels[0] ?? "");
