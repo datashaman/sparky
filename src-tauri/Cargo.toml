@@ -28,7 +28,7 @@ tokio = { version = "1", features = ["time", "net"] }
 axum = { version = "0.8", features = ["json"] }
 sha2 = "0.10"
 base64 = { version = "0.22", features = ["alloc"] }
-rand = "0.8"
+rand = "0.10"
 open = "5"
 urlencoding = "2"
 tauri-plugin-process = "2"
