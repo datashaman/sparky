@@ -57,6 +57,12 @@ export function compressMessages(
 }
 
 function compressMessage(msg: any, provider: AgentProvider, currentPct: number, targetPct: number): number {
+  // Asymmetric compression: compress assistant text blocks first (cheaper to lose
+  // than user messages). Inspired by ChatGPT's approach of keeping user messages
+  // but dropping assistant responses for ~50% token savings.
+  const assistantCount = compressAssistantText(msg, provider, currentPct, targetPct);
+  if (assistantCount > 0) return assistantCount;
+
   switch (provider) {
     case "anthropic":
       return compressAnthropicMessage(msg, currentPct, targetPct);
@@ -115,6 +121,56 @@ function compressGeminiMessage(msg: any, currentPct: number, targetPct: number):
     }
   }
   return count;
+}
+
+/**
+ * Compress assistant text blocks. Assistant reasoning/narration is the least
+ * valuable content to preserve — the tool calls and user messages carry the
+ * actual state. We strip assistant text to a short summary.
+ */
+function compressAssistantText(msg: any, provider: AgentProvider, currentPct: number, targetPct: number): number {
+  const overshoot = currentPct - targetPct;
+
+  if (provider === "gemini") {
+    // Gemini: model messages with text parts
+    if (msg.role !== "model" || !Array.isArray(msg.parts)) return 0;
+    let count = 0;
+    for (const part of msg.parts) {
+      if (!part.text || typeof part.text !== "string" || part.text.length < SUMMARIZE_THRESHOLD) continue;
+      if (overshoot > 20) {
+        part.text = "[assistant reasoning omitted]";
+      } else {
+        part.text = part.text.slice(0, 200) + "\n... (assistant text compressed)";
+      }
+      count++;
+    }
+    return count;
+  }
+
+  // Anthropic: assistant messages with content array of text blocks
+  if (provider === "anthropic") {
+    if (msg.role !== "assistant" || !Array.isArray(msg.content)) return 0;
+    let count = 0;
+    for (const block of msg.content) {
+      if (block.type !== "text" || typeof block.text !== "string" || block.text.length < SUMMARIZE_THRESHOLD) continue;
+      if (overshoot > 20) {
+        block.text = "[assistant reasoning omitted]";
+      } else {
+        block.text = block.text.slice(0, 200) + "\n... (assistant text compressed)";
+      }
+      count++;
+    }
+    return count;
+  }
+
+  // OpenAI-compatible: assistant messages with content string
+  if (msg.role !== "assistant" || typeof msg.content !== "string" || msg.content.length < SUMMARIZE_THRESHOLD) return 0;
+  if (overshoot > 20) {
+    msg.content = "[assistant reasoning omitted]";
+  } else {
+    msg.content = msg.content.slice(0, 200) + "\n... (assistant text compressed)";
+  }
+  return 1;
 }
 
 /**
