@@ -82,8 +82,9 @@ export async function runAnalysisPipeline(opts: AnalysisPipelineOpts): Promise<v
     apiKey,
     onRetry: () => stepLog({ type: "info", message: "JSON extraction failed, retrying with focused prompt" }),
   }) as Record<string, unknown>;
+  repairAnalysisResponse(parsed);
   if (!parsed.summary || !parsed.type || !parsed.complexity) {
-    throw new Error("Invalid analysis response: missing required fields");
+    throw new Error("Invalid analysis response: missing required fields (summary, type, or complexity)");
   }
 
   const duration = Math.round((Date.now() - startTime) / 1000);
@@ -94,6 +95,28 @@ export async function runAnalysisPipeline(opts: AnalysisPipelineOpts): Promise<v
 
   if (payload.analysis_id) {
     updateExistingTable("issue_analyses", payload.analysis_id, { status, result });
+  }
+}
+
+/**
+ * Fill missing fields in an analysis response with sensible defaults.
+ * Small models often omit array fields or optional fields.
+ */
+function repairAnalysisResponse(parsed: Record<string, unknown>): void {
+  if (!parsed.complexity_reason && parsed.complexity) {
+    parsed.complexity_reason = `Assessed as ${parsed.complexity}`;
+  }
+  if (!Array.isArray(parsed.considerations)) {
+    parsed.considerations = [];
+  }
+  if (!parsed.approach && parsed.summary) {
+    parsed.approach = String(parsed.summary);
+  }
+  if (!Array.isArray(parsed.skills)) {
+    parsed.skills = [];
+  }
+  if (!Array.isArray(parsed.agents)) {
+    parsed.agents = [];
   }
 }
 

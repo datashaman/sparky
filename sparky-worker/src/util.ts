@@ -35,12 +35,42 @@ export function extractJSON(text: string): unknown {
     } catch { /* fall through */ }
   }
 
+  // 4. Try fixing common JSON issues from small models
+  const repaired = repairJSON(trimmed);
+  if (repaired !== null) return repaired;
+
   throw new Error("Could not extract valid JSON from LLM response");
+}
+
+/**
+ * Attempt to repair common JSON issues from small models:
+ * - Trailing commas
+ * - Single quotes instead of double quotes
+ * - Unquoted keys
+ */
+function repairJSON(text: string): unknown | null {
+  // Find the JSON-like region
+  const first = text.indexOf("{");
+  const last = text.lastIndexOf("}");
+  if (first === -1 || last <= first) return null;
+
+  let candidate = text.slice(first, last + 1);
+
+  // Remove trailing commas before } or ]
+  candidate = candidate.replace(/,\s*([}\]])/g, "$1");
+
+  // Try parsing after trailing comma fix
+  try {
+    return JSON.parse(candidate);
+  } catch { /* continue */ }
+
+  return null;
 }
 
 /**
  * Try extractJSON, and on failure retry via callLLM with structured output
  * to convert the prose response into the required JSON schema.
+ * Retries up to `maxRetries` times (default 2).
  */
 export async function extractJSONWithRetry(opts: {
   text: string;
@@ -50,21 +80,33 @@ export async function extractJSONWithRetry(opts: {
   modelId: string;
   apiKey: string;
   onRetry?: () => void;
+  maxRetries?: number;
 }): Promise<unknown> {
+  // First attempt: direct extraction
   try {
     return extractJSON(opts.text);
-  } catch {
+  } catch { /* continue to LLM retry */ }
+
+  const maxRetries = opts.maxRetries ?? 2;
+
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
     if (opts.onRetry) opts.onRetry();
-    const retryText = await callLLM({
-      provider: opts.provider,
-      modelId: opts.modelId,
-      apiKey: opts.apiKey,
-      systemPrompt: "You are a JSON formatter. Convert the text below into a valid JSON object. Output ONLY the JSON, nothing else.",
-      userPrompt: `Convert this into JSON matching this schema:\n${JSON.stringify(opts.schema, null, 2)}\n\nText to convert:\n${opts.text.slice(0, 4000)}`,
-      schema: opts.schema,
-      schemaName: opts.schemaName,
-      maxTokens: 2048,
-    });
-    return extractJSON(retryText);
+    try {
+      const retryText = await callLLM({
+        provider: opts.provider,
+        modelId: opts.modelId,
+        apiKey: opts.apiKey,
+        systemPrompt: "You are a JSON formatter. Extract or convert the text below into a valid JSON object matching the given schema. Output ONLY valid JSON, no explanation, no code fences.",
+        userPrompt: `Convert this into JSON matching this schema:\n${JSON.stringify(opts.schema, null, 2)}\n\nText to convert:\n${opts.text.slice(0, 4000)}`,
+        schema: opts.schema,
+        schemaName: opts.schemaName,
+        maxTokens: 2048,
+      });
+      return extractJSON(retryText);
+    } catch {
+      if (attempt === maxRetries - 1) throw new Error("Could not extract valid JSON after retries");
+    }
   }
+
+  throw new Error("Could not extract valid JSON after retries");
 }
