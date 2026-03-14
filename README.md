@@ -8,6 +8,26 @@ Sparky is a Tauri desktop app that takes a GitHub issue and drives it through a 
 
 Work happens in sandboxed git worktrees, so your main branch stays clean.
 
+## Features
+
+- **Automated Issue Resolution** -- Point Sparky at a GitHub issue and it autonomously analyzes, plans, and implements a solution
+- **Multi-Phase AI Pipeline** -- Issues flow through Analysis, Planning, Critic Review, and Execution stages for higher-quality results
+- **Dual-Model Architecture** -- Uses powerful reasoning models (Opus-class) for planning and fast models (Sonnet-class) for execution, optimizing cost and quality
+- **6 LLM Providers** -- Works with OpenAI, Anthropic, Gemini, Ollama, OpenRouter, and LiteLLM -- use cloud or run fully local
+- **Sandboxed Execution** -- All file edits and shell commands run inside isolated git worktrees, keeping your main branch safe
+- **Built-in Tool Suite** -- Agents can read, write, search, and run shell commands with an allowlist-based security model
+- **Agents & Skills** -- Define reusable AI agents and callable skills scoped to your workspace for domain-specific automation
+- **Critic Review** -- Plans are automatically reviewed and refined by a critic agent before execution begins
+- **Adaptive Replanning** -- If execution hits a wall, the agent re-plans on the fly instead of failing
+- **Subissue Decomposition** -- High-complexity issues are automatically broken into smaller, linked subissues on GitHub
+- **Interactive Clarification** -- The agent can ask you questions mid-analysis or mid-execution when it encounters ambiguity
+- **Session Durability** -- Pipeline execution runs in a background worker process, surviving app restarts
+- **Desktop App** -- Native macOS app built with Tauri -- fast, lightweight, and runs locally
+- **GitHub Integration** -- OAuth device flow authentication, repo cloning, worktree management, and issue tracking built in
+- **Local Model Support** -- Run entirely offline with Ollama or LiteLLM -- no data leaves your machine
+- **Workspace Management** -- Organize repos, configure providers, and track execution history per workspace
+- **Execution Logs** -- Full transparency into every LLM call, tool invocation, and decision the agent makes
+
 ## Quickstart
 
 ### Prerequisites
