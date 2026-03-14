@@ -3337,7 +3337,7 @@ button.user-code:focus-visible {
 .user-settings-body {
   flex: 1;
   overflow-y: auto;
-  padding: 1rem 1.25rem;
+  padding: 1rem 1.25rem 2rem;
   display: flex;
   flex-direction: column;
   gap: 1.25rem;
@@ -4190,7 +4190,7 @@ button.user-code:focus-visible {
   }
 
   .user-settings-hint {
-    color: #666;
+    color: #9ca3af;
   }
 
   .issue-tabs {

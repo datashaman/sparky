@@ -3,6 +3,7 @@ import { AGENT_PROVIDERS, AGENT_MODELS } from "../data/agents";
 import { fetchOllamaModels } from "../data/ollamaModels";
 import { fetchOpenRouterModels } from "../data/openrouterModels";
 import { fetchLitellmModels } from "../data/litellmModels";
+import { KEYLESS_PROVIDERS } from "../data/llm";
 import type { AgentProvider } from "../data/types";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
@@ -142,7 +143,7 @@ export function UserSettings({ open, onClose }: Props) {
     // For others: reset to first in fixed list.
     if (!provider) return;
     if (provider === "ollama") {
-      if (!ollamaModels.includes(model)) setModel(ollamaModels[0] ?? "");
+      if (ollamaModels.length > 0 && !ollamaModels.includes(model)) setModel(ollamaModels[0]);
       return;
     }
     if (provider === "openrouter") {
@@ -167,7 +168,7 @@ export function UserSettings({ open, onClose }: Props) {
     try { localStorage.setItem(EXEC_PROVIDER_KEY, execProvider); } catch { /* ignore */ }
     if (!execProvider) return;
     if (execProvider === "ollama") {
-      if (!ollamaModels.includes(execModel)) setExecModel(ollamaModels[0] ?? "");
+      if (ollamaModels.length > 0 && !ollamaModels.includes(execModel)) setExecModel(ollamaModels[0]);
       return;
     }
     if (execProvider === "openrouter") {
@@ -319,7 +320,7 @@ export function UserSettings({ open, onClose }: Props) {
           <section className="settings-card">
             <h3 className="settings-card-title">API Keys</h3>
             <div className="settings-card-body">
-              {AGENT_PROVIDERS.map((p) => (
+              {AGENT_PROVIDERS.filter((p) => !KEYLESS_PROVIDERS.has(p)).map((p) => (
                 <div key={p} className="flex flex-col gap-1.5">
                   <Label>{p}</Label>
                   <Input
@@ -335,7 +336,7 @@ export function UserSettings({ open, onClose }: Props) {
                 </div>
               ))}
               <p className="user-settings-hint">
-                Stored locally on this device. Required for issue analysis.
+                Stored locally on this device. Ollama and LiteLLM don't require keys.
               </p>
             </div>
           </section>
