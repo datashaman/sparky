@@ -244,8 +244,20 @@ export function createToolHandler(
           await writeFile(worktreePath, input.file_path as string, input.content as string);
           return "File written successfully.";
         case "edit_file":
-          await editFile(worktreePath, input.file_path as string, input.old_text as string, input.new_text as string);
-          return "Edit applied successfully.";
+          try {
+            await editFile(worktreePath, input.file_path as string, input.old_text as string, input.new_text as string);
+            return "Edit applied successfully.";
+          } catch (editErr) {
+            // Edit-as-gather: on failure, return the current file content so the
+            // model has fresh context to retry with correct old_text.
+            const errMsg = editErr instanceof Error ? editErr.message : String(editErr);
+            try {
+              const currentContent = await readFile(worktreePath, input.file_path as string);
+              return truncate(`Error: ${errMsg}\n\nCurrent file content:\n${currentContent}`);
+            } catch {
+              return `Error: ${errMsg}`;
+            }
+          }
         case "glob":
           return truncate((await globFiles(worktreePath, input.pattern as string)).join("\n"));
         case "grep": {
