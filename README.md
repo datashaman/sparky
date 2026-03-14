@@ -1,5 +1,7 @@
 # Sparky
 
+[![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
+
 AI-powered GitHub issue resolution, right from your desktop.
 
 Sparky is a Tauri desktop app that takes a GitHub issue and drives it through a full resolution pipeline: **analysis, planning, critic review, execution, and adaptive replanning** -- all powered by your choice of LLM provider.
