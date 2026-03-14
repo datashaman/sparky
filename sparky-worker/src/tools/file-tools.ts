@@ -65,14 +65,40 @@ export async function editFile(worktreePath: string, filePath: string, oldText: 
   const resolved = sandboxResolve(worktreePath, filePath);
   const contents = readFileSync(resolved, "utf-8");
 
-  const count = contents.split(oldText).length - 1;
-  if (count === 0) {
-    throw new EditFileError("old_text not found in file", contents);
+  // Layer 1: exact match
+  const exactCount = contents.split(oldText).length - 1;
+  if (exactCount === 1) {
+    writeFileSync(resolved, contents.replace(oldText, newText));
+    return;
   }
-  if (count > 1) {
-    throw new EditFileError(`old_text matches ${count} times — must be unique`, contents);
+  if (exactCount > 1) {
+    throw new EditFileError(`old_text matches ${exactCount} times — must be unique`, contents);
   }
 
-  const updated = contents.replace(oldText, newText);
-  writeFileSync(resolved, updated);
+  // Layer 2: normalized line endings (CRLF → LF)
+  const normalizedContents = contents.replace(/\r\n/g, "\n");
+  const normalizedOld = oldText.replace(/\r\n/g, "\n");
+  const lfCount = normalizedContents.split(normalizedOld).length - 1;
+  if (lfCount === 1) {
+    writeFileSync(resolved, normalizedContents.replace(normalizedOld, newText));
+    return;
+  }
+  if (lfCount > 1) {
+    throw new EditFileError(`old_text matches ${lfCount} times after line ending normalization — must be unique`, contents);
+  }
+
+  // Layer 3: trimmed trailing whitespace per line
+  const trimLines = (s: string) => s.split("\n").map((l) => l.trimEnd()).join("\n");
+  const trimmedContents = trimLines(normalizedContents);
+  const trimmedOld = trimLines(normalizedOld);
+  const trimCount = trimmedContents.split(trimmedOld).length - 1;
+  if (trimCount === 1) {
+    writeFileSync(resolved, trimmedContents.replace(trimmedOld, newText));
+    return;
+  }
+  if (trimCount > 1) {
+    throw new EditFileError(`old_text matches ${trimCount} times after whitespace normalization — must be unique`, contents);
+  }
+
+  throw new EditFileError("old_text not found in file (tried exact, line-ending normalized, and whitespace-trimmed matching)", contents);
 }
