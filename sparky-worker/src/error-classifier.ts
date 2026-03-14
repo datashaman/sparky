@@ -4,6 +4,7 @@
  * Based on Operator's empirical taxonomy from 15,000+ tasks:
  * - API errors (rate limits, server errors) → retry or wait
  * - Auth errors (bad key, expired token) → reconfigure
+ * - Config errors (missing provider/model/key) → configure settings
  * - Context errors (too long, invalid schema) → compress or reduce scope
  * - Tool errors (sandbox violations, file not found) → fix tool input
  * - Infrastructure (network, DNS, timeout) → retry later
@@ -12,6 +13,7 @@
 export type ErrorCategory =
   | "rate_limit"
   | "auth"
+  | "config"
   | "server_error"
   | "context_overflow"
   | "invalid_request"
@@ -41,7 +43,18 @@ export function classifyError(error: unknown): ClassifiedError {
     };
   }
 
-  // Auth errors
+  // Configuration errors (missing provider/model/API key)
+  if (lower.includes("no api key") || lower.includes("no default provider") ||
+      lower.includes("no exec provider") || lower.includes("not configured")) {
+    return {
+      category: "config",
+      message,
+      suggestion: "Missing provider, model, or API key configuration. Check your settings.",
+      retryable: false,
+    };
+  }
+
+  // Auth errors (API rejected the key)
   if (lower.includes("401") || lower.includes("403") || lower.includes("unauthorized") ||
       lower.includes("invalid api key") || lower.includes("invalid x-api-key") ||
       lower.includes("permission denied")) {
@@ -65,8 +78,9 @@ export function classifyError(error: unknown): ClassifiedError {
     };
   }
 
-  // Invalid request (client error, bad schema, etc.)
-  if (lower.includes("400") || lower.includes("422") || lower.includes("invalid") ||
+  // Invalid request — narrowed to HTTP status codes and specific API phrases
+  // to avoid catching internal validation errors like "Invalid analysis response"
+  if (lower.includes("api 400") || lower.includes("api 422") ||
       lower.includes("malformed") || lower.includes("bad request")) {
     return {
       category: "invalid_request",
@@ -111,13 +125,15 @@ export function classifyError(error: unknown): ClassifiedError {
     };
   }
 
-  // Tool/sandbox errors
+  // Tool errors — sandbox violations and common tool failures
   if (lower.includes("worktree") || lower.includes("sandbox") ||
-      lower.includes("outside") || lower.includes("allowlist")) {
+      lower.includes("path escapes") || lower.includes("allowlist") ||
+      lower.includes("old_text not found") || lower.includes("old_text matches") ||
+      lower.includes("no ready worktree")) {
     return {
       category: "tool_error",
       message,
-      suggestion: "A tool operation was blocked by the sandbox. This may indicate a misconfigured worktree.",
+      suggestion: "A tool operation failed. Check the error details and verify the worktree is set up correctly.",
       retryable: false,
     };
   }

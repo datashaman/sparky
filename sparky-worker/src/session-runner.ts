@@ -107,7 +107,6 @@ async function runSession(sessionId: string, payload: StartSessionPayload): Prom
       message: `Error (${classified.category}): ${classified.suggestion}${classified.retryable ? " [retryable]" : ""}`,
     });
     broadcast({ type: "session_error", session_id: sessionId, error: `${classified.message}\n\n${classified.suggestion}` });
-    throw err;
   }
 }
 
@@ -182,6 +181,10 @@ export async function resumeSession(session: Session): Promise<void> {
     const errorMsg = `[${classified.category}] ${classified.message}`;
     console.error(`[session ${session.id}] resume error: ${errorMsg}`);
     updateSession(session.id, { status: "error" });
+    logFn(0, {
+      type: "info",
+      message: `Error (${classified.category}): ${classified.suggestion}${classified.retryable ? " [retryable]" : ""}`,
+    });
     broadcast({ type: "session_error", session_id: session.id, error: `${classified.message}\n\n${classified.suggestion}` });
   }
 }
