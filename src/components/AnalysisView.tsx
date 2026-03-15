@@ -154,10 +154,7 @@ export function AnalysisView({ result, workspaceId, onAllCreated }: AnalysisView
     }
   };
 
-  const approachHtml =
-    typeof marked.parse(result.approach) === "string"
-      ? DOMPurify.sanitize(marked.parse(result.approach) as string)
-      : "";
+  const approachHtml = DOMPurify.sanitize(marked.parse(result.approach, { async: false }) as string);
 
   const allExist = loaded && result.skills.every((s) => existingSkills.has(s.name))
     && result.agents.every((a) => existingAgents.has(a.name));
