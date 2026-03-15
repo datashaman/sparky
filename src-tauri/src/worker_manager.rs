@@ -113,6 +113,14 @@ fn resolve_bin(name: &str) -> String {
 pub async fn worker_ensure_running(app: AppHandle) -> Result<String, String> {
     let state = app.state::<WorkerState>();
 
+    // Already connected — nothing to do
+    {
+        let guard = state.writer.lock().await;
+        if guard.is_some() {
+            return Ok("Worker already connected".into());
+        }
+    }
+
     let tmux = resolve_bin("tmux");
     let node = resolve_bin("node");
 
