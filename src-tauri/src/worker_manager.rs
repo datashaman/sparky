@@ -13,22 +13,45 @@ pub struct WorkerState {
     worker_script: PathBuf,
     /// Write half for sending commands to the worker.
     writer: Arc<Mutex<Option<OwnedWriteHalf>>>,
+    /// Serialize calls to worker_ensure_running to prevent races.
+    #[allow(dead_code)]
+    startup_lock: Arc<Mutex<()>>,
 }
 
 impl WorkerState {
     pub fn new(app_data_dir: PathBuf, resource_dir: PathBuf) -> Self {
+        // In dev mode, resource_dir points into target/debug/ where the worker
+        // script doesn't exist. Fall back to the project root's sparky-worker/.
+        let candidate = resource_dir.join("sparky-worker").join("dist").join("main.js");
+        let worker_script = if candidate.exists() {
+            candidate
+        } else {
+            // Walk up from src-tauri/target/.../resource_dir to find the project root
+            let mut dir = resource_dir.as_path();
+            loop {
+                let dev_candidate = dir.join("sparky-worker").join("dist").join("main.js");
+                if dev_candidate.exists() {
+                    break dev_candidate;
+                }
+                match dir.parent() {
+                    Some(parent) => dir = parent,
+                    None => break candidate, // give up, use original
+                }
+            }
+        };
         Self {
             socket_path: app_data_dir.join("sparky.sock"),
             db_path: app_data_dir.join("sparky.db"),
-            worker_script: resource_dir.join("sparky-worker").join("dist").join("main.js"),
+            worker_script,
             writer: Arc::new(Mutex::new(None)),
+            startup_lock: Arc::new(Mutex::new(())),
         }
     }
 }
 
 /// Check if the tmux session is running.
-fn tmux_session_exists(session_name: &str) -> bool {
-    std::process::Command::new("tmux")
+fn tmux_session_exists(tmux: &str, session_name: &str) -> bool {
+    std::process::Command::new(tmux)
         .args(["has-session", "-t", session_name])
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::null())
@@ -39,25 +62,29 @@ fn tmux_session_exists(session_name: &str) -> bool {
 
 /// Start the tmux session with the worker process.
 fn start_tmux_session(
+    tmux: &str,
+    node: &str,
     session_name: &str,
     script_path: &str,
     db_path: &str,
     socket_path: &str,
 ) -> Result<(), String> {
     let cmd = format!(
-        "node {} --db {} --socket {}",
+        "{} {} --db {} --socket {}",
+        shell_escape(node),
         shell_escape(script_path),
         shell_escape(db_path),
         shell_escape(socket_path),
     );
 
-    let status = std::process::Command::new("tmux")
+    let output = std::process::Command::new(tmux)
         .args(["new-session", "-d", "-s", session_name, &cmd])
-        .status()
+        .output()
         .map_err(|e| format!("Failed to start tmux: {}", e))?;
 
-    if !status.success() {
-        return Err("tmux new-session failed".into());
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(format!("tmux new-session failed: {}", stderr));
     }
     Ok(())
 }
@@ -68,26 +95,76 @@ fn shell_escape(s: &str) -> String {
 
 const SESSION_NAME: &str = "sparky-worker";
 
+/// Resolve full path for a command by asking the user's login shell.
+/// Falls back to common homebrew/system locations.
+fn resolve_bin(name: &str) -> String {
+    // Try the user's login shell first (picks up nvm, pyenv, etc.)
+    let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/sh".to_string());
+    if let Ok(output) = std::process::Command::new(&shell)
+        .args(["-l", "-c", &format!("which {}", name)])
+        .output()
+    {
+        if output.status.success() {
+            let path = String::from_utf8_lossy(&output.stdout).trim().to_string();
+            if !path.is_empty() && std::path::Path::new(&path).exists() {
+                return path;
+            }
+        }
+    }
+
+    let candidates = [
+        format!("/opt/homebrew/bin/{}", name),
+        format!("/usr/local/bin/{}", name),
+        format!("/usr/bin/{}", name),
+    ];
+    for c in &candidates {
+        if std::path::Path::new(c).exists() {
+            return c.clone();
+        }
+    }
+    // Fall back to bare name and hope PATH has it
+    name.to_string()
+}
+
 /// Ensure the worker process is running in tmux and connect to its socket.
 /// Waits for the socket connection before returning.
 #[tauri::command]
 pub async fn worker_ensure_running(app: AppHandle) -> Result<String, String> {
     let state = app.state::<WorkerState>();
 
-    // Start tmux if needed
-    if !tmux_session_exists(SESSION_NAME) {
-        let script = state
-            .worker_script
-            .to_str()
-            .ok_or("Invalid worker script path")?;
-        let db = state.db_path.to_str().ok_or("Invalid db path")?;
-        let sock = state.socket_path.to_str().ok_or("Invalid socket path")?;
+    // Serialize startup attempts to prevent races
+    let _startup_guard = state.startup_lock.lock().await;
 
-        // Remove stale socket file
-        let _ = std::fs::remove_file(&state.socket_path);
-
-        start_tmux_session(SESSION_NAME, script, db, sock)?;
+    // Already connected — nothing to do (check inside lock to avoid races)
+    {
+        let guard = state.writer.lock().await;
+        if guard.is_some() {
+            return Ok("Worker already connected".into());
+        }
     }
+
+    let tmux = resolve_bin("tmux");
+    let node = resolve_bin("node");
+
+    // Kill any existing session and start fresh — we have no connection
+    // so any existing session is stale from a previous app run
+    if tmux_session_exists(&tmux, SESSION_NAME) {
+        let _ = std::process::Command::new(&tmux)
+            .args(["kill-session", "-t", SESSION_NAME])
+            .status();
+    }
+
+    let script = state
+        .worker_script
+        .to_str()
+        .ok_or("Invalid worker script path")?;
+    let db = state.db_path.to_str().ok_or("Invalid db path")?;
+    let sock = state.socket_path.to_str().ok_or("Invalid socket path")?;
+
+    // Remove stale socket file
+    let _ = std::fs::remove_file(&state.socket_path);
+
+    start_tmux_session(&tmux, &node, SESSION_NAME, script, db, sock)?;
 
     // Connect to socket with retry — await until connected
     let sock_path = state.socket_path.clone();

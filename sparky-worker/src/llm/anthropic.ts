@@ -1,8 +1,9 @@
+import Anthropic from "@anthropic-ai/sdk";
+import { jsonSchemaOutputFormat } from "@anthropic-ai/sdk/helpers/json-schema";
 import type { LLMToolDef } from "../types.js";
 import type { LogCallback, CheckpointCallback } from "./index.js";
 import { getContextBudget } from "./context-budget.js";
 import { compressMessages } from "./compress.js";
-import { fetchWithRetry } from "./retry.js";
 
 function truncate(s: string, max = 200): string {
   return s.length > max ? s.slice(0, max) + "..." : s;
@@ -10,41 +11,36 @@ function truncate(s: string, max = 200): string {
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
+function makeClient(apiKey: string): Anthropic {
+  return new Anthropic({ apiKey });
+}
+
 export async function anthropicStructured(opts: {
   modelId: string;
   apiKey: string;
   systemPrompt: string;
   userPrompt: string;
   schema: Record<string, unknown>;
+  schemaName?: string;
   maxTokens: number;
 }): Promise<string> {
   const { modelId, apiKey, systemPrompt, userPrompt, schema, maxTokens } = opts;
+  const client = makeClient(apiKey);
 
-  const res = await fetchWithRetry("https://api.anthropic.com/v1/messages", {
-    method: "POST",
-    headers: {
-      "content-type": "application/json",
-      "x-api-key": apiKey,
-      "anthropic-version": "2023-06-01",
+  const message = await client.messages.create({
+    model: modelId,
+    max_tokens: maxTokens,
+    system: systemPrompt,
+    messages: [{ role: "user", content: userPrompt }],
+    output_config: {
+      format: jsonSchemaOutputFormat(schema as any),
     },
-    body: JSON.stringify({
-      model: modelId,
-      max_tokens: maxTokens,
-      system: systemPrompt,
-      messages: [{ role: "user", content: userPrompt }],
-      output_config: {
-        format: { type: "json_schema", schema },
-      },
-    }),
-  }, { label: "Anthropic" });
+  });
 
-  if (!res.ok) {
-    const body = await res.text();
-    throw new Error(`Anthropic API ${res.status}: ${body}`);
-  }
-
-  const data = await res.json();
-  return data.content?.map((b: { text: string }) => b.text).join("") ?? "";
+  return message.content
+    .filter((b): b is Anthropic.TextBlock => b.type === "text")
+    .map((b) => b.text)
+    .join("");
 }
 
 export async function anthropicToolLoop(opts: {
@@ -60,11 +56,12 @@ export async function anthropicToolLoop(opts: {
   onCheckpoint?: CheckpointCallback;
 }): Promise<{ text: string; messages: any[] }> {
   const { modelId, apiKey, systemPrompt, tools, maxTurns, onToolCall, onLog, onCheckpoint } = opts;
+  const client = makeClient(apiKey);
 
-  const anthropicTools = tools.map((t) => ({
+  const anthropicTools: Anthropic.Messages.Tool[] = tools.map((t) => ({
     name: t.name,
     description: t.description,
-    input_schema: t.parameters,
+    input_schema: t.parameters as Anthropic.Messages.Tool.InputSchema,
   }));
 
   const messages: any[] = opts.existingMessages
@@ -85,30 +82,16 @@ export async function anthropicToolLoop(opts: {
       message: turn === 0 && !opts.existingMessages ? truncate(opts.userPrompt, 150) : `turn ${turn + 1} (with tool results)`,
     });
 
-    const res = await fetchWithRetry("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        "x-api-key": apiKey,
-        "anthropic-version": "2023-06-01",
-      },
-      body: JSON.stringify({
-        model: modelId,
-        max_tokens: 4096,
-        system: isLastTurn
-          ? systemPrompt + "\n\nYou have reached the tool-use limit. Respond with:\n1. What is DONE (with file paths)\n2. What REMAINS to be completed\n3. Current state of the codebase (compiles? tests pass?)"
-          : systemPrompt,
-        messages,
-        ...(isLastTurn ? {} : { tools: anthropicTools }),
-      }),
-    }, { label: "Anthropic", onLog });
+    const data = await client.messages.create({
+      model: modelId,
+      max_tokens: 4096,
+      system: isLastTurn
+        ? systemPrompt + "\n\nYou have reached the tool-use limit. Respond with:\n1. What is DONE (with file paths)\n2. What REMAINS to be completed\n3. Current state of the codebase (compiles? tests pass?)"
+        : systemPrompt,
+      messages,
+      ...(isLastTurn ? {} : { tools: anthropicTools }),
+    });
 
-    if (!res.ok) {
-      const body = await res.text();
-      throw new Error(`Anthropic API ${res.status}: ${body}`);
-    }
-
-    const data = await res.json();
     const content: any[] = data.content ?? [];
     messages.push({ role: "assistant", content });
 

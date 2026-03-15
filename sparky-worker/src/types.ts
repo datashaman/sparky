@@ -231,7 +231,7 @@ export type IPCEvent =
   | { type: "session_started"; session_id: string }
   | { type: "session_update"; session_id: string; step_order: number; status: string }
   | { type: "log"; session_id: string; entry: ExecutionLogEntry }
-  | { type: "ask_user"; session_id: string; prompt_id: string; question: string; options: string[]; allow_multiple: boolean }
+  | { type: "ask_user"; session_id: string; prompt_id: string; step_order: number; question: string; options: string[]; allow_multiple: boolean }
   | { type: "session_complete"; session_id: string }
   | { type: "session_error"; session_id: string; error: string }
   | { type: "pong" }

@@ -36,6 +36,7 @@ export function createAskUserHandler(
       type: "ask_user",
       session_id: sessionId,
       prompt_id: promptId,
+      step_order: stepOrder,
       question: request.question,
       options: request.options,
       allow_multiple: request.allowMultiple,

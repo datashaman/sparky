@@ -1,14 +1,18 @@
+import { GoogleGenAI, type Content, type Part } from "@google/genai";
 import type { LLMToolDef } from "../types.js";
 import type { LogCallback, CheckpointCallback } from "./index.js";
 import { getContextBudget } from "./context-budget.js";
 import { compressMessages } from "./compress.js";
-import { fetchWithRetry } from "./retry.js";
 
 function truncate(s: string, max = 200): string {
   return s.length > max ? s.slice(0, max) + "..." : s;
 }
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
+
+function makeClient(apiKey: string): GoogleGenAI {
+  return new GoogleGenAI({ apiKey });
+}
 
 export async function geminiStructured(opts: {
   modelId: string;
@@ -18,32 +22,24 @@ export async function geminiStructured(opts: {
   schema: Record<string, unknown>;
   maxTokens: number;
 }): Promise<string> {
-  const { modelId, apiKey, systemPrompt, userPrompt, schema } = opts;
+  const { modelId, apiKey, systemPrompt, userPrompt, schema, maxTokens } = opts;
+  const client = makeClient(apiKey);
 
-  const res = await fetchWithRetry(
-    `https://generativelanguage.googleapis.com/v1beta/models/${modelId}:generateContent?key=${apiKey}`,
-    {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        systemInstruction: { parts: [{ text: systemPrompt }] },
-        contents: [{ parts: [{ text: userPrompt }] }],
-        generationConfig: {
-          responseMimeType: "application/json",
-          responseSchema: schema,
-        },
-      }),
+  const response = await client.models.generateContent({
+    model: modelId,
+    contents: [{ role: "user", parts: [{ text: userPrompt }] }],
+    config: {
+      systemInstruction: systemPrompt,
+      responseMimeType: "application/json",
+      responseSchema: schema as any,
+      maxOutputTokens: maxTokens,
     },
-    { label: "Gemini" },
-  );
+  });
 
-  if (!res.ok) {
-    const body = await res.text();
-    throw new Error(`Gemini API ${res.status}: ${body}`);
-  }
-
-  const data = await res.json();
-  return data.candidates?.[0]?.content?.parts?.map((p: { text: string }) => p.text).join("") ?? "";
+  return response.candidates?.[0]?.content?.parts
+    ?.filter((p: Part) => p.text)
+    .map((p: Part) => p.text)
+    .join("") ?? "";
 }
 
 export async function geminiToolLoop(opts: {
@@ -59,14 +55,15 @@ export async function geminiToolLoop(opts: {
   onCheckpoint?: CheckpointCallback;
 }): Promise<{ text: string; messages: any[] }> {
   const { modelId, apiKey, systemPrompt, tools, maxTurns, onToolCall, onLog, onCheckpoint } = opts;
+  const client = makeClient(apiKey);
 
-  const declarations = tools.map((t) => {
-    const params = { ...t.parameters };
-    delete params.additionalProperties;
-    return { name: t.name, description: t.description, parameters: params };
-  });
+  const declarations = tools.map((t) => ({
+    name: t.name,
+    description: t.description,
+    parametersJsonSchema: t.parameters,
+  }));
 
-  const contents: any[] = opts.existingMessages
+  const contents: Content[] = opts.existingMessages
     ? [...opts.existingMessages]
     : [{ role: "user", parts: [{ text: opts.userPrompt }] }];
 
@@ -88,35 +85,24 @@ export async function geminiToolLoop(opts: {
       message: turn === 0 && !opts.existingMessages ? truncate(opts.userPrompt, 150) : `turn ${turn + 1} (with tool results)`,
     });
 
-    const res = await fetchWithRetry(
-      `https://generativelanguage.googleapis.com/v1beta/models/${modelId}:generateContent?key=${apiKey}`,
-      {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          systemInstruction: { parts: [{ text: systemPrompt }] },
-          contents,
-          ...(isLastTurn ? {} : { tools: [{ functionDeclarations: declarations }] }),
-        }),
+    const data = await client.models.generateContent({
+      model: modelId,
+      contents,
+      config: {
+        systemInstruction: systemPrompt,
+        ...(isLastTurn ? {} : { tools: [{ functionDeclarations: declarations }] }),
       },
-      { label: "Gemini", onLog },
-    );
+    });
 
-    if (!res.ok) {
-      const body = await res.text();
-      throw new Error(`Gemini API ${res.status}: ${body}`);
-    }
-
-    const data = await res.json();
-    const parts: any[] = data.candidates?.[0]?.content?.parts ?? [];
+    const parts: Part[] = data.candidates?.[0]?.content?.parts ?? [];
     contents.push({ role: "model", parts });
 
-    const fnCalls = parts.filter((p: any) => p.functionCall);
+    const fnCalls = parts.filter((p: Part) => p.functionCall);
     if (fnCalls.length === 0 || isLastTurn) {
       onLog?.({ type: "llm_response", turn: turn + 1, message: "final response" });
       const text = parts
-        .filter((p: any) => p.text)
-        .map((p: any) => p.text)
+        .filter((p: Part) => p.text)
+        .map((p: Part) => p.text)
         .join("");
       return { text, messages: contents };
     }
@@ -127,14 +113,16 @@ export async function geminiToolLoop(opts: {
       message: `${fnCalls.length} tool call${fnCalls.length > 1 ? "s" : ""}`,
     });
 
-    const responseParts: any[] = [];
+    const responseParts: Part[] = [];
     for (const fc of fnCalls) {
-      onLog?.({ type: "tool_call", turn: turn + 1, toolName: fc.functionCall.name, toolInput: truncate(JSON.stringify(fc.functionCall.args ?? {})) });
-      const result = await onToolCall(fc.functionCall.name, fc.functionCall.args ?? {});
-      onLog?.({ type: "tool_result", turn: turn + 1, toolName: fc.functionCall.name, toolResult: truncate(result) });
+      const name = fc.functionCall!.name!;
+      const args = fc.functionCall!.args ?? {};
+      onLog?.({ type: "tool_call", turn: turn + 1, toolName: name, toolInput: truncate(JSON.stringify(args)) });
+      const result = await onToolCall(name, args);
+      onLog?.({ type: "tool_result", turn: turn + 1, toolName: name, toolResult: truncate(result) });
       responseParts.push({
         functionResponse: {
-          name: fc.functionCall.name,
+          name,
           response: { result },
         },
       });

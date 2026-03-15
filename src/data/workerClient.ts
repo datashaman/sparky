@@ -6,17 +6,6 @@ import type { AgentProvider } from "./types";
 
 export type SessionType = "analysis" | "plan" | "execution";
 
-export interface SessionConfig {
-  default_provider: AgentProvider;
-  default_model: string;
-  default_api_key: string;
-  exec_provider: AgentProvider;
-  exec_model: string;
-  exec_api_key: string;
-  github_token: string;
-  ask_user_timeout_minutes: number | null;
-}
-
 export interface StartSessionOpts {
   session_type: SessionType;
   workspace_id: string;
@@ -45,6 +34,18 @@ export interface WorkerEvent {
   allow_multiple?: boolean;
   error?: string;
   sessions?: unknown[];
+}
+
+export interface SessionConfig {
+  default_provider: AgentProvider;
+  default_model: string;
+  default_api_key: string;
+  exec_provider: AgentProvider;
+  exec_model: string;
+  exec_api_key: string;
+  github_token: string;
+  ask_user_timeout_minutes: number | null;
+  api_keys?: Partial<Record<AgentProvider, string>>;
 }
 
 // ─── Worker Lifecycle ───

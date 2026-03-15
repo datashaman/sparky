@@ -1,14 +1,28 @@
+import OpenAI from "openai";
 import type { LLMToolDef } from "../types.js";
 import type { LogCallback, CheckpointCallback } from "./index.js";
 import { getContextBudget } from "./context-budget.js";
 import { compressMessages } from "./compress.js";
-import { fetchWithRetry } from "./retry.js";
 
 function truncate(s: string, max = 200): string {
   return s.length > max ? s.slice(0, max) + "..." : s;
 }
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
+
+function makeClient(apiKey: string, baseUrl: string): OpenAI {
+  if (apiKey) {
+    return new OpenAI({ apiKey, baseURL: baseUrl });
+  }
+  // Keyless providers (e.g. Ollama): SDK requires a non-empty apiKey,
+  // but we blank the Authorization header so servers that reject
+  // unexpected auth aren't broken.
+  return new OpenAI({
+    apiKey: "unused",
+    baseURL: baseUrl,
+    defaultHeaders: { Authorization: undefined as unknown as string },
+  });
+}
 
 export async function openaiStructured(opts: {
   modelId: string;
@@ -22,45 +36,25 @@ export async function openaiStructured(opts: {
   jsonMode?: boolean;
 }): Promise<string> {
   const { modelId, apiKey, systemPrompt, userPrompt, schema, schemaName, maxTokens, baseUrl, jsonMode } = opts;
+  const client = makeClient(apiKey, baseUrl);
 
-  const messages: any[] = [
+  const messages: OpenAI.ChatCompletionMessageParam[] = [
     { role: "system", content: jsonMode
       ? systemPrompt + "\n\nYou MUST respond with valid JSON matching this schema:\n" + JSON.stringify(schema, null, 2)
       : systemPrompt },
     { role: "user", content: userPrompt },
   ];
 
-  const body: any = {
+  const response = await client.chat.completions.create({
     model: modelId,
     max_tokens: maxTokens,
     messages,
-  };
+    response_format: jsonMode
+      ? { type: "json_object" }
+      : { type: "json_schema", json_schema: { name: schemaName, strict: true, schema } },
+  });
 
-  if (jsonMode) {
-    body.response_format = { type: "json_object" };
-  } else {
-    body.response_format = {
-      type: "json_schema",
-      json_schema: { name: schemaName, strict: true, schema },
-    };
-  }
-
-  const headers: Record<string, string> = { "content-type": "application/json" };
-  if (apiKey) headers.authorization = `Bearer ${apiKey}`;
-
-  const res = await fetchWithRetry(`${baseUrl}/chat/completions`, {
-    method: "POST",
-    headers,
-    body: JSON.stringify(body),
-  }, { label: "OpenAI" });
-
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`API ${res.status}: ${text}`);
-  }
-
-  const data = await res.json();
-  return data.choices?.[0]?.message?.content ?? "";
+  return response.choices?.[0]?.message?.content ?? "";
 }
 
 export async function openaiToolLoop(opts: {
@@ -78,8 +72,9 @@ export async function openaiToolLoop(opts: {
   onCheckpoint?: CheckpointCallback;
 }): Promise<{ text: string; messages: any[] }> {
   const { modelId, apiKey, systemPrompt, tools, maxTurns, onToolCall, onLog, baseUrl, label, onCheckpoint } = opts;
+  const client = makeClient(apiKey, baseUrl);
 
-  const openaiTools = tools.map((t) => ({
+  const openaiTools: OpenAI.ChatCompletionTool[] = tools.map((t) => ({
     type: "function" as const,
     function: { name: t.name, description: t.description, parameters: t.parameters },
   }));
@@ -90,9 +85,6 @@ export async function openaiToolLoop(opts: {
         { role: "system", content: systemPrompt },
         { role: "user", content: opts.userPrompt },
       ];
-
-  const headers: Record<string, string> = { "content-type": "application/json" };
-  if (apiKey) headers.authorization = `Bearer ${apiKey}`;
 
   let toolResultCount = 0;
   let hintLevel = 0; // 0=none, 1=info, 2=urgent
@@ -112,25 +104,13 @@ export async function openaiToolLoop(opts: {
       message: turn === 0 && !opts.existingMessages ? truncate(opts.userPrompt, 150) : `turn ${turn + 1} (with tool results)`,
     });
 
-    const reqBody = JSON.stringify({
+    const data = await client.chat.completions.create({
       model: modelId,
       max_tokens: 4096,
       messages,
       ...(isLastTurn ? {} : { tools: openaiTools }),
     });
 
-    const res = await fetchWithRetry(`${baseUrl}/chat/completions`, {
-      method: "POST",
-      headers,
-      body: reqBody,
-    }, { label, onLog });
-
-    if (!res.ok) {
-      const body = await res.text();
-      throw new Error(`${label} API ${res.status}: ${body}`);
-    }
-
-    const data = await res.json();
     const choice = data.choices?.[0];
     if (!choice) throw new Error(`No choices in ${label} response`);
 
@@ -149,21 +129,23 @@ export async function openaiToolLoop(opts: {
     });
 
     for (const tc of msg.tool_calls) {
+      if (tc.type !== "function") continue;
+      const fn = tc.function;
       let args: Record<string, unknown>;
       try {
-        args = JSON.parse(tc.function.arguments);
+        args = JSON.parse(fn.arguments);
       } catch {
-        onLog?.({ type: "tool_result", turn: turn + 1, toolName: tc.function.name, toolError: "invalid JSON in tool arguments" });
+        onLog?.({ type: "tool_result", turn: turn + 1, toolName: fn.name, toolError: "invalid JSON in tool arguments" });
         messages.push({
           role: "tool",
           tool_call_id: tc.id,
-          content: `Error: invalid JSON in tool arguments: ${tc.function.arguments}`,
+          content: `Error: invalid JSON in tool arguments: ${fn.arguments}`,
         });
         continue;
       }
-      onLog?.({ type: "tool_call", turn: turn + 1, toolName: tc.function.name, toolInput: truncate(JSON.stringify(args)) });
-      const result = await onToolCall(tc.function.name, args);
-      onLog?.({ type: "tool_result", turn: turn + 1, toolName: tc.function.name, toolResult: truncate(result) });
+      onLog?.({ type: "tool_call", turn: turn + 1, toolName: fn.name, toolInput: truncate(JSON.stringify(args)) });
+      const result = await onToolCall(fn.name, args);
+      onLog?.({ type: "tool_result", turn: turn + 1, toolName: fn.name, toolResult: truncate(result) });
       messages.push({
         role: "tool",
         tool_call_id: tc.id,
