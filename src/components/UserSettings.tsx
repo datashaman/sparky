@@ -104,7 +104,12 @@ export function UserSettings({ open, onClose }: Props) {
   });
 
   const [sandboxBinaries, setSandboxBinaries] = useState(() => {
-    try { return localStorage.getItem("sandbox_allowed_binaries") ?? ""; } catch { return ""; }
+    try {
+      const raw = localStorage.getItem("sandbox_allowed_binaries");
+      if (!raw) return "";
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? parsed.join(", ") : "";
+    } catch { return ""; }
   });
   const [sandboxAllowAll, setSandboxAllowAll] = useState(() => {
     try { return localStorage.getItem("sandbox_allow_all") === "true"; } catch { return false; }

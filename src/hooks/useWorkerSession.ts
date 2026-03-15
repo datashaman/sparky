@@ -69,7 +69,7 @@ function buildSessionConfig(): SessionConfig {
     github_token: localStorage.getItem("github_token") ?? "",
     ask_user_timeout_minutes: null,
     api_keys: apiKeys,
-    sandbox_allowed_binaries: JSON.parse(localStorage.getItem("sandbox_allowed_binaries") ?? "[]"),
+    sandbox_allowed_binaries: (() => { try { const v = JSON.parse(localStorage.getItem("sandbox_allowed_binaries") ?? "[]"); return Array.isArray(v) ? v.filter((s: unknown) => typeof s === "string") : []; } catch { return []; } })(),
     sandbox_allow_all: localStorage.getItem("sandbox_allow_all") === "true",
   };
 }

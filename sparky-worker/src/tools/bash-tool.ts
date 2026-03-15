@@ -49,8 +49,8 @@ export async function runBash(
     }
   }
 
-  // Reject shell metacharacters that could bypass the allowlist
-  const DANGEROUS_CHARS = /[;|&$`()<>]/;
+  // Reject shell metacharacters and newlines that could bypass the allowlist
+  const DANGEROUS_CHARS = /[;|&$`()<>\n\r]/;
   if (!allowAll && DANGEROUS_CHARS.test(command)) {
     throw new Error(
       "Command contains shell metacharacters (;|&$`()<>) which are not allowed for security.",
