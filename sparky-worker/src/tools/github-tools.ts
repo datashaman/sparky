@@ -70,24 +70,38 @@ function sanitizeError(e: unknown, token: string): string {
   return msg;
 }
 
-/** Common patterns that should be gitignored in most projects. */
-const GITIGNORE_PATTERNS: Array<{ dir: string; patterns: string[] }> = [
-  { dir: "vendor", patterns: ["/vendor/"] },
-  { dir: "node_modules", patterns: ["/node_modules/"] },
-  { dir: ".phpunit.result.cache", patterns: [".phpunit.result.cache"] },
-  { dir: ".pytest_cache", patterns: [".pytest_cache/"] },
-  { dir: "__pycache__", patterns: ["__pycache__/"] },
-  { dir: ".mypy_cache", patterns: [".mypy_cache/"] },
-  { dir: "target", patterns: ["/target/"] },
-  { dir: ".gradle", patterns: [".gradle/"] },
-  { dir: ".sparky", patterns: [".sparky/"] },
+/**
+ * Common patterns that should be gitignored. These use non-rooted patterns
+ * (no leading /) so they match at any depth (e.g. php-app/vendor/).
+ */
+const GITIGNORE_PATTERNS = [
+  "vendor/",
+  "node_modules/",
+  ".phpunit.result.cache",
+  ".pytest_cache/",
+  "__pycache__/",
+  ".mypy_cache/",
+  "target/",
+  ".gradle/",
+  ".sparky/",
 ];
 
 /**
- * Check for common dependency/cache directories and ensure they're in .gitignore.
- * Appends missing patterns to an existing .gitignore or creates one if needed.
+ * Check for untracked dependency/cache paths and ensure they're in .gitignore.
+ * Uses `git status --porcelain` to find what would be committed, then checks
+ * against known patterns.
  */
 function ensureGitignore(worktreePath: string): void {
+  // Ask git what untracked/modified files exist
+  let status = "";
+  try {
+    status = execFileSync("git", ["status", "--porcelain"], {
+      cwd: worktreePath, encoding: "utf-8", timeout: 10_000,
+    });
+  } catch {
+    return;
+  }
+
   const gitignorePath = join(worktreePath, ".gitignore");
   let existing = "";
   try {
@@ -99,16 +113,20 @@ function ensureGitignore(worktreePath: string): void {
   const existingLines = new Set(existing.split("\n").map((l) => l.trim()));
   const toAdd: string[] = [];
 
-  for (const { dir, patterns } of GITIGNORE_PATTERNS) {
-    // Check if the dir/file exists in the worktree
-    const dirPath = join(worktreePath, dir);
-    if (!existsSync(dirPath)) continue;
+  for (const pattern of GITIGNORE_PATTERNS) {
+    // Already in .gitignore?
+    if (existingLines.has(pattern) || existingLines.has("/" + pattern) || existingLines.has(pattern.replace(/\/$/, ""))) continue;
 
-    // Check if any of the patterns are already in .gitignore
-    const alreadyIgnored = patterns.some((p) => existingLines.has(p) || existingLines.has(p.replace(/^\//, "")));
-    if (alreadyIgnored) continue;
+    // Check if any staged/untracked file matches this pattern
+    const baseName = pattern.replace(/\/$/, "");
+    const matchesStatus = status.split("\n").some((line) => {
+      const file = line.slice(3); // skip status chars + space
+      return file.includes(baseName + "/") || file === baseName || file.endsWith("/" + baseName);
+    });
 
-    toAdd.push(...patterns);
+    if (matchesStatus) {
+      toAdd.push(pattern);
+    }
   }
 
   if (toAdd.length === 0) return;
