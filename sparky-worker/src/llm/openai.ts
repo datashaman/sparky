@@ -11,7 +11,17 @@ function truncate(s: string, max = 200): string {
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
 function makeClient(apiKey: string, baseUrl: string): OpenAI {
-  return new OpenAI({ apiKey: apiKey || "unused", baseURL: baseUrl });
+  if (apiKey) {
+    return new OpenAI({ apiKey, baseURL: baseUrl });
+  }
+  // Keyless providers (e.g. Ollama): SDK requires a non-empty apiKey,
+  // but we blank the Authorization header so servers that reject
+  // unexpected auth aren't broken.
+  return new OpenAI({
+    apiKey: "unused",
+    baseURL: baseUrl,
+    defaultHeaders: { Authorization: undefined as unknown as string },
+  });
 }
 
 export async function openaiStructured(opts: {

@@ -279,7 +279,7 @@ export function WorkspaceDetail({ workspaceId, onSwitchWorkspace, onDeleted, onW
       setPlan(p);
       setIssueTab("plan");
       setExecutionLogs([]);
-      workerSession.startPlan(p.id, selectedIssue, analysisResult, analysis.id);
+      await workerSession.startPlan(p.id, selectedIssue, analysisResult, analysis.id);
     } finally {
       setPlanLoading(false);
     }
@@ -962,7 +962,7 @@ export function WorkspaceDetail({ workspaceId, onSwitchWorkspace, onDeleted, onW
                             const accessToken = localStorage.getItem("github_token") ?? "";
                             if (!accessToken) throw new Error("No GitHub token. Please log in.");
                             await ensureWorktree(workspaceId, selectedIssue.full_name, selectedIssue.number, accessToken, setWorktree);
-                            workerSession.startExecution(plan!.id, selectedIssue, parsed, analysis?.id);
+                            await workerSession.startExecution(plan!.id, selectedIssue, parsed, analysis?.id);
                           }}
                         />
                       );

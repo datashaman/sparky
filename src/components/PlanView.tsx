@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ExecutionLogEntry, ExecutionPlanResult, StepExecutionStatus, CriticReview } from "../data/types";
 import { marked } from "marked";
+import DOMPurify from "dompurify";
 export interface AskUserPrompt {
   stepOrder: number;
   question: string;
@@ -265,7 +266,7 @@ export function PlanView({ result, criticReview, stepStatuses, executing, execut
                 <span className="pv-step-title">{step.title}</span>
                 {step.agent_name && <span className="pv-step-agent">{step.agent_name}</span>}
               </div>
-              <div className="pv-step-description markdown-body" dangerouslySetInnerHTML={{ __html: marked.parse(step.description, { async: false }) as string }} />
+              <div className="pv-step-description markdown-body" dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(marked.parse(step.description, { async: false }) as string) }} />
               <div className="pv-step-output">
                 <span className="pv-step-output-label">Expected output:</span> {step.expected_output}
               </div>

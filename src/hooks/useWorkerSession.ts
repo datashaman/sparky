@@ -104,8 +104,9 @@ export function useWorkerSession(opts: {
   const unlistenRef = useRef<(() => void) | null>(null);
   const workerReadyRef = useRef(false);
 
-  // Use a ref for the event handler so ensureWorker doesn't depend on it
+  // Use refs for event handlers to avoid stale closures over workspaceId/callbacks
   const handleWorkerEventRef = useRef<(event: WorkerEvent) => void>(() => {});
+  const handleSessionCompleteRef = useRef<() => void>(() => {});
 
   // Deduplicate worker events (Tauri can deliver the same event twice in StrictMode)
   const lastEventRef = useRef("");
@@ -192,7 +193,7 @@ export function useWorkerSession(opts: {
         break;
 
       case "session_complete":
-        handleSessionComplete();
+        handleSessionCompleteRef.current();
         break;
 
       case "session_error":
@@ -217,7 +218,7 @@ export function useWorkerSession(opts: {
     }
   }, [onLog, onStepUpdate]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Keep the ref in sync
+  // Keep refs in sync so event handlers always use latest closures
   handleWorkerEventRef.current = handleWorkerEvent;
 
   const handleSessionComplete = useCallback(async () => {
@@ -253,6 +254,8 @@ export function useWorkerSession(opts: {
       console.error("[useWorkerSession] error re-reading results:", err);
     }
   }, [workspaceId, onAnalysisUpdate, onPlanUpdate]);
+
+  handleSessionCompleteRef.current = handleSessionComplete;
 
   const doStartAnalysis = useCallback(
     async (

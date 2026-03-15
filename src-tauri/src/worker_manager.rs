@@ -99,7 +99,8 @@ const SESSION_NAME: &str = "sparky-worker";
 /// Falls back to common homebrew/system locations.
 fn resolve_bin(name: &str) -> String {
     // Try the user's login shell first (picks up nvm, pyenv, etc.)
-    if let Ok(output) = std::process::Command::new("/bin/zsh")
+    let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/sh".to_string());
+    if let Ok(output) = std::process::Command::new(&shell)
         .args(["-l", "-c", &format!("which {}", name)])
         .output()
     {
