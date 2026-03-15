@@ -318,14 +318,25 @@ export function PlanView({ result, criticReview, stepStatuses, executing, execut
         const allDone = totalSteps > 0 && doneCount + errorCount === totalSteps;
         const hasStarted = stepStatuses && stepStatuses.size > 0;
 
-        // Extract PR URL from step outputs
+        // Extract PR URL from step outputs and execution logs
         const prUrl = (() => {
-          if (!stepStatuses) return null;
           const prPattern = /https:\/\/github\.com\/[^\s]+\/pull\/\d+/;
-          for (const [, status] of stepStatuses) {
-            if (status.output) {
-              const match = status.output.match(prPattern);
-              if (match) return match[0];
+          // Check step outputs first
+          if (stepStatuses) {
+            for (const [, status] of stepStatuses) {
+              if (status.output) {
+                const match = status.output.match(prPattern);
+                if (match) return match[0];
+              }
+            }
+          }
+          // Also check tool results in execution logs
+          if (executionLogs) {
+            for (const log of executionLogs) {
+              if (log.toolResult) {
+                const match = log.toolResult.match(prPattern);
+                if (match) return match[0];
+              }
             }
           }
           return null;
