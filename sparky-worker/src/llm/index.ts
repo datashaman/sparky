@@ -24,7 +24,7 @@ export async function callLLM(opts: {
 
   switch (provider) {
     case "anthropic":
-      return anthropicStructured({ modelId, apiKey, systemPrompt, userPrompt, schema, maxTokens });
+      return anthropicStructured({ modelId, apiKey, systemPrompt, userPrompt, schema, schemaName, maxTokens });
     case "openai":
       return openaiStructured({ modelId, apiKey, systemPrompt, userPrompt, schema, schemaName, maxTokens, baseUrl: "https://api.openai.com/v1" });
     case "gemini":
