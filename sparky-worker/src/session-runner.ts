@@ -168,9 +168,10 @@ export async function resumeSession(session: Session): Promise<void> {
           resumeFromStepStates: stepStates,
         });
         break;
-      // Analysis and plan don't support resume yet — restart them
+      // Analysis and plan don't support resume — mark as error
       default:
-        await runSession(session.id, payload);
+        console.log(`[session ${session.id}] ${session.session_type} sessions cannot resume, marking as error`);
+        updateSession(session.id, { status: "error" });
         return;
     }
 
