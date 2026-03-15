@@ -6,6 +6,7 @@ import { fetchLitellmModels } from "../data/litellmModels";
 import { KEYLESS_PROVIDERS } from "../data/providers";
 import { getModelsForProvider, shouldShowModelInput, getModelInputPlaceholder } from "../data/shared";
 import type { AgentProvider } from "../data/types";
+import { PROVIDER_LABELS } from "../data/providers";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import {
@@ -96,7 +97,10 @@ export function UserSettings({ open, onClose }: Props) {
   const [model, setModel] = useState(getDefaultModel);
   const [execProvider, setExecProvider] = useState<AgentProvider | "">(getExecProvider);
   const [execModel, setExecModel] = useState(getExecModel);
+  const [modelUseCase, setModelUseCase] = useState<"analysis" | "execution">("analysis");
 
+  const keyProviders = AGENT_PROVIDERS.filter((p) => !KEYLESS_PROVIDERS.has(p));
+  const [selectedKeyProvider, setSelectedKeyProvider] = useState<AgentProvider>(keyProviders[0]);
   const [apiKeys, setApiKeys] = useState<Record<string, string>>(() => {
     const keys: Record<string, string> = {};
     for (const p of AGENT_PROVIDERS) keys[p] = getApiKey(p);
@@ -243,91 +247,69 @@ export function UserSettings({ open, onClose }: Props) {
           </section>
 
           <section className="settings-card">
-            <h3 className="settings-card-title">Analysis / Planning</h3>
+            <h3 className="settings-card-title">Models</h3>
             <div className="settings-card-body">
+              <div className="flex flex-col gap-1.5">
+                <Label>Use case</Label>
+                <Select value={modelUseCase} onValueChange={(v) => setModelUseCase(v as "analysis" | "execution")}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="analysis">Analysis / Planning</SelectItem>
+                    <SelectItem value="execution">Execution</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
               <div className="flex gap-3">
                 <div className="flex flex-col gap-1.5 flex-1 min-w-0">
                   <Label>Provider</Label>
-                  <Select value={provider} onValueChange={(v) => setProvider(v as AgentProvider)}>
+                  <Select
+                    value={modelUseCase === "analysis" ? provider : execProvider}
+                    onValueChange={(v) => modelUseCase === "analysis" ? setProvider(v as AgentProvider) : setExecProvider(v as AgentProvider)}
+                  >
                     <SelectTrigger>
                       <SelectValue placeholder="None" />
                     </SelectTrigger>
                     <SelectContent>
                       {AGENT_PROVIDERS.map((p) => (
-                        <SelectItem key={p} value={p}>{p}</SelectItem>
+                        <SelectItem key={p} value={p}>{PROVIDER_LABELS[p]}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
                 </div>
                 <div className="flex flex-col gap-1.5 flex-1 min-w-0">
                   <Label>Model</Label>
-                  {shouldShowModelInput(provider, models) ? (
-                    <Input
-                      placeholder={getModelInputPlaceholder(provider)}
-                      value={model}
-                      onChange={(e) => setModel(e.target.value)}
-                    />
-                  ) : (
-                    <Select value={model} onValueChange={setModel} disabled={!provider}>
-                      <SelectTrigger>
-                        <SelectValue placeholder={provider ? "Select model" : "Pick provider first"} />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {[...models].sort().map((m) => (
-                          <SelectItem key={m} value={m}>{m}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  )}
+                  {(() => {
+                    const activeProvider = modelUseCase === "analysis" ? provider : execProvider;
+                    const activeModel = modelUseCase === "analysis" ? model : execModel;
+                    const activeModels = modelUseCase === "analysis" ? models : execModels;
+                    const setActiveModel = modelUseCase === "analysis" ? setModel : setExecModel;
+                    return shouldShowModelInput(activeProvider, activeModels) ? (
+                      <Input
+                        placeholder={getModelInputPlaceholder(activeProvider)}
+                        value={activeModel}
+                        onChange={(e) => setActiveModel(e.target.value)}
+                      />
+                    ) : (
+                      <Select value={activeModel} onValueChange={setActiveModel} disabled={!activeProvider}>
+                        <SelectTrigger>
+                          <SelectValue placeholder={activeProvider ? "Select model" : "Pick provider first"} />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {[...activeModels].sort().map((m) => (
+                            <SelectItem key={m} value={m}>{m}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    );
+                  })()}
                 </div>
               </div>
               <p className="user-settings-hint">
-                Used for issue analysis, plan generation, and new agent/skill defaults.
-              </p>
-            </div>
-          </section>
-
-          <section className="settings-card">
-            <h3 className="settings-card-title">Execution</h3>
-            <div className="settings-card-body">
-              <div className="flex gap-3">
-                <div className="flex flex-col gap-1.5 flex-1 min-w-0">
-                  <Label>Provider</Label>
-                  <Select value={execProvider} onValueChange={(v) => setExecProvider(v as AgentProvider)}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="None" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {AGENT_PROVIDERS.map((p) => (
-                        <SelectItem key={p} value={p}>{p}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="flex flex-col gap-1.5 flex-1 min-w-0">
-                  <Label>Model</Label>
-                  {shouldShowModelInput(execProvider, execModels) ? (
-                    <Input
-                      placeholder={getModelInputPlaceholder(execProvider)}
-                      value={execModel}
-                      onChange={(e) => setExecModel(e.target.value)}
-                    />
-                  ) : (
-                    <Select value={execModel} onValueChange={setExecModel} disabled={!execProvider}>
-                      <SelectTrigger>
-                        <SelectValue placeholder={execProvider ? "Select model" : "Pick provider first"} />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {[...execModels].sort().map((m) => (
-                          <SelectItem key={m} value={m}>{m}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  )}
-                </div>
-              </div>
-              <p className="user-settings-hint">
-                Used by the issue LLM when executing plan steps. Falls back to analysis model if not set.
+                {modelUseCase === "analysis"
+                  ? "Used for issue analysis, plan generation, and new agent/skill defaults."
+                  : "Used by the issue LLM when executing plan steps. Falls back to analysis model if not set."}
               </p>
             </div>
           </section>
@@ -335,21 +317,34 @@ export function UserSettings({ open, onClose }: Props) {
           <section className="settings-card">
             <h3 className="settings-card-title">API Keys</h3>
             <div className="settings-card-body">
-              {AGENT_PROVIDERS.filter((p) => !KEYLESS_PROVIDERS.has(p)).map((p) => (
-                <div key={p} className="flex flex-col gap-1.5">
-                  <Label>{p}</Label>
+              <div className="flex gap-3">
+                <div className="flex flex-col gap-1 flex-1 min-w-0">
+                  <Label>Provider</Label>
+                  <Select value={selectedKeyProvider} onValueChange={(v) => setSelectedKeyProvider(v as AgentProvider)}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {keyProviders.map((p) => (
+                        <SelectItem key={p} value={p}>{PROVIDER_LABELS[p]}{apiKeys[p] ? " \u2713" : ""}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="flex flex-col gap-1 flex-1 min-w-0">
+                  <Label>API Key</Label>
                   <Input
                     type="password"
-                    placeholder={`${p} API key`}
-                    value={apiKeys[p] ?? ""}
+                    placeholder={`${PROVIDER_LABELS[selectedKeyProvider]} API key`}
+                    value={apiKeys[selectedKeyProvider] ?? ""}
                     onChange={(e) => {
                       const val = e.target.value;
-                      setApiKeys((prev) => ({ ...prev, [p]: val }));
-                      try { localStorage.setItem(API_KEY_PREFIX + p, val); } catch { /* ignore */ }
+                      setApiKeys((prev) => ({ ...prev, [selectedKeyProvider]: val }));
+                      try { localStorage.setItem(API_KEY_PREFIX + selectedKeyProvider, val); } catch { /* ignore */ }
                     }}
                   />
                 </div>
-              ))}
+              </div>
               <p className="user-settings-hint">
                 Stored locally on this device. Ollama and LiteLLM don't require keys.
               </p>
