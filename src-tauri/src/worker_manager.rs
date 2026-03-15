@@ -93,7 +93,16 @@ const SESSION_NAME: &str = "sparky-worker";
 pub async fn worker_ensure_running(app: AppHandle) -> Result<String, String> {
     let state = app.state::<WorkerState>();
 
-    // Start tmux if needed
+    // Start tmux if needed — kill stale sessions that lost their socket
+    if tmux_session_exists(SESSION_NAME) {
+        if !state.socket_path.exists() {
+            // Session exists but socket is gone — stale, kill and restart
+            let _ = std::process::Command::new("tmux")
+                .args(["kill-session", "-t", SESSION_NAME])
+                .status();
+        }
+    }
+
     if !tmux_session_exists(SESSION_NAME) {
         let script = state
             .worker_script
