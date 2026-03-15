@@ -10,6 +10,7 @@ import { getAnalysisForIssue, createAnalysis, deleteAnalysesForIssue } from "../
 import { getPlanForIssue, createPlan, deletePlansForIssue } from "../data/executionPlans";
 import { getWorktreeForIssue, removeWorktree, ensureWorktree } from "../data/issueWorktrees";
 import { getLatestSessionForIssue, getLogsForSession } from "../data/sessionLogs";
+import { getStepResultsForPlan } from "../data/stepResults";
 import type { ExecutionLogEntry, IssueAnalysis, AnalysisResult, ExecutionPlan, ExecutionPlanResult, IssueWorktree, StepExecutionStatus, CriticReview } from "../data/types";
 import { marked } from "marked";
 import DOMPurify from "dompurify";
@@ -164,11 +165,17 @@ export function WorkspaceDetail({ workspaceId, onSwitchWorkspace, onDeleted, onW
         setAnalysis(a);
         setPlan(p);
         setWorktree(wt);
-        // Restore execution logs from the latest session
+        // Restore execution logs and step statuses from DB
         if (session) {
           const logs = await getLogsForSession(session.id);
           if (!cancelled && logs.length > 0) {
             setExecutionLogs(logs);
+          }
+        }
+        if (p?.id) {
+          const results = await getStepResultsForPlan(p.id);
+          if (!cancelled && results.size > 0) {
+            setStepStatuses(results);
           }
         }
       })
