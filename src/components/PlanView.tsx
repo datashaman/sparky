@@ -111,16 +111,22 @@ function LogEntryLine({ entry }: { entry: ExecutionLogEntry }) {
         </div>
       );
     case "replan_check":
-      // Hide routine replan checks — only show when replanning actually happens
       return null;
     case "replan_decision":
-      // Only show when replanning — "continue" decisions are noise
-      if (entry.decision !== "replan") return null;
+      if (entry.decision === "replan") {
+        return (
+          <div className="pv-log-entry pv-log-replan">
+            <span className="pv-log-time">[{time}]</span>
+            <span className="pv-log-icon">{"\u21BB"}</span>
+            <span>Replanning: {entry.reason}</span>
+          </div>
+        );
+      }
       return (
-        <div className="pv-log-entry pv-log-replan">
+        <div className="pv-log-entry pv-log-ok">
           <span className="pv-log-time">[{time}]</span>
-          <span className="pv-log-icon">{"\u21BB"}</span>
-          <span>Replanning: {entry.reason}</span>
+          <span className="pv-log-icon">{"\uD83D\uDC4D"}</span>
+          <span>Plan on track</span>
         </div>
       );
     case "info":

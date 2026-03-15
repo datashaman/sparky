@@ -4499,6 +4499,11 @@ button.user-code:focus-visible {
   color: #a855f7;
 }
 
+.pv-log-ok {
+  color: #9ca3af;
+  font-size: 0.75rem;
+}
+
 .pv-log-info {
   color: #64748b;
 }
@@ -4878,6 +4883,10 @@ button.user-code:focus-visible {
 
   .pv-log-replan {
     color: #c084fc;
+  }
+
+  .pv-log-ok {
+    color: #6b7280;
   }
 
   .pv-log-info {
