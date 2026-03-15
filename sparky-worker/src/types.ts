@@ -200,6 +200,10 @@ export interface SessionConfig {
   ask_user_timeout_minutes: number | null;
   /** API keys by provider for agent resolution. */
   api_keys?: Partial<Record<AgentProvider, string>>;
+  /** Extra binaries allowed in the bash sandbox (e.g. "php", "composer"). */
+  sandbox_allowed_binaries?: string[];
+  /** Skip the bash sandbox allowlist entirely. Dangerous. */
+  sandbox_allow_all?: boolean;
 }
 
 // ─── IPC Types ───

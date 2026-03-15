@@ -45,7 +45,11 @@ export async function runPlanPipeline(opts: PlanPipelineOpts): Promise<void> {
 
   const skillResolver = buildSkillResolver(workspace_id);
   const askUserHandler = createAskUserHandler(sessionId, 0, config.ask_user_timeout_minutes);
-  const toolHandler = createToolHandler(worktreePath, skillResolver, askUserHandler);
+  const sandboxConfig = {
+    allowedBinaries: config.sandbox_allowed_binaries ?? [],
+    allowAll: config.sandbox_allow_all ?? false,
+  };
+  const toolHandler = createToolHandler(worktreePath, skillResolver, askUserHandler, undefined, sandboxConfig);
 
   const planTools = TOOL_SCHEMAS.filter((t) => TOOL_IDS.includes(t.name));
 
