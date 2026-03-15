@@ -717,14 +717,14 @@ export function WorkspaceDetail({ workspaceId, onSwitchWorkspace, onDeleted, onW
                   className={`issue-tab ${issueTab === "analysis" ? "issue-tab-active" : ""}`}
                   onClick={() => {
                     setIssueTab("analysis");
-                    if (!analysis && !analysisLoading) {
+                    if ((!analysis || analysis.status === "pending") && !analysisLoading) {
                       (async () => {
                         try {
                           const accessToken = localStorage.getItem("github_token") ?? "";
                           if (accessToken) {
                             await ensureWorktree(workspaceId, selectedIssue.full_name, selectedIssue.number, accessToken, setWorktree);
                           }
-                          const a = await createAnalysis(workspaceId, selectedIssue.full_name, selectedIssue.number);
+                          const a = analysis ?? await createAnalysis(workspaceId, selectedIssue.full_name, selectedIssue.number);
                           setAnalysis(a);
                           await workerSession.startAnalysis(a.id, selectedIssue);
                         } catch (err) {
