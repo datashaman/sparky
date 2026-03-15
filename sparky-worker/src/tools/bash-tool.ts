@@ -79,6 +79,16 @@ export async function runBash(
       );
     }
 
+    // Block git push/fetch with credentials — these must go through dedicated tools
+    for (const sub of splitChainedCommands(command)) {
+      const words = sub.trim().split(/\s+/);
+      if (words[0] === "git" && (words[1] === "push" || words[1] === "remote")) {
+        throw new Error(
+          "git push is not allowed via bash. Use the create_pull_request tool to push and create PRs.",
+        );
+      }
+    }
+
     // Build effective allowlist: defaults + user-configured extras
     const allowed = new Set(DEFAULT_ALLOWED_COMMANDS);
     if (sandboxConfig?.allowedBinaries) {
