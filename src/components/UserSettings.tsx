@@ -1,12 +1,11 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import { AGENT_PROVIDERS, AGENT_MODELS } from "../data/agents";
 import { fetchOllamaModels } from "../data/ollamaModels";
 import { fetchOpenRouterModels } from "../data/openrouterModels";
 import { fetchLitellmModels } from "../data/litellmModels";
-import { KEYLESS_PROVIDERS } from "../data/providers";
+import { KEYLESS_PROVIDERS, PROVIDER_LABELS } from "../data/providers";
 import { getModelsForProvider, shouldShowModelInput, getModelInputPlaceholder } from "../data/shared";
 import type { AgentProvider } from "../data/types";
-import { PROVIDER_LABELS } from "../data/providers";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import {
@@ -23,6 +22,33 @@ const DEFAULT_MODEL_KEY = "sparky_default_model";
 const EXEC_PROVIDER_KEY = "sparky_exec_provider";
 const EXEC_MODEL_KEY = "sparky_exec_model";
 const API_KEY_PREFIX = "sparky_api_key_";
+
+// ─── Stage definitions ───
+
+const STAGES = ["default", "analysis", "planning", "critic", "execution", "replanning"] as const;
+type Stage = typeof STAGES[number];
+
+const STAGE_LABELS: Record<Stage, string> = {
+  default: "Default",
+  analysis: "Analysis",
+  planning: "Planning",
+  critic: "Critic Review",
+  execution: "Execution",
+  replanning: "Replanning",
+};
+
+const STAGE_HINTS: Record<Stage, string> = {
+  default: "Fallback for all stages without an override.",
+  analysis: "AI reads the issue, classifies type and complexity.",
+  planning: "Generates a step-by-step plan with task dependencies.",
+  critic: "Separate LLM pass to validate and refine the plan.",
+  execution: "Executes each step using sandboxed tools.",
+  replanning: "Adjusts remaining steps when execution diverges.",
+};
+
+const UNSET = "__unset__";
+
+// ─── Exported getters (used by useWorkerSession and other components) ───
 
 export type DisplayMode = "light" | "dark" | "system";
 
@@ -49,9 +75,7 @@ export function getDefaultProvider(): AgentProvider | "" {
 }
 
 export function getDefaultModel(): string {
-  try {
-    return localStorage.getItem(DEFAULT_MODEL_KEY) ?? "";
-  } catch { return ""; }
+  try { return localStorage.getItem(DEFAULT_MODEL_KEY) ?? ""; } catch { return ""; }
 }
 
 export function getExecProvider(): AgentProvider | "" {
@@ -59,15 +83,11 @@ export function getExecProvider(): AgentProvider | "" {
 }
 
 export function getExecModel(): string {
-  try {
-    return localStorage.getItem(EXEC_MODEL_KEY) ?? "";
-  } catch { return ""; }
+  try { return localStorage.getItem(EXEC_MODEL_KEY) ?? ""; } catch { return ""; }
 }
 
 export function getApiKey(provider: AgentProvider): string {
-  try {
-    return localStorage.getItem(API_KEY_PREFIX + provider) ?? "";
-  } catch { return ""; }
+  try { return localStorage.getItem(API_KEY_PREFIX + provider) ?? ""; } catch { return ""; }
 }
 
 export function applyDisplayMode(mode: DisplayMode) {
@@ -77,7 +97,6 @@ export function applyDisplayMode(mode: DisplayMode) {
   } else if (mode === "light") {
     root.classList.remove("dark");
   } else {
-    // system
     if (window.matchMedia("(prefers-color-scheme: dark)").matches) {
       root.classList.add("dark");
     } else {
@@ -86,19 +105,41 @@ export function applyDisplayMode(mode: DisplayMode) {
   }
 }
 
+// ─── Component ───
+
 interface Props {
   open: boolean;
   onClose: () => void;
 }
 
 export function UserSettings({ open, onClose }: Props) {
+  // Appearance
   const [displayMode, setDisplayMode] = useState<DisplayMode>(getDisplayMode);
-  const [provider, setProvider] = useState<AgentProvider | "">(getDefaultProvider);
-  const [model, setModel] = useState(getDefaultModel);
-  const [execProvider, setExecProvider] = useState<AgentProvider | "">(getExecProvider);
-  const [execModel, setExecModel] = useState(getExecModel);
-  const [modelUseCase, setModelUseCase] = useState<"analysis" | "execution">("analysis");
 
+  // Default provider/model
+  const [defaultProvider, setDefaultProvider] = useState<AgentProvider | "">(getDefaultProvider);
+  const [defaultModel, setDefaultModel] = useState(getDefaultModel);
+
+  // Per-stage overrides
+  const [selectedStage, setSelectedStage] = useState<Stage>("default");
+  const [stageProviders, setStageProviders] = useState<Record<string, AgentProvider | "">>(() => {
+    const m: Record<string, AgentProvider | ""> = {};
+    for (const s of STAGES) {
+      if (s === "default") continue;
+      m[s] = readProvider(`sparky_stage_${s}_provider`);
+    }
+    return m;
+  });
+  const [stageModels, setStageModels] = useState<Record<string, string>>(() => {
+    const m: Record<string, string> = {};
+    for (const s of STAGES) {
+      if (s === "default") continue;
+      try { m[s] = localStorage.getItem(`sparky_stage_${s}_model`) ?? ""; } catch { m[s] = ""; }
+    }
+    return m;
+  });
+
+  // API keys
   const keyProviders = AGENT_PROVIDERS.filter((p) => !KEYLESS_PROVIDERS.has(p));
   const [selectedKeyProvider, setSelectedKeyProvider] = useState<AgentProvider>(keyProviders[0]);
   const [apiKeys, setApiKeys] = useState<Record<string, string>>(() => {
@@ -107,6 +148,7 @@ export function UserSettings({ open, onClose }: Props) {
     return keys;
   });
 
+  // Sandbox
   const [sandboxBinaries, setSandboxBinaries] = useState(() => {
     try {
       const raw = localStorage.getItem("sandbox_allowed_binaries");
@@ -119,94 +161,88 @@ export function UserSettings({ open, onClose }: Props) {
     try { return localStorage.getItem("sandbox_allow_all") === "true"; } catch { return false; }
   });
 
+  // Dynamic model lists
   const [ollamaModels, setOllamaModels] = useState<string[]>([]);
   const [openrouterModels, setOpenrouterModels] = useState<string[]>([]);
   const [litellmModels, setLitellmModels] = useState<string[]>([]);
-  const providerRef = useRef(provider);
-  providerRef.current = provider;
-  const execProviderRef = useRef(execProvider);
-  execProviderRef.current = execProvider;
 
+  // Fetch dynamic models when any selected provider needs them
   useEffect(() => {
-    if (provider === "ollama" || execProvider === "ollama") {
-      fetchOllamaModels().then((m) => {
-        if (providerRef.current !== "ollama" && execProviderRef.current !== "ollama") return;
-        setOllamaModels(m);
-      });
-    }
-    if (provider === "openrouter" || execProvider === "openrouter") {
-      fetchOpenRouterModels().then((m) => {
-        if (providerRef.current !== "openrouter" && execProviderRef.current !== "openrouter") return;
-        setOpenrouterModels(m);
-      });
-    }
-    if (provider === "litellm" || execProvider === "litellm") {
-      fetchLitellmModels().then((m) => {
-        if (providerRef.current !== "litellm" && execProviderRef.current !== "litellm") return;
-        setLitellmModels(m);
-      });
-    }
-  }, [provider, execProvider]);
+    const allProviders = [defaultProvider, ...Object.values(stageProviders)];
+    if (allProviders.includes("ollama")) fetchOllamaModels().then(setOllamaModels);
+    if (allProviders.includes("openrouter")) fetchOpenRouterModels().then(setOpenrouterModels);
+    if (allProviders.includes("litellm")) fetchLitellmModels().then(setLitellmModels);
+  }, [defaultProvider, stageProviders]);
 
-  const models = getModelsForProvider(provider, ollamaModels, openrouterModels, litellmModels, AGENT_MODELS);
-  const execModels = getModelsForProvider(execProvider, ollamaModels, openrouterModels, litellmModels, AGENT_MODELS);
-
+  // Persist display mode
   useEffect(() => {
     applyDisplayMode(displayMode);
     try { localStorage.setItem(DISPLAY_MODE_KEY, displayMode); } catch { /* ignore */ }
   }, [displayMode]);
 
+  // Persist default provider/model + legacy exec keys
   useEffect(() => {
-    try { localStorage.setItem(DEFAULT_PROVIDER_KEY, provider); } catch { /* ignore */ }
-    // For ollama/openrouter: sync model with dynamic list when loaded.
-    // For others: reset to first in fixed list.
-    if (!provider) return;
-    if (provider === "ollama") {
-      if (ollamaModels.length > 0 && !ollamaModels.includes(model)) setModel(ollamaModels[0]);
-      return;
-    }
-    if (provider === "openrouter") {
-      if (openrouterModels.length > 0 && !openrouterModels.includes(model)) setModel(openrouterModels[0] ?? "");
-      return;
-    }
-    if (provider === "litellm") {
-      if (litellmModels.length > 0 && !litellmModels.includes(model)) setModel(litellmModels[0] ?? "");
-      return;
-    }
-    const available = AGENT_MODELS[provider];
-    if (available.length > 0 && !available.includes(model)) {
-      setModel(available[0] ?? "");
-    }
-  }, [provider, ollamaModels, openrouterModels, litellmModels]);
+    try { localStorage.setItem(DEFAULT_PROVIDER_KEY, defaultProvider); } catch { /* ignore */ }
+  }, [defaultProvider]);
+  useEffect(() => {
+    try { localStorage.setItem(DEFAULT_MODEL_KEY, defaultModel); } catch { /* ignore */ }
+  }, [defaultModel]);
 
+  // Sync legacy exec keys from execution stage override
   useEffect(() => {
-    try { localStorage.setItem(DEFAULT_MODEL_KEY, model); } catch { /* ignore */ }
-  }, [model]);
+    const ep = stageProviders.execution || defaultProvider;
+    const em = stageModels.execution || defaultModel;
+    try {
+      localStorage.setItem(EXEC_PROVIDER_KEY, ep);
+      localStorage.setItem(EXEC_MODEL_KEY, em);
+    } catch { /* ignore */ }
+  }, [stageProviders, stageModels, defaultProvider, defaultModel]);
 
-  useEffect(() => {
-    try { localStorage.setItem(EXEC_PROVIDER_KEY, execProvider); } catch { /* ignore */ }
-    if (!execProvider) return;
-    if (execProvider === "ollama") {
-      if (ollamaModels.length > 0 && !ollamaModels.includes(execModel)) setExecModel(ollamaModels[0]);
-      return;
-    }
-    if (execProvider === "openrouter") {
-      if (openrouterModels.length > 0 && !openrouterModels.includes(execModel)) setExecModel(openrouterModels[0] ?? "");
-      return;
-    }
-    if (execProvider === "litellm") {
-      if (litellmModels.length > 0 && !litellmModels.includes(execModel)) setExecModel(litellmModels[0] ?? "");
-      return;
-    }
-    const available = AGENT_MODELS[execProvider];
-    if (available.length > 0 && !available.includes(execModel)) {
-      setExecModel(available[0] ?? "");
-    }
-  }, [execProvider, ollamaModels, openrouterModels, litellmModels]);
+  // Active provider/model for the selected stage
+  const activeProvider = selectedStage === "default"
+    ? defaultProvider
+    : (stageProviders[selectedStage] || "");
+  const activeModel = selectedStage === "default"
+    ? defaultModel
+    : (stageModels[selectedStage] || "");
+  const activeModels = getModelsForProvider(
+    activeProvider || defaultProvider,
+    ollamaModels, openrouterModels, litellmModels, AGENT_MODELS,
+  );
 
-  useEffect(() => {
-    try { localStorage.setItem(EXEC_MODEL_KEY, execModel); } catch { /* ignore */ }
-  }, [execModel]);
+  function setActiveProvider(p: AgentProvider | "") {
+    if (selectedStage === "default") {
+      setDefaultProvider(p);
+    } else {
+      setStageProviders((prev) => ({ ...prev, [selectedStage]: p }));
+      try { localStorage.setItem(`sparky_stage_${selectedStage}_provider`, p); } catch { /* ignore */ }
+      // Clear the stage model when provider changes so we don't keep an incompatible model
+      setStageModels((prev) => ({ ...prev, [selectedStage]: "" }));
+      try { localStorage.removeItem(`sparky_stage_${selectedStage}_model`); } catch { /* ignore */ }
+    }
+  }
+
+  function setActiveModel(m: string) {
+    if (selectedStage === "default") {
+      setDefaultModel(m);
+    } else {
+      setStageModels((prev) => ({ ...prev, [selectedStage]: m }));
+      try { localStorage.setItem(`sparky_stage_${selectedStage}_model`, m); } catch { /* ignore */ }
+    }
+  }
+
+  function clearStageOverride() {
+    if (selectedStage === "default") return;
+    setStageProviders((prev) => ({ ...prev, [selectedStage]: "" }));
+    setStageModels((prev) => ({ ...prev, [selectedStage]: "" }));
+    try {
+      localStorage.removeItem(`sparky_stage_${selectedStage}_provider`);
+      localStorage.removeItem(`sparky_stage_${selectedStage}_model`);
+    } catch { /* ignore */ }
+  }
+
+  const showModelInput = shouldShowModelInput(activeProvider || defaultProvider, activeModels);
+  const isOverrideSet = selectedStage !== "default" && !!(stageProviders[selectedStage] || stageModels[selectedStage]);
 
   return (
     <div
@@ -217,12 +253,7 @@ export function UserSettings({ open, onClose }: Props) {
       <div className="user-settings-panel">
         <div className="user-settings-header">
           <h3>Settings</h3>
-          <button
-            type="button"
-            className="user-settings-close"
-            onClick={onClose}
-            aria-label="Close"
-          >
+          <button type="button" className="user-settings-close" onClick={onClose} aria-label="Close">
             ×
           </button>
         </div>
@@ -230,12 +261,10 @@ export function UserSettings({ open, onClose }: Props) {
           <section className="settings-card">
             <h3 className="settings-card-title">Appearance</h3>
             <div className="settings-card-body">
-              <div className="flex flex-col gap-1.5">
+              <div className="flex flex-col gap-1">
                 <Label>Display mode</Label>
                 <Select value={displayMode} onValueChange={(v) => setDisplayMode(v as DisplayMode)}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="system">System</SelectItem>
                     <SelectItem value="light">Light</SelectItem>
@@ -249,68 +278,81 @@ export function UserSettings({ open, onClose }: Props) {
           <section className="settings-card">
             <h3 className="settings-card-title">Models</h3>
             <div className="settings-card-body">
-              <div className="flex flex-col gap-1.5">
-                <Label>Use case</Label>
-                <Select value={modelUseCase} onValueChange={(v) => setModelUseCase(v as "analysis" | "execution")}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
+              <div className="flex flex-col gap-1">
+                <Label>Stage</Label>
+                <Select value={selectedStage} onValueChange={(v) => setSelectedStage(v as Stage)}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="analysis">Analysis / Planning</SelectItem>
-                    <SelectItem value="execution">Execution</SelectItem>
+                    {STAGES.map((s) => (
+                      <SelectItem key={s} value={s}>
+                        {STAGE_LABELS[s]}
+                        {s !== "default" && stageProviders[s] ? " (override)" : ""}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
               <div className="flex gap-3">
-                <div className="flex flex-col gap-1.5 flex-1 min-w-0">
+                <div className="flex flex-col gap-1 flex-1 min-w-0">
                   <Label>Provider</Label>
                   <Select
-                    value={modelUseCase === "analysis" ? provider : execProvider}
-                    onValueChange={(v) => modelUseCase === "analysis" ? setProvider(v as AgentProvider) : setExecProvider(v as AgentProvider)}
+                    value={activeProvider || UNSET}
+                    onValueChange={(v) => setActiveProvider(v === UNSET ? "" : v as AgentProvider)}
                   >
                     <SelectTrigger>
-                      <SelectValue placeholder="None" />
+                      <SelectValue placeholder={selectedStage === "default" ? "Select" : "Use default"} />
                     </SelectTrigger>
                     <SelectContent>
+                      {selectedStage !== "default" && (
+                        <SelectItem value={UNSET}>Use default</SelectItem>
+                      )}
                       {AGENT_PROVIDERS.map((p) => (
                         <SelectItem key={p} value={p}>{PROVIDER_LABELS[p]}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
                 </div>
-                <div className="flex flex-col gap-1.5 flex-1 min-w-0">
+                <div className="flex flex-col gap-1 flex-1 min-w-0">
                   <Label>Model</Label>
-                  {(() => {
-                    const activeProvider = modelUseCase === "analysis" ? provider : execProvider;
-                    const activeModel = modelUseCase === "analysis" ? model : execModel;
-                    const activeModels = modelUseCase === "analysis" ? models : execModels;
-                    const setActiveModel = modelUseCase === "analysis" ? setModel : setExecModel;
-                    return shouldShowModelInput(activeProvider, activeModels) ? (
-                      <Input
-                        placeholder={getModelInputPlaceholder(activeProvider)}
-                        value={activeModel}
-                        onChange={(e) => setActiveModel(e.target.value)}
-                      />
-                    ) : (
-                      <Select value={activeModel} onValueChange={setActiveModel} disabled={!activeProvider}>
-                        <SelectTrigger>
-                          <SelectValue placeholder={activeProvider ? "Select model" : "Pick provider first"} />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {[...activeModels].sort().map((m) => (
-                            <SelectItem key={m} value={m}>{m}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    );
-                  })()}
+                  {showModelInput ? (
+                    <Input
+                      placeholder={selectedStage !== "default" && !activeProvider ? "Using default" : getModelInputPlaceholder(activeProvider || defaultProvider)}
+                      value={activeModel}
+                      onChange={(e) => setActiveModel(e.target.value)}
+                      disabled={selectedStage !== "default" && !activeProvider}
+                    />
+                  ) : (
+                    <Select
+                      value={activeModel || UNSET}
+                      onValueChange={(v) => setActiveModel(v === UNSET ? "" : v)}
+                      disabled={selectedStage === "default" ? !defaultProvider : !activeProvider}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder={selectedStage !== "default" && !activeProvider ? "Using default" : "Select model"} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {selectedStage !== "default" && (
+                          <SelectItem value={UNSET}>Use default</SelectItem>
+                        )}
+                        {[...activeModels].sort().map((m) => (
+                          <SelectItem key={m} value={m}>{m}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
                 </div>
               </div>
-              <p className="user-settings-hint">
-                {modelUseCase === "analysis"
-                  ? "Used for issue analysis, plan generation, and new agent/skill defaults."
-                  : "Used by the issue LLM when executing plan steps. Falls back to analysis model if not set."}
-              </p>
+              <p className="user-settings-hint">{STAGE_HINTS[selectedStage]}</p>
+              {isOverrideSet && (
+                <button
+                  type="button"
+                  className="user-settings-hint"
+                  style={{ color: "var(--color-primary, #3b82f6)", cursor: "pointer", background: "none", border: "none", padding: 0, textAlign: "left" }}
+                  onClick={clearStageOverride}
+                >
+                  Clear override (use default)
+                </button>
+              )}
             </div>
           </section>
 
@@ -321,9 +363,7 @@ export function UserSettings({ open, onClose }: Props) {
                 <div className="flex flex-col gap-1 flex-1 min-w-0">
                   <Label>Provider</Label>
                   <Select value={selectedKeyProvider} onValueChange={(v) => setSelectedKeyProvider(v as AgentProvider)}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
                       {keyProviders.map((p) => (
                         <SelectItem key={p} value={p}>{PROVIDER_LABELS[p]}{apiKeys[p] ? " \u2713" : ""}</SelectItem>
@@ -346,7 +386,7 @@ export function UserSettings({ open, onClose }: Props) {
                 </div>
               </div>
               <p className="user-settings-hint">
-                Stored locally on this device. Ollama and LiteLLM don't require keys.
+                Stored locally. Ollama and LiteLLM don't require keys.
               </p>
             </div>
           </section>
@@ -354,7 +394,7 @@ export function UserSettings({ open, onClose }: Props) {
           <section className="settings-card">
             <h3 className="settings-card-title">Sandbox</h3>
             <div className="settings-card-body">
-              <div className="flex flex-col gap-1.5">
+              <div className="flex flex-col gap-1">
                 <Label>Allowed binaries</Label>
                 <Input
                   placeholder="php, composer, ruby, bundle..."
@@ -369,10 +409,10 @@ export function UserSettings({ open, onClose }: Props) {
                   }}
                 />
                 <p className="user-settings-hint">
-                  Comma-separated list of extra commands the executor can run (e.g. php, composer, ruby). Common tools like git, npm, node, python are always allowed.
+                  Extra commands the executor can run. Common tools (git, npm, node, python, php, ruby, go, java) are always allowed.
                 </p>
               </div>
-              <div className="flex items-center gap-2 mt-3">
+              <div className="flex items-center gap-2">
                 <input
                   type="checkbox"
                   id="sandbox-allow-all"
@@ -387,7 +427,7 @@ export function UserSettings({ open, onClose }: Props) {
               </div>
               {sandboxAllowAll && (
                 <p className="user-settings-hint" style={{ color: "var(--color-warning, #d97706)" }}>
-                  Warning: Disables the command allowlist. The executor can run any command in the worktree, including destructive ones. Only enable if you trust the LLM output.
+                  Warning: Disables the command allowlist. The executor can run any command in the worktree, including destructive ones.
                 </p>
               )}
             </div>

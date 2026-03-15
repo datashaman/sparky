@@ -189,17 +189,32 @@ export interface SessionStepState {
 
 // ─── Config Types ───
 
+/** Per-stage provider/model override. */
+export interface StageOverride {
+  provider: AgentProvider;
+  model: string;
+}
+
 export interface SessionConfig {
   default_provider: AgentProvider;
   default_model: string;
   default_api_key: string;
-  exec_provider: AgentProvider;
-  exec_model: string;
-  exec_api_key: string;
   github_token: string;
   ask_user_timeout_minutes: number | null;
   /** API keys by provider for agent resolution. */
   api_keys?: Partial<Record<AgentProvider, string>>;
+  /** Per-stage provider/model overrides. Falls back to default if not set. */
+  stage_overrides?: {
+    analysis?: StageOverride;
+    planning?: StageOverride;
+    critic?: StageOverride;
+    execution?: StageOverride;
+    replanning?: StageOverride;
+  };
+  // Legacy fields — kept for backward compat, overridden by stage_overrides
+  exec_provider: AgentProvider;
+  exec_model: string;
+  exec_api_key: string;
   /** Extra binaries allowed in the bash sandbox (e.g. "php", "composer"). */
   sandbox_allowed_binaries?: string[];
   /** Skip the bash sandbox allowlist entirely. Dangerous. */
