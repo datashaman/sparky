@@ -31,7 +31,6 @@ jobs:
               - '.github/workflows/**'
             rust:
               - 'src-tauri/**'
-              - 'sparky-worker/**'
               - '.github/workflows/**'
 
   typecheck:
