@@ -14,6 +14,7 @@ pub struct WorkerState {
     /// Write half for sending commands to the worker.
     writer: Arc<Mutex<Option<OwnedWriteHalf>>>,
     /// Serialize calls to worker_ensure_running to prevent races.
+    #[allow(dead_code)]
     startup_lock: Arc<Mutex<()>>,
 }
 
