@@ -1,6 +1,7 @@
 import type { SessionConfig, StartSessionPayload, ExecutionLogEntry } from "../types.js";
 import { updateSession, updateExistingTable, getSkillsForWorkspace, getAgentsForWorkspace } from "../db.js";
-import { callLLMWithTools, KEYLESS_PROVIDERS } from "../llm/index.js";
+import { callLLMWithTools } from "../llm/index.js";
+import { resolveStage, validateStage } from "./resolve-stage.js";
 import { TOOL_SCHEMAS, createToolHandler } from "../tools/index.js";
 import { buildSkillResolver } from "../tools/skill-tool.js";
 import { createAskUserHandler } from "../tools/ask-user-tool.js";
@@ -21,12 +22,8 @@ export async function runAnalysisPipeline(opts: AnalysisPipelineOpts): Promise<v
   const { sessionId, payload, config, onLog } = opts;
   const { workspace_id, repo_full_name, issue_number, issue_title, issue_body } = payload;
 
-  const provider = config.default_provider;
-  const modelId = config.default_model;
-  const apiKey = config.default_api_key;
-
-  if (!provider || !modelId) throw new Error("No default provider/model configured.");
-  if (!apiKey && !KEYLESS_PROVIDERS.has(provider)) throw new Error(`No API key for ${provider}.`);
+  const { provider, model: modelId, apiKey } = resolveStage(config, "analysis");
+  validateStage({ provider, model: modelId, apiKey }, "analysis");
   if (isSessionCancelled(sessionId)) return;
 
   updateSession(sessionId, { current_phase: "analysis" });

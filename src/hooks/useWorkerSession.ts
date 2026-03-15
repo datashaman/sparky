@@ -47,16 +47,36 @@ export interface WorkerSessionState {
 }
 
 /** Build a SessionConfig from localStorage settings. */
+type StageName = "analysis" | "planning" | "critic" | "execution" | "replanning";
+
+function readStageOverride(stage: StageName): { provider: AgentProvider; model: string } | undefined {
+  try {
+    const provider = localStorage.getItem(`sparky_stage_${stage}_provider`) || "";
+    const model = localStorage.getItem(`sparky_stage_${stage}_model`) || "";
+    if (provider && model) return { provider: provider as AgentProvider, model };
+    return undefined;
+  } catch { return undefined; }
+}
+
 function buildSessionConfig(): SessionConfig {
   const defaultProvider = getDefaultProvider() as AgentProvider;
   const defaultModel = getDefaultModel();
-  const execProvider = (getExecProvider() || defaultProvider) as AgentProvider;
-  const execModel = getExecModel() || defaultModel;
+  // Legacy exec fields — populated from execution stage override or defaults
+  const execOverride = readStageOverride("execution");
+  const execProvider = (execOverride?.provider || getExecProvider() || defaultProvider) as AgentProvider;
+  const execModel = execOverride?.model || getExecModel() || defaultModel;
 
   const apiKeys: Partial<Record<AgentProvider, string>> = {};
   for (const p of AGENT_PROVIDERS) {
     const key = getApiKey(p);
     if (key) apiKeys[p] = key;
+  }
+
+  const stages: StageName[] = ["analysis", "planning", "critic", "execution", "replanning"];
+  const stageOverrides: Record<string, { provider: AgentProvider; model: string }> = {};
+  for (const s of stages) {
+    const override = readStageOverride(s);
+    if (override) stageOverrides[s] = override;
   }
 
   return {
@@ -69,6 +89,7 @@ function buildSessionConfig(): SessionConfig {
     github_token: localStorage.getItem("github_token") ?? "",
     ask_user_timeout_minutes: null,
     api_keys: apiKeys,
+    stage_overrides: Object.keys(stageOverrides).length > 0 ? stageOverrides : undefined,
     sandbox_allowed_binaries: (() => { try { const v = JSON.parse(localStorage.getItem("sandbox_allowed_binaries") ?? "[]"); return Array.isArray(v) ? v.filter((s: unknown) => typeof s === "string") : []; } catch { return []; } })(),
     sandbox_allow_all: localStorage.getItem("sandbox_allow_all") === "true",
   };
