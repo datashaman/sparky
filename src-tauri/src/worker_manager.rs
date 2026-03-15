@@ -79,7 +79,10 @@ fn start_tmux_session(
     );
 
     // Wrap in login shell so PATH includes nvm, homebrew, etc.
-    let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/sh".to_string());
+    let shell = std::env::var("SHELL")
+        .ok()
+        .filter(|s| !s.is_empty() && std::path::Path::new(s).is_file())
+        .unwrap_or_else(|| "/bin/sh".to_string());
     let cmd = format!("{} -l -c {}", shell_escape(&shell), shell_escape(&inner_cmd));
 
     let output = std::process::Command::new(tmux)
