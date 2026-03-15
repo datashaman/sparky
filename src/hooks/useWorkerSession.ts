@@ -107,6 +107,9 @@ export function useWorkerSession(opts: {
   // Use a ref for the event handler so ensureWorker doesn't depend on it
   const handleWorkerEventRef = useRef<(event: WorkerEvent) => void>(() => {});
 
+  // Deduplicate worker events (Tauri can deliver the same event twice in StrictMode)
+  const lastEventRef = useRef("");
+
   /** Ensure worker is running and subscribed. Called on mount and before each dispatch. */
   const ensureWorker = useCallback(async () => {
     if (workerReadyRef.current) return;
@@ -115,6 +118,10 @@ export function useWorkerSession(opts: {
 
     if (!unlistenRef.current) {
       const unlisten = await subscribeToWorkerEvents((event) => {
+        // Deduplicate by comparing serialized event
+        const key = JSON.stringify(event);
+        if (key === lastEventRef.current) return;
+        lastEventRef.current = key;
         handleWorkerEventRef.current(event);
       });
       unlistenRef.current = unlisten;
