@@ -17,10 +17,29 @@ pub struct WorkerState {
 
 impl WorkerState {
     pub fn new(app_data_dir: PathBuf, resource_dir: PathBuf) -> Self {
+        // In dev mode, resource_dir points into target/debug/ where the worker
+        // script doesn't exist. Fall back to the project root's sparky-worker/.
+        let candidate = resource_dir.join("sparky-worker").join("dist").join("main.js");
+        let worker_script = if candidate.exists() {
+            candidate
+        } else {
+            // Walk up from src-tauri/target/.../resource_dir to find the project root
+            let mut dir = resource_dir.as_path();
+            loop {
+                let dev_candidate = dir.join("sparky-worker").join("dist").join("main.js");
+                if dev_candidate.exists() {
+                    break dev_candidate;
+                }
+                match dir.parent() {
+                    Some(parent) => dir = parent,
+                    None => break candidate, // give up, use original
+                }
+            }
+        };
         Self {
             socket_path: app_data_dir.join("sparky.sock"),
             db_path: app_data_dir.join("sparky.db"),
-            worker_script: resource_dir.join("sparky-worker").join("dist").join("main.js"),
+            worker_script,
             writer: Arc::new(Mutex::new(None)),
         }
     }

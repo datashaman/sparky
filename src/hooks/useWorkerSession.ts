@@ -102,32 +102,34 @@ export function useWorkerSession(opts: {
 
   // Subscribe to worker events on mount
   const unlistenRef = useRef<(() => void) | null>(null);
+  const workerReadyRef = useRef(false);
 
-  useEffect(() => {
-    let cancelled = false;
+  // Use a ref for the event handler so ensureWorker doesn't depend on it
+  const handleWorkerEventRef = useRef<(event: WorkerEvent) => void>(() => {});
 
-    async function setup() {
-      try {
-        await ensureWorkerRunning();
-      } catch (err) {
-        console.warn("[useWorkerSession] failed to ensure worker:", err);
-        return;
-      }
+  /** Ensure worker is running and subscribed. Called on mount and before each dispatch. */
+  const ensureWorker = useCallback(async () => {
+    if (workerReadyRef.current) return;
 
-      if (cancelled) return;
+    await ensureWorkerRunning();
 
-      const unlisten = await subscribeToWorkerEvents(handleWorkerEvent);
-      if (cancelled) {
-        unlisten();
-        return;
-      }
+    if (!unlistenRef.current) {
+      const unlisten = await subscribeToWorkerEvents((event) => {
+        handleWorkerEventRef.current(event);
+      });
       unlistenRef.current = unlisten;
     }
 
-    setup();
+    workerReadyRef.current = true;
+  }, []);
+
+  useEffect(() => {
+    ensureWorker().catch((err) => {
+      console.warn("[useWorkerSession] worker not ready on mount:", err);
+    });
 
     return () => {
-      cancelled = true;
+      workerReadyRef.current = false;
       if (unlistenRef.current) {
         unlistenRef.current();
         unlistenRef.current = null;
@@ -196,6 +198,9 @@ export function useWorkerSession(opts: {
     }
   }, [onLog, onStepUpdate]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Keep the ref in sync
+  handleWorkerEventRef.current = handleWorkerEvent;
+
   const handleSessionComplete = useCallback(async () => {
     const meta = sessionMetaRef.current;
     const type = sessionTypeRef.current;
@@ -245,6 +250,8 @@ export function useWorkerSession(opts: {
         return;
       }
 
+      await ensureWorker();
+
       sessionTypeRef.current = "analysis";
       sessionMetaRef.current = {
         repoFullName: issue.full_name,
@@ -266,7 +273,7 @@ export function useWorkerSession(opts: {
         analysis_id: analysisId,
       });
     },
-    [workspaceId],
+    [workspaceId, ensureWorker],
   );
 
   const doStartPlan = useCallback(
@@ -285,6 +292,8 @@ export function useWorkerSession(opts: {
         setState((prev) => ({ ...prev, error: `No API key configured for ${config.default_provider}. Add one in Settings.` }));
         return;
       }
+
+      await ensureWorker();
 
       sessionTypeRef.current = "plan";
       sessionMetaRef.current = {
@@ -310,7 +319,7 @@ export function useWorkerSession(opts: {
         analysis_result: analysisResult,
       });
     },
-    [workspaceId],
+    [workspaceId, ensureWorker],
   );
 
   const doStartExecution = useCallback(
@@ -325,6 +334,8 @@ export function useWorkerSession(opts: {
         setState((prev) => ({ ...prev, error: `No API key configured for exec provider ${config.exec_provider}. Add one in Settings.` }));
         return;
       }
+
+      await ensureWorker();
 
       sessionTypeRef.current = "execution";
       sessionMetaRef.current = {
@@ -350,7 +361,7 @@ export function useWorkerSession(opts: {
         plan_result: planResult,
       });
     },
-    [workspaceId],
+    [workspaceId, ensureWorker],
   );
 
   const doCancel = useCallback(async () => {
