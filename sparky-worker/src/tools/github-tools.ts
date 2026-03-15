@@ -1,4 +1,6 @@
 import { execFileSync, execSync } from "node:child_process";
+import { readFileSync, writeFileSync, existsSync } from "node:fs";
+import { join } from "node:path";
 
 export interface GitHubToolContext {
   token: string;
@@ -68,6 +70,56 @@ function sanitizeError(e: unknown, token: string): string {
   return msg;
 }
 
+/** Common patterns that should be gitignored in most projects. */
+const GITIGNORE_PATTERNS: Array<{ dir: string; patterns: string[] }> = [
+  { dir: "vendor", patterns: ["/vendor/"] },
+  { dir: "node_modules", patterns: ["/node_modules/"] },
+  { dir: ".phpunit.result.cache", patterns: [".phpunit.result.cache"] },
+  { dir: ".pytest_cache", patterns: [".pytest_cache/"] },
+  { dir: "__pycache__", patterns: ["__pycache__/"] },
+  { dir: ".mypy_cache", patterns: [".mypy_cache/"] },
+  { dir: "target", patterns: ["/target/"] },
+  { dir: ".gradle", patterns: [".gradle/"] },
+  { dir: ".sparky", patterns: [".sparky/cache/"] },
+];
+
+/**
+ * Check for common dependency/cache directories and ensure they're in .gitignore.
+ * Appends missing patterns to an existing .gitignore or creates one if needed.
+ */
+function ensureGitignore(worktreePath: string): void {
+  const gitignorePath = join(worktreePath, ".gitignore");
+  let existing = "";
+  try {
+    existing = readFileSync(gitignorePath, "utf-8");
+  } catch {
+    // No .gitignore exists
+  }
+
+  const existingLines = new Set(existing.split("\n").map((l) => l.trim()));
+  const toAdd: string[] = [];
+
+  for (const { dir, patterns } of GITIGNORE_PATTERNS) {
+    // Check if the dir/file exists in the worktree
+    const dirPath = join(worktreePath, dir);
+    if (!existsSync(dirPath)) continue;
+
+    // Check if any of the patterns are already in .gitignore
+    const alreadyIgnored = patterns.some((p) => existingLines.has(p) || existingLines.has(p.replace(/^\//, "")));
+    if (alreadyIgnored) continue;
+
+    toAdd.push(...patterns);
+  }
+
+  if (toAdd.length === 0) return;
+
+  const addition = (existing.endsWith("\n") || !existing ? "" : "\n") +
+    "# Added by Sparky — common dependency/cache directories\n" +
+    toAdd.join("\n") + "\n";
+
+  writeFileSync(gitignorePath, existing + addition, "utf-8");
+}
+
 export async function createPullRequest(
   ctx: GitHubToolContext,
   worktreePath: string,
@@ -82,7 +134,10 @@ export async function createPullRequest(
     const status = gitExec("status", "--porcelain");
     if (!status) return "No changes to commit.";
 
-    // 2. Stage and commit
+    // 2. Ensure common dependency/cache dirs are gitignored
+    ensureGitignore(worktreePath);
+
+    // 3. Stage changes (after gitignore update)
     gitExec("add", "-A");
     const commitMessage = `${title}\n\n${body}`;
     execFileSync("git", ["commit", "-m", commitMessage], {
@@ -91,10 +146,10 @@ export async function createPullRequest(
       timeout: 30_000,
     });
 
-    // 3. Get branch name
+    // 4. Get branch name
     const branch = gitExec("rev-parse", "--abbrev-ref", "HEAD");
 
-    // 4. Push with auth — use env var to avoid token in argv/error messages
+    // 5. Push with auth — use env var to avoid token in argv/error messages
     // Use --force for sparky branches (they're ephemeral per-issue branches, not shared)
     const basicAuth = Buffer.from(`x-access-token:${ctx.token}`).toString("base64");
     execSync(
@@ -107,7 +162,7 @@ export async function createPullRequest(
       },
     );
 
-    // 5. Detect default branch
+    // 6. Detect default branch
     let defaultBranch = "main";
     try {
       const ref = gitExec("symbolic-ref", "refs/remotes/origin/HEAD", "--short");
@@ -116,7 +171,7 @@ export async function createPullRequest(
       // fallback to main
     }
 
-    // 6. Create PR
+    // 7. Create PR
     const prBody = `${body}\n\nResolves #${ctx.parentIssueNumber}`;
     const res = await fetch(`https://api.github.com/repos/${ctx.repoFullName}/pulls`, {
       method: "POST",
