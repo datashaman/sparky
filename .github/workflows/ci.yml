@@ -22,11 +22,17 @@ jobs:
               - 'package.json'
               - 'package-lock.json'
               - 'tsconfig.json'
+              - 'tsconfig.node.json'
+              - 'vite.config.ts'
+              - 'vitest.config.ts'
+              - '.github/workflows/**'
             worker:
               - 'sparky-worker/**'
+              - '.github/workflows/**'
             rust:
               - 'src-tauri/**'
               - 'sparky-worker/**'
+              - '.github/workflows/**'
 
   typecheck:
     name: TypeScript
