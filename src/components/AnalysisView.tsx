@@ -4,6 +4,7 @@ import { createSkill, listSkillsForWorkspace } from "../data/skills";
 import { createAgent, listAgentsForWorkspace, setSkillIdsForAgent, setToolIdsForAgent, type CreateAgentParams } from "../data/agents";
 import { getDefaultProvider, getDefaultModel } from "./UserSettings";
 import { marked } from "marked";
+import DOMPurify from "dompurify";
 
 interface AnalysisViewProps {
   result: AnalysisResult;
@@ -153,10 +154,7 @@ export function AnalysisView({ result, workspaceId, onAllCreated }: AnalysisView
     }
   };
 
-  const approachHtml =
-    typeof marked.parse(result.approach) === "string"
-      ? (marked.parse(result.approach) as string)
-      : "";
+  const approachHtml = DOMPurify.sanitize(marked.parse(result.approach, { async: false }) as string);
 
   const allExist = loaded && result.skills.every((s) => existingSkills.has(s.name))
     && result.agents.every((a) => existingAgents.has(a.name));

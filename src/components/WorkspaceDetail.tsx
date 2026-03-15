@@ -13,6 +13,7 @@ import { getPlanForIssue, createPlan, deletePlansForIssue } from "../data/execut
 import { getWorktreeForIssue, removeWorktree, ensureWorktree } from "../data/issueWorktrees";
 import type { ExecutionLogEntry, IssueAnalysis, AnalysisResult, ExecutionPlan, ExecutionPlanResult, IssueWorktree, StepExecutionStatus, CriticReview } from "../data/types";
 import { marked } from "marked";
+import DOMPurify from "dompurify";
 import { AnalysisView } from "./AnalysisView";
 import { PlanView, AskUserPanel, StepLogPanel, type AskUserPrompt } from "./PlanView";
 import { useWorkerSession } from "../hooks/useWorkerSession";
@@ -841,7 +842,7 @@ export function WorkspaceDetail({ workspaceId, onSwitchWorkspace, onDeleted, onW
                 selectedIssue.body ? (
                   <div
                     className="issue-detail-body markdown-body"
-                    dangerouslySetInnerHTML={{ __html: marked.parse(selectedIssue.body, { async: false }) as string }}
+                    dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(marked.parse(selectedIssue.body, { async: false }) as string) }}
                   />
                 ) : (
                   <p className="empty-state">No description.</p>
@@ -865,7 +866,7 @@ export function WorkspaceDetail({ workspaceId, onSwitchWorkspace, onDeleted, onW
                       return (
                         <div
                           className="analysis-result markdown-body"
-                          dangerouslySetInnerHTML={{ __html: marked.parse(analysis.result, { async: false }) as string }}
+                          dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(marked.parse(analysis.result, { async: false }) as string) }}
                         />
                       );
                     }
@@ -900,7 +901,7 @@ export function WorkspaceDetail({ workspaceId, onSwitchWorkspace, onDeleted, onW
                       return (
                         <div
                           className="analysis-result markdown-body"
-                          dangerouslySetInnerHTML={{ __html: marked.parse(analysis.result, { async: false }) as string }}
+                          dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(marked.parse(analysis.result, { async: false }) as string) }}
                         />
                       );
                     }
