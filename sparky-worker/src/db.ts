@@ -4,8 +4,6 @@ import type {
   SessionLog,
   SessionAskUser,
   SessionStepState,
-  Agent,
-  Skill,
   SessionStatus,
 } from "./types.js";
 
@@ -259,34 +257,6 @@ export function getStepStatesForSession(sessionId: string): SessionStepState[] {
   return getDb()
     .prepare("SELECT * FROM session_step_state WHERE session_id = ? ORDER BY step_order")
     .all(sessionId) as SessionStepState[];
-}
-
-// ─── Workspace Data Queries (read from existing tables) ───
-
-export function getAgentsForWorkspace(workspaceId: string): Agent[] {
-  return getDb()
-    .prepare("SELECT * FROM agents WHERE workspace_id = ?")
-    .all(workspaceId) as Agent[];
-}
-
-export function getSkillsForWorkspace(workspaceId: string): Skill[] {
-  return getDb()
-    .prepare("SELECT * FROM skills WHERE workspace_id = ?")
-    .all(workspaceId) as Skill[];
-}
-
-export function getToolIdsForAgent(agentId: string): string[] {
-  const rows = getDb()
-    .prepare("SELECT tool_id FROM agent_tools WHERE agent_id = ?")
-    .all(agentId) as Array<{ tool_id: string }>;
-  return rows.map((r) => r.tool_id);
-}
-
-export function getSkillIdsForAgent(agentId: string): string[] {
-  const rows = getDb()
-    .prepare("SELECT skill_id FROM agent_skills WHERE agent_id = ?")
-    .all(agentId) as Array<{ skill_id: string }>;
-  return rows.map((r) => r.skill_id);
 }
 
 // ─── Existing table reads (for analysis/plan status updates) ───

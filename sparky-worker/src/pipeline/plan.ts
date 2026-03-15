@@ -1,12 +1,12 @@
 import type { SessionConfig, StartSessionPayload, ExecutionLogEntry, AnalysisResult, Agent, Skill } from "../types.js";
-import { updateSession, updateExistingTable, getSkillsForWorkspace, getAgentsForWorkspace } from "../db.js";
+import { updateSession, updateExistingTable } from "../db.js";
 import { callLLM, callLLMWithTools, KEYLESS_PROVIDERS } from "../llm/index.js";
 import { TOOL_SCHEMAS, createToolHandler } from "../tools/index.js";
-import { buildSkillResolver } from "../tools/skill-tool.js";
 import { createAskUserHandler } from "../tools/ask-user-tool.js";
 import { isSessionCancelled } from "../session-manager.js";
 import { extractJSONWithRetry } from "../util.js";
 import { readRepoContext } from "../repo-context.js";
+import { ensureManifest, getSkillsFromManifest, getAgentsFromManifest, buildManifestSkillResolver, getManifestContextFiles } from "../discovery/index.js";
 
 const TOOL_IDS = ["list_files", "read_file", "glob", "grep", "bash", "ask_user", "use_skill"];
 
@@ -38,12 +38,13 @@ export async function runPlanPipeline(opts: PlanPipelineOpts): Promise<void> {
     updateExistingTable("execution_plans", payload.plan_id, { status: "running" });
   }
 
-  const agents = getAgentsForWorkspace(workspace_id);
-  const skills = getSkillsForWorkspace(workspace_id);
-
   const worktreePath = await resolveWorktreePath(repo_full_name, issue_number);
 
-  const skillResolver = buildSkillResolver(workspace_id);
+  ensureManifest(worktreePath);
+  const agents = getAgentsFromManifest(worktreePath);
+  const skills = getSkillsFromManifest(worktreePath);
+
+  const skillResolver = buildManifestSkillResolver(worktreePath);
   const askUserHandler = createAskUserHandler(sessionId, 0, config.ask_user_timeout_minutes);
   const sandboxConfig = {
     allowedBinaries: config.sandbox_allowed_binaries ?? [],
@@ -53,7 +54,8 @@ export async function runPlanPipeline(opts: PlanPipelineOpts): Promise<void> {
 
   const planTools = TOOL_SCHEMAS.filter((t) => TOOL_IDS.includes(t.name));
 
-  const repoContext = readRepoContext(worktreePath, 2000);
+  const additionalContextFiles = getManifestContextFiles(worktreePath);
+  const repoContext = readRepoContext(worktreePath, 2000, additionalContextFiles);
   const systemPrompt = buildPlanSystemPrompt() + (repoContext ? `\n\n${repoContext}` : "");
   const baseUserPrompt = buildPlanUserPrompt(payload, analysisResult, agents, skills);
 

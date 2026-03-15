@@ -22,13 +22,22 @@ const DEFAULT_MAX_SIZE = 8000;
  *
  * @param maxSize - Total budget in characters for all docs combined. Use a smaller
  *   value (e.g. 2000) for small models to avoid crowding out task instructions.
+ * @param additionalFiles - Extra file paths from manifest discovery to include.
  */
-export function readRepoContext(worktreePath: string, maxSize: number = DEFAULT_MAX_SIZE): string {
+export function readRepoContext(worktreePath: string, maxSize: number = DEFAULT_MAX_SIZE, additionalFiles?: string[]): string {
   const root = realpathSync(worktreePath);
   const sections: string[] = [];
   let totalSize = 0;
 
-  for (const filename of CONTEXT_FILES) {
+  // Merge well-known files with additional discovered files, deduplicating
+  const allFiles = [...CONTEXT_FILES];
+  if (additionalFiles) {
+    for (const f of additionalFiles) {
+      if (!allFiles.includes(f)) allFiles.push(f);
+    }
+  }
+
+  for (const filename of allFiles) {
     const filepath = join(root, filename);
 
     // Reject symlinks to prevent reading files outside the worktree

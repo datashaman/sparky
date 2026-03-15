@@ -35,8 +35,8 @@ export interface AnalysisResult {
   complexity_reason: string;
   considerations: string[];
   approach: string;
-  skills: AnalysisResultSkill[];
-  agents: AnalysisResultAgent[];
+  skills?: AnalysisResultSkill[];
+  agents?: AnalysisResultAgent[];
   decomposed?: boolean;
   subissues?: Array<{ number: number; title: string }>;
 }

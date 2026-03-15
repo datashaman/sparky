@@ -27,7 +27,7 @@ import {
   getApiKey,
 } from "../components/UserSettings";
 import { KEYLESS_PROVIDERS } from "../data/providers";
-import { AGENT_PROVIDERS } from "../data/agents";
+import { AGENT_PROVIDERS } from "../data/providers";
 import type { AgentProvider } from "../data/types";
 
 export interface AskUserPromptIPC {

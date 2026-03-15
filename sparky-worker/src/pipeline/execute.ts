@@ -11,18 +11,15 @@ import type { GitHubToolContext } from "../tools/github-tools.js";
 import {
   updateSession,
   upsertStepState,
-  getAgentsForWorkspace,
-  getSkillsForWorkspace,
-  getToolIdsForAgent,
   updateExistingTable,
 } from "../db.js";
 import { callLLM, callLLMWithTools, KEYLESS_PROVIDERS } from "../llm/index.js";
 import { getContextWindowSize, estimateMessageTokens } from "../llm/context-budget.js";
 import { TOOL_SCHEMAS, filterToolSchemas, createToolHandler } from "../tools/index.js";
-import { buildSkillResolver } from "../tools/skill-tool.js";
 import { createAskUserHandler } from "../tools/ask-user-tool.js";
 import { isSessionCancelled } from "../session-manager.js";
 import { readRepoContext } from "../repo-context.js";
+import { ensureManifest, getAgentsFromManifest, getSkillsFromManifest, getToolIdsForManifestAgent, buildManifestSkillResolver, getManifestContextFiles } from "../discovery/index.js";
 
 const FINALIZE_TITLE = "Commit changes and create pull request";
 
@@ -79,13 +76,15 @@ export async function runExecutionPipeline(opts: ExecutionPipelineOpts): Promise
   // Dynamic repo context budget: 5% of context window, clamped to 2000-10000 chars
   const execContextWindow = getContextWindowSize(execProvider, execModel);
   const repoContextBudget = Math.min(10000, Math.max(2000, Math.floor(execContextWindow * 0.05 * 4)));
-  const repoContext = readRepoContext(worktreePath, repoContextBudget);
+  const additionalContextFiles = getManifestContextFiles(worktreePath);
+  const repoContext = readRepoContext(worktreePath, repoContextBudget, additionalContextFiles);
 
-  const agents = getAgentsForWorkspace(workspace_id);
-  const skills = getSkillsForWorkspace(workspace_id);
+  ensureManifest(worktreePath);
+  const agents = getAgentsFromManifest(worktreePath);
+  const skills = getSkillsFromManifest(worktreePath);
 
   const agentsByName = new Map(agents.map((a) => [a.name, a]));
-  const skillResolver = buildSkillResolver(workspace_id);
+  const skillResolver = buildManifestSkillResolver(worktreePath);
 
   const stepOutputs = new Map<number, string>();
   let steps = [...planResult.steps];
@@ -165,7 +164,7 @@ export async function runExecutionPipeline(opts: ExecutionPipelineOpts): Promise
           apiKey = agentKey;
           if (agent.content) agentContent = agent.content;
 
-          const agentToolIds = getToolIdsForAgent(agent.id);
+          const agentToolIds = getToolIdsForManifestAgent(worktreePath, agent.name);
           toolSchemas = agentToolIds.length > 0
             ? filterToolSchemas(agentToolIds)
             : filterToolSchemas(["read", "glob", "grep"]);
