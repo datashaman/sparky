@@ -95,8 +95,22 @@ fn shell_escape(s: &str) -> String {
 
 const SESSION_NAME: &str = "sparky-worker";
 
-/// Resolve full path for a command, checking common homebrew/system locations.
+/// Resolve full path for a command by asking the user's login shell.
+/// Falls back to common homebrew/system locations.
 fn resolve_bin(name: &str) -> String {
+    // Try the user's login shell first (picks up nvm, pyenv, etc.)
+    if let Ok(output) = std::process::Command::new("/bin/zsh")
+        .args(["-l", "-c", &format!("which {}", name)])
+        .output()
+    {
+        if output.status.success() {
+            let path = String::from_utf8_lossy(&output.stdout).trim().to_string();
+            if !path.is_empty() && std::path::Path::new(&path).exists() {
+                return path;
+            }
+        }
+    }
+
     let candidates = [
         format!("/opt/homebrew/bin/{}", name),
         format!("/usr/local/bin/{}", name),
