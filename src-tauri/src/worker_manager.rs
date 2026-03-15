@@ -124,29 +124,25 @@ pub async fn worker_ensure_running(app: AppHandle) -> Result<String, String> {
     let tmux = resolve_bin("tmux");
     let node = resolve_bin("node");
 
-    // Start tmux if needed — kill stale sessions that lost their socket
+    // Kill any existing session and start fresh — we have no connection
+    // so any existing session is stale from a previous app run
     if tmux_session_exists(&tmux, SESSION_NAME) {
-        if !state.socket_path.exists() {
-            // Session exists but socket is gone — stale, kill and restart
-            let _ = std::process::Command::new(&tmux)
-                .args(["kill-session", "-t", SESSION_NAME])
-                .status();
-        }
+        let _ = std::process::Command::new(&tmux)
+            .args(["kill-session", "-t", SESSION_NAME])
+            .status();
     }
 
-    if !tmux_session_exists(&tmux, SESSION_NAME) {
-        let script = state
-            .worker_script
-            .to_str()
-            .ok_or("Invalid worker script path")?;
-        let db = state.db_path.to_str().ok_or("Invalid db path")?;
-        let sock = state.socket_path.to_str().ok_or("Invalid socket path")?;
+    let script = state
+        .worker_script
+        .to_str()
+        .ok_or("Invalid worker script path")?;
+    let db = state.db_path.to_str().ok_or("Invalid db path")?;
+    let sock = state.socket_path.to_str().ok_or("Invalid socket path")?;
 
-        // Remove stale socket file
-        let _ = std::fs::remove_file(&state.socket_path);
+    // Remove stale socket file
+    let _ = std::fs::remove_file(&state.socket_path);
 
-        start_tmux_session(&tmux, &node, SESSION_NAME, script, db, sock)?;
-    }
+    start_tmux_session(&tmux, &node, SESSION_NAME, script, db, sock)?;
 
     // Connect to socket with retry — await until connected
     let sock_path = state.socket_path.clone();
