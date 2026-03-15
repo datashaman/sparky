@@ -95,9 +95,10 @@ export async function createPullRequest(
     const branch = gitExec("rev-parse", "--abbrev-ref", "HEAD");
 
     // 4. Push with auth — use env var to avoid token in argv/error messages
+    // Use --force for sparky branches (they're ephemeral per-issue branches, not shared)
     const basicAuth = Buffer.from(`x-access-token:${ctx.token}`).toString("base64");
     execSync(
-      `git -c http.extraHeader="Authorization: Basic $GIT_AUTH_TOKEN" push --force-with-lease -u origin ${branch}`,
+      `git -c http.extraHeader="Authorization: Basic $GIT_AUTH_TOKEN" push --force -u origin ${branch}`,
       {
         cwd: worktreePath,
         encoding: "utf-8",
