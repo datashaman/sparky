@@ -1,7 +1,7 @@
 import { execSync } from "node:child_process";
 import { realpathSync } from "node:fs";
 
-const ALLOWED_BASH_COMMANDS = new Set([
+const DEFAULT_ALLOWED_COMMANDS = new Set([
   "ls", "find", "cat", "head", "tail", "wc", "sort", "uniq", "diff",
   "mkdir", "cp", "mv", "rm", "touch",
   "git", "npm", "npx", "node", "cargo", "rustc",
@@ -13,25 +13,52 @@ const ALLOWED_BASH_COMMANDS = new Set([
   "tsc", "eslint", "prettier",
 ]);
 
-export async function runBash(worktreePath: string, command: string): Promise<string> {
-  const root = realpathSync(worktreePath);
+export interface BashSandboxConfig {
+  /** Extra binaries to allow beyond the defaults. */
+  allowedBinaries: string[];
+  /** Skip the allowlist entirely. Dangerous — allows any command. */
+  allowAll: boolean;
+}
 
-  // Validate command starts with an allowed program
-  const firstWord = command.split(/\s/)[0] ?? "";
-  const baseCmd = firstWord.split("/").pop() ?? firstWord;
-  if (!ALLOWED_BASH_COMMANDS.has(baseCmd)) {
-    throw new Error(
-      `Command '${baseCmd}' is not in the allowed list. Allowed: ${[...ALLOWED_BASH_COMMANDS].join(", ")}`,
-    );
+export async function runBash(
+  worktreePath: string,
+  command: string,
+  sandboxConfig?: BashSandboxConfig,
+): Promise<string> {
+  const root = realpathSync(worktreePath);
+  const allowAll = sandboxConfig?.allowAll ?? false;
+
+  if (!allowAll) {
+    // Build effective allowlist: defaults + user-configured extras
+    const allowed = new Set(DEFAULT_ALLOWED_COMMANDS);
+    if (sandboxConfig?.allowedBinaries) {
+      for (const bin of sandboxConfig.allowedBinaries) {
+        // Support both full paths ("/opt/homebrew/bin/php") and bare names ("php")
+        const base = bin.split("/").pop() ?? bin;
+        if (base) allowed.add(base);
+      }
+    }
+
+    // Validate command starts with an allowed program
+    const firstWord = command.split(/\s/)[0] ?? "";
+    const baseCmd = firstWord.split("/").pop() ?? firstWord;
+    if (!allowed.has(baseCmd)) {
+      throw new Error(
+        `Command '${baseCmd}' is not in the allowed list. Allowed: ${[...allowed].sort().join(", ")}`,
+      );
+    }
   }
 
-  // Reject shell metacharacters that could bypass the allowlist
-  const DANGEROUS_CHARS = /[;|&$`()<>]/;
-  if (DANGEROUS_CHARS.test(command)) {
+  // Reject shell metacharacters and newlines that could bypass the allowlist
+  const DANGEROUS_CHARS = /[;|&$`()<>\n\r]/;
+  if (!allowAll && DANGEROUS_CHARS.test(command)) {
     throw new Error(
       "Command contains shell metacharacters (;|&$`()<>) which are not allowed for security.",
     );
   }
+
+  // Use the inherited PATH so nvm/homebrew/etc binaries are available
+  const envPath = process.env.PATH ?? "/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin";
 
   try {
     const stdout = execSync(command, {
@@ -41,7 +68,7 @@ export async function runBash(worktreePath: string, command: string): Promise<st
       env: {
         ...process.env,
         HOME: root,
-        PATH: "/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin",
+        PATH: envPath,
       },
       shell: "/bin/sh",
     });

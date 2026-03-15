@@ -46,6 +46,8 @@ export interface SessionConfig {
   github_token: string;
   ask_user_timeout_minutes: number | null;
   api_keys?: Partial<Record<AgentProvider, string>>;
+  sandbox_allowed_binaries?: string[];
+  sandbox_allow_all?: boolean;
 }
 
 // ─── Worker Lifecycle ───

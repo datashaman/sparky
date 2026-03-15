@@ -103,6 +103,18 @@ export function UserSettings({ open, onClose }: Props) {
     return keys;
   });
 
+  const [sandboxBinaries, setSandboxBinaries] = useState(() => {
+    try {
+      const raw = localStorage.getItem("sandbox_allowed_binaries");
+      if (!raw) return "";
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? parsed.join(", ") : "";
+    } catch { return ""; }
+  });
+  const [sandboxAllowAll, setSandboxAllowAll] = useState(() => {
+    try { return localStorage.getItem("sandbox_allow_all") === "true"; } catch { return false; }
+  });
+
   const [ollamaModels, setOllamaModels] = useState<string[]>([]);
   const [openrouterModels, setOpenrouterModels] = useState<string[]>([]);
   const [litellmModels, setLitellmModels] = useState<string[]>([]);
@@ -341,6 +353,48 @@ export function UserSettings({ open, onClose }: Props) {
               <p className="user-settings-hint">
                 Stored locally on this device. Ollama and LiteLLM don't require keys.
               </p>
+            </div>
+          </section>
+
+          <section className="settings-card">
+            <h3 className="settings-card-title">Sandbox</h3>
+            <div className="settings-card-body">
+              <div className="flex flex-col gap-1.5">
+                <Label>Allowed binaries</Label>
+                <Input
+                  placeholder="php, composer, ruby, bundle..."
+                  value={sandboxBinaries}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setSandboxBinaries(val);
+                    try {
+                      const binaries = val.split(",").map((s) => s.trim()).filter(Boolean);
+                      localStorage.setItem("sandbox_allowed_binaries", JSON.stringify(binaries));
+                    } catch { /* ignore */ }
+                  }}
+                />
+                <p className="user-settings-hint">
+                  Comma-separated list of extra commands the executor can run (e.g. php, composer, ruby). Common tools like git, npm, node, python are always allowed.
+                </p>
+              </div>
+              <div className="flex items-center gap-2 mt-3">
+                <input
+                  type="checkbox"
+                  id="sandbox-allow-all"
+                  checked={sandboxAllowAll}
+                  onChange={(e) => {
+                    const checked = e.target.checked;
+                    setSandboxAllowAll(checked);
+                    try { localStorage.setItem("sandbox_allow_all", String(checked)); } catch { /* ignore */ }
+                  }}
+                />
+                <Label htmlFor="sandbox-allow-all" className="cursor-pointer">Allow all commands</Label>
+              </div>
+              {sandboxAllowAll && (
+                <p className="user-settings-hint" style={{ color: "var(--color-warning, #d97706)" }}>
+                  Warning: Disables the command allowlist. The executor can run any command in the worktree, including destructive ones. Only enable if you trust the LLM output.
+                </p>
+              )}
             </div>
           </section>
         </div>

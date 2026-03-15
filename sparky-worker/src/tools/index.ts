@@ -5,7 +5,7 @@ import { editFile, EditFileError } from "./file-tools.js";
 import { listFiles } from "./search-tools.js";
 import { globFiles } from "./search-tools.js";
 import { grepFiles } from "./search-tools.js";
-import { runBash } from "./bash-tool.js";
+import { runBash, type BashSandboxConfig } from "./bash-tool.js";
 import { createGitHubIssue, updateGitHubIssue, closeGitHubIssue, createPullRequest, type GitHubToolContext } from "./github-tools.js";
 
 export const TOOL_SCHEMAS: LLMToolDef[] = [
@@ -257,6 +257,7 @@ export function createToolHandler(
   skillResolver?: SkillResolver,
   askUserHandler?: AskUserHandler,
   githubContext?: GitHubToolContext,
+  sandboxConfig?: BashSandboxConfig,
 ): (name: string, input: Record<string, unknown>) => Promise<string> {
   const createdIssues = new Set<number>();
   return async (name: string, input: Record<string, unknown>): Promise<string> => {
@@ -291,7 +292,7 @@ export function createToolHandler(
           return truncate(formatted || "No matches found.");
         }
         case "bash":
-          return truncate(await runBash(worktreePath, input.command as string));
+          return truncate(await runBash(worktreePath, input.command as string, sandboxConfig));
         case "use_skill": {
           if (!skillResolver) return "Error: no skills available in this context.";
           const skillName = input.skill_name as string;

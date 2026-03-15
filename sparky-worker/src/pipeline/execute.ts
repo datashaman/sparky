@@ -263,7 +263,11 @@ export async function runExecutionPipeline(opts: ExecutionPipelineOpts): Promise
       const githubContext: GitHubToolContext | undefined = config.github_token
         ? { token: config.github_token, repoFullName: repo_full_name, parentIssueNumber: issue_number }
         : undefined;
-      const toolHandler = createToolHandler(worktreePath, skillResolver, askUserHandler, githubContext);
+      const sandboxConfig = {
+        allowedBinaries: config.sandbox_allowed_binaries ?? [],
+        allowAll: config.sandbox_allow_all ?? false,
+      };
+      const toolHandler = createToolHandler(worktreePath, skillResolver, askUserHandler, githubContext, sandboxConfig);
 
       // Resume from checkpoint if available
       let existingMessages: unknown[] | undefined;

@@ -46,7 +46,11 @@ export async function runAnalysisPipeline(opts: AnalysisPipelineOpts): Promise<v
   const skillResolver = buildSkillResolver(workspace_id);
   const askUserHandler = createAskUserHandler(sessionId, 0, config.ask_user_timeout_minutes);
   const githubContext = { token: config.github_token, repoFullName: repo_full_name, parentIssueNumber: issue_number };
-  const toolHandler = createToolHandler(worktreePath, skillResolver, askUserHandler, githubContext);
+  const sandboxConfig = {
+    allowedBinaries: config.sandbox_allowed_binaries ?? [],
+    allowAll: config.sandbox_allow_all ?? false,
+  };
+  const toolHandler = createToolHandler(worktreePath, skillResolver, askUserHandler, githubContext, sandboxConfig);
 
   const analysisTools = TOOL_SCHEMAS.filter((t) => TOOL_IDS.includes(t.name));
 
