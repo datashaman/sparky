@@ -9,6 +9,7 @@ import { fetchRepo, listUserRepos, listRepoOpenIssues, type GitHubRepo, type Git
 import { getAnalysisForIssue, createAnalysis, deleteAnalysesForIssue } from "../data/issueAnalyses";
 import { getPlanForIssue, createPlan, deletePlansForIssue } from "../data/executionPlans";
 import { getWorktreeForIssue, removeWorktree, ensureWorktree } from "../data/issueWorktrees";
+import { getLatestSessionForIssue, getLogsForSession } from "../data/sessionLogs";
 import type { ExecutionLogEntry, IssueAnalysis, AnalysisResult, ExecutionPlan, ExecutionPlanResult, IssueWorktree, StepExecutionStatus, CriticReview } from "../data/types";
 import { marked } from "marked";
 import DOMPurify from "dompurify";
@@ -156,12 +157,20 @@ export function WorkspaceDetail({ workspaceId, onSwitchWorkspace, onDeleted, onW
       getAnalysisForIssue(workspaceId, selectedIssue.full_name, selectedIssue.number),
       getPlanForIssue(workspaceId, selectedIssue.full_name, selectedIssue.number),
       getWorktreeForIssue(workspaceId, selectedIssue.full_name, selectedIssue.number),
+      getLatestSessionForIssue(workspaceId, selectedIssue.full_name, selectedIssue.number),
     ])
-      .then(([a, p, wt]) => {
+      .then(async ([a, p, wt, session]) => {
         if (cancelled) return;
         setAnalysis(a);
         setPlan(p);
         setWorktree(wt);
+        // Restore execution logs from the latest session
+        if (session) {
+          const logs = await getLogsForSession(session.id);
+          if (!cancelled && logs.length > 0) {
+            setExecutionLogs(logs);
+          }
+        }
       })
       .catch(() => {
         if (cancelled) return;
