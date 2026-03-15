@@ -2753,6 +2753,7 @@ button.user-code:focus-visible {
   background: #fff;
   border: 1.5px solid rgba(0, 0, 0, 0.06);
   border-radius: 10px;
+  overflow: hidden;
 }
 
 .settings-card-title {

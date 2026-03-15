@@ -9,7 +9,7 @@ const DEFAULT_ALLOWED_COMMANDS = new Set([
   "php", "composer", "artisan",
   "ruby", "gem", "bundle", "rake", "rails",
   "go",
-  "java", "javac", "mvn", "gradle",
+  "java", "javac", "mvn", "mvnw", "gradle", "gradlew",
   "make", "cmake",
   "echo", "printf", "test", "true", "false",
   "sed", "awk", "cut", "tr", "xargs",
