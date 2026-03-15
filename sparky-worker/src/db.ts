@@ -182,6 +182,18 @@ export function getLogsForSession(sessionId: string): SessionLog[] {
     .all(sessionId) as SessionLog[];
 }
 
+/** Get tool call/result logs from the session that produced a given analysis. */
+export function getAnalysisToolLogs(analysisId: string): Array<{ tool_name: string; tool_input: string; tool_result: string | null }> {
+  const session = getDb()
+    .prepare("SELECT id FROM sessions WHERE analysis_id = ? ORDER BY created_at DESC LIMIT 1")
+    .get(analysisId) as { id: string } | undefined;
+  if (!session) return [];
+
+  return getDb()
+    .prepare("SELECT tool_name, tool_input, tool_result FROM session_logs WHERE session_id = ? AND log_type = 'tool_result' AND tool_name IS NOT NULL ORDER BY id")
+    .all(session.id) as Array<{ tool_name: string; tool_input: string; tool_result: string | null }>;
+}
+
 // ─── Ask User Operations ───
 
 export function insertAskUser(prompt: SessionAskUser): void {

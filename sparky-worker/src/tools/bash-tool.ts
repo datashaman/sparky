@@ -1,5 +1,8 @@
 import { execSync } from "node:child_process";
-import { realpathSync } from "node:fs";
+import { realpathSync, mkdirSync } from "node:fs";
+import { join } from "node:path";
+import { createHash } from "node:crypto";
+import { tmpdir } from "node:os";
 
 const DEFAULT_ALLOWED_COMMANDS = new Set([
   // Shell builtins
@@ -24,8 +27,15 @@ const DEFAULT_ALLOWED_COMMANDS = new Set([
   "tsc", "eslint", "prettier",
 ]);
 
-/** Characters that are always dangerous (command substitution, subshells, redirects). */
-const DANGEROUS_CHARS = /[$`()<>\n\r]/;
+/**
+ * Characters that are always dangerous (command substitution, subshells).
+ * Note: > and < are allowed only in safe redirect patterns (2>/dev/null, 2>&1);
+ * raw redirects to files are stripped before checking.
+ */
+const DANGEROUS_CHARS = /[$`()\n\r]/;
+
+/** Safe redirect patterns that should not trigger the dangerous chars check. */
+const SAFE_REDIRECTS = /\s*(?:2>&1|[12]>\/dev\/null|>&\/dev\/null)\s*/g;
 
 /**
  * Split a command string on safe chaining operators (&& and ||).
@@ -52,11 +62,31 @@ export async function runBash(
   const allowAll = sandboxConfig?.allowAll ?? false;
 
   if (!allowAll) {
-    // Reject truly dangerous shell metacharacters (command substitution, subshells, redirects)
-    if (DANGEROUS_CHARS.test(command)) {
+    // Strip safe redirect patterns before checking for dangerous characters
+    const sanitized = command.replace(SAFE_REDIRECTS, " ");
+
+    // Reject truly dangerous shell metacharacters (command substitution, subshells)
+    if (DANGEROUS_CHARS.test(sanitized)) {
       throw new Error(
-        "Command contains dangerous shell metacharacters ($`()<>) which are not allowed for security.",
+        "Command contains dangerous shell metacharacters ($`()) which are not allowed for security.",
       );
+    }
+
+    // Block arbitrary file redirects (> file, < file) that aren't safe patterns
+    if (/[<>]/.test(sanitized)) {
+      throw new Error(
+        "Command contains file redirects (> or <) which are not allowed. Use 2>/dev/null or 2>&1 for stderr suppression.",
+      );
+    }
+
+    // Block git push/fetch with credentials — these must go through dedicated tools
+    for (const sub of splitChainedCommands(command)) {
+      const words = sub.trim().split(/\s+/);
+      if (words[0] === "git" && (words[1] === "push" || words[1] === "remote")) {
+        throw new Error(
+          "git push is not allowed via bash. Use the create_pull_request tool to push and create PRs.",
+        );
+      }
     }
 
     // Build effective allowlist: defaults + user-configured extras
@@ -89,6 +119,11 @@ export async function runBash(
   // Use the inherited PATH so nvm/homebrew/etc binaries are available
   const envPath = process.env.PATH ?? "/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin";
 
+  // Redirect tool caches outside the worktree — use a stable per-worktree dir in OS temp
+  const worktreeHash = createHash("sha256").update(root).digest("hex").slice(0, 12);
+  const cacheHome = join(tmpdir(), "sparky-sandbox", worktreeHash);
+  mkdirSync(cacheHome, { recursive: true });
+
   try {
     const stdout = execSync(command, {
       cwd: root,
@@ -96,8 +131,19 @@ export async function runBash(
       maxBuffer: 10 * 1024 * 1024,
       env: {
         ...process.env,
-        HOME: root,
+        HOME: cacheHome,
         PATH: envPath,
+        // Composer
+        COMPOSER_HOME: join(cacheHome, ".composer"),
+        COMPOSER_CACHE_DIR: join(cacheHome, ".composer", "cache"),
+        // npm/node
+        npm_config_cache: join(cacheHome, ".npm"),
+        // pip
+        PIP_CACHE_DIR: join(cacheHome, ".pip"),
+        // XDG (catches most other tools)
+        XDG_CACHE_HOME: join(cacheHome, ".cache"),
+        XDG_CONFIG_HOME: join(cacheHome, ".config"),
+        XDG_DATA_HOME: join(cacheHome, ".local", "share"),
       },
       shell: "/bin/sh",
     });

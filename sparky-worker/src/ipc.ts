@@ -47,6 +47,8 @@ export function startIPCServer(socketPath: string, onCommand: CommandHandler): S
         if (!trimmed) continue;
         try {
           const command = JSON.parse(trimmed) as IPCCommand;
+          const ts = new Date().toLocaleTimeString();
+          console.log(`[ipc] [${ts}] ← ${command.type}${command.type === "start_session" ? ` (${(command as any).payload?.session_type})` : ""}`);
           onCommand(command, client.send);
         } catch (e) {
           client.send({ type: "error", error: `Invalid JSON: ${e}` });

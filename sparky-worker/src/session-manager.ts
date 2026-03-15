@@ -72,6 +72,8 @@ export async function resumeRunningSessions(): Promise<void> {
     resumeSession(session).catch((err) => {
       console.error(`[manager] failed to resume session ${session.id}:`, err);
       activeSessions.delete(session.id);
+      // Mark as error so it doesn't retry on next startup
+      updateSession(session.id, { status: "error" });
     });
   }
 }

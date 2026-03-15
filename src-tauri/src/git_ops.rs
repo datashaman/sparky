@@ -230,6 +230,7 @@ pub async fn git_remove_worktree(
     app: AppHandle,
     repo_full_name: String,
     issue_number: u32,
+    access_token: Option<String>,
 ) -> Result<(), String> {
     let (owner, name) = parse_repo_name(&repo_full_name)?;
     let clone_path = repo_path(&app, owner, name)?;
@@ -239,25 +240,37 @@ pub async fn git_remove_worktree(
         .join(format!("issue-{}", issue_number));
 
     tauri::async_runtime::spawn_blocking(move || {
-        if !wt_path.exists() {
-            return Ok(());
+        let branch_name = format!("sparky/issue-{}", issue_number);
+
+        if wt_path.exists() {
+            let result = run_git(
+                &[
+                    "worktree",
+                    "remove",
+                    "--force",
+                    &wt_path.to_string_lossy(),
+                ],
+                &clone_path,
+            );
+
+            if result.is_err() {
+                // Fallback: remove directory and prune
+                std::fs::remove_dir_all(&wt_path)
+                    .map_err(|e| format!("Failed to remove worktree dir: {}", e))?;
+                let _ = run_git(&["worktree", "prune"], &clone_path);
+            }
         }
 
-        let result = run_git(
-            &[
-                "worktree",
-                "remove",
-                "--force",
-                &wt_path.to_string_lossy(),
-            ],
-            &clone_path,
-        );
+        // Delete local branch so a fresh one is created on next run
+        let _ = run_git(&["branch", "-D", &branch_name], &clone_path);
 
-        if result.is_err() {
-            // Fallback: remove directory and prune
-            std::fs::remove_dir_all(&wt_path)
-                .map_err(|e| format!("Failed to remove worktree dir: {}", e))?;
-            let _ = run_git(&["worktree", "prune"], &clone_path);
+        // Delete remote branch (best-effort, requires auth)
+        if let Some(ref token) = access_token {
+            let header = auth_header(token);
+            let _ = run_git(
+                &["-c", &format!("http.extraHeader={}", header), "push", "origin", "--delete", &branch_name],
+                &clone_path,
+            );
         }
 
         Ok(())

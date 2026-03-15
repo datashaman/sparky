@@ -9,6 +9,8 @@ import { fetchRepo, listUserRepos, listRepoOpenIssues, type GitHubRepo, type Git
 import { getAnalysisForIssue, createAnalysis, deleteAnalysesForIssue } from "../data/issueAnalyses";
 import { getPlanForIssue, createPlan, deletePlansForIssue } from "../data/executionPlans";
 import { getWorktreeForIssue, removeWorktree, ensureWorktree } from "../data/issueWorktrees";
+import { getLatestSessionForIssue, getLogsForSession } from "../data/sessionLogs";
+import { getStepResultsForPlan } from "../data/stepResults";
 import type { ExecutionLogEntry, IssueAnalysis, AnalysisResult, ExecutionPlan, ExecutionPlanResult, IssueWorktree, StepExecutionStatus, CriticReview } from "../data/types";
 import { marked } from "marked";
 import DOMPurify from "dompurify";
@@ -156,12 +158,26 @@ export function WorkspaceDetail({ workspaceId, onSwitchWorkspace, onDeleted, onW
       getAnalysisForIssue(workspaceId, selectedIssue.full_name, selectedIssue.number),
       getPlanForIssue(workspaceId, selectedIssue.full_name, selectedIssue.number),
       getWorktreeForIssue(workspaceId, selectedIssue.full_name, selectedIssue.number),
+      getLatestSessionForIssue(workspaceId, selectedIssue.full_name, selectedIssue.number),
     ])
-      .then(([a, p, wt]) => {
+      .then(async ([a, p, wt, session]) => {
         if (cancelled) return;
         setAnalysis(a);
         setPlan(p);
         setWorktree(wt);
+        // Restore execution logs and step statuses from DB
+        if (session) {
+          const logs = await getLogsForSession(session.id);
+          if (!cancelled && logs.length > 0) {
+            setExecutionLogs(logs);
+          }
+        }
+        if (p?.id) {
+          const results = await getStepResultsForPlan(p.id);
+          if (!cancelled && results.size > 0) {
+            setStepStatuses(results);
+          }
+        }
       })
       .catch(() => {
         if (cancelled) return;
@@ -758,8 +774,9 @@ export function WorkspaceDetail({ workspaceId, onSwitchWorkspace, onDeleted, onW
                       disabled={workerSession.loading}
                       onClick={async () => {
                         const { full_name, number } = selectedIssue;
-                        const wt = _worktree;
-                        if (wt && wt.status === "ready") {
+                        // Remove worktree regardless of status (best-effort)
+                        const wt = _worktree ?? await getWorktreeForIssue(workspaceId, full_name, number);
+                        if (wt) {
                           try { await removeWorktree(wt, setWorktree); } catch { /* best-effort */ }
                         }
 
@@ -771,6 +788,8 @@ export function WorkspaceDetail({ workspaceId, onSwitchWorkspace, onDeleted, onW
                         setPlan(null);
                         setWorktree(null);
                         setAllCreated(false);
+                        setStepStatuses(new Map());
+                        setExecutionLogs([]);
                         setIssueTab("issue");
                       }}
                     >

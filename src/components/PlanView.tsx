@@ -111,19 +111,22 @@ function LogEntryLine({ entry }: { entry: ExecutionLogEntry }) {
         </div>
       );
     case "replan_check":
-      return (
-        <div className="pv-log-entry pv-log-replan">
-          <span className="pv-log-time">[{time}]</span>
-          <span className="pv-log-icon">&#128260;</span>
-          <span>{entry.message}</span>
-        </div>
-      );
+      return null;
     case "replan_decision":
+      if (entry.decision === "replan") {
+        return (
+          <div className="pv-log-entry pv-log-replan">
+            <span className="pv-log-time">[{time}]</span>
+            <span className="pv-log-icon">{"\u21BB"}</span>
+            <span>Replanning: {entry.reason}</span>
+          </div>
+        );
+      }
       return (
-        <div className={`pv-log-entry ${entry.decision === "replan" ? "pv-log-replan" : "pv-log-result"}`}>
+        <div className="pv-log-entry pv-log-ok">
           <span className="pv-log-time">[{time}]</span>
-          <span className="pv-log-icon">{entry.decision === "replan" ? "\u21BB" : "\u2713"}</span>
-          <span>{entry.decision === "replan" ? "Replanning" : "Continuing"}: {entry.reason}</span>
+          <span className="pv-log-icon">{"\uD83D\uDC4D"}</span>
+          <span>Plan on track</span>
         </div>
       );
     case "info":
@@ -308,21 +311,90 @@ export function PlanView({ result, criticReview, stepStatuses, executing, execut
         <p className="pv-criteria-text">{result.success_criteria}</p>
       </div>
 
-      {onExecute && (
-        <div className="pv-execute">
-          {executionError && (
-            <div className="pv-execute-error">{executionError}</div>
-          )}
-          <button
-            type="button"
-            className="pv-execute-btn"
-            onClick={onExecute}
-            disabled={executing}
-          >
-            {executing ? "Executing..." : "Execute Plan"}
-          </button>
-        </div>
-      )}
+      {(() => {
+        const totalSteps = result.steps.length;
+        const doneCount = result.steps.filter((s) => stepStatuses?.get(s.order)?.status === "done").length;
+        const errorCount = result.steps.filter((s) => stepStatuses?.get(s.order)?.status === "error").length;
+        const allDone = totalSteps > 0 && doneCount + errorCount === totalSteps;
+        const hasStarted = stepStatuses && stepStatuses.size > 0;
+
+        // Extract PR URL from step outputs and execution logs
+        const prUrl = (() => {
+          const prPattern = /https:\/\/github\.com\/[^\s]+\/pull\/\d+/;
+          // Check step outputs first
+          if (stepStatuses) {
+            for (const [, status] of stepStatuses) {
+              if (status.output) {
+                const match = status.output.match(prPattern);
+                if (match) return match[0];
+              }
+            }
+          }
+          // Also check tool results in execution logs
+          if (executionLogs) {
+            for (const log of executionLogs) {
+              if (log.toolResult) {
+                const match = log.toolResult.match(prPattern);
+                if (match) return match[0];
+              }
+            }
+          }
+          return null;
+        })();
+
+        if (allDone && !executing) {
+          return (
+            <div className={`pv-execution-outcome ${errorCount > 0 ? "pv-outcome-error" : "pv-outcome-success"}`}>
+              <div>
+                <span className="pv-outcome-icon">{errorCount > 0 ? "\u2717" : "\u2713"}</span>
+                <span className="pv-outcome-text">
+                  {errorCount > 0
+                    ? `Execution finished with ${errorCount} failed step${errorCount > 1 ? "s" : ""} (${doneCount}/${totalSteps} succeeded)`
+                    : `All ${totalSteps} steps completed successfully`}
+                </span>
+              </div>
+              {prUrl && (
+                <div className="pv-outcome-pr">
+                  <a href={prUrl} target="_blank" rel="noopener noreferrer">
+                    {prUrl.replace("https://github.com/", "")}
+                  </a>
+                </div>
+              )}
+            </div>
+          );
+        }
+
+        if (onExecute && (!hasStarted || (!executing && !allDone))) {
+          return (
+            <div className="pv-execute">
+              {executionError && (
+                <div className="pv-execute-error">{executionError}</div>
+              )}
+              <button
+                type="button"
+                className="pv-execute-btn"
+                onClick={onExecute}
+                disabled={executing}
+              >
+                {executing ? "Executing..." : "Execute Plan"}
+              </button>
+            </div>
+          );
+        }
+
+        if (executing) {
+          return (
+            <div className="pv-execute">
+              {executionError && (
+                <div className="pv-execute-error">{executionError}</div>
+              )}
+              <div className="pv-executing-indicator">Executing...</div>
+            </div>
+          );
+        }
+
+        return null;
+      })()}
     </div>
   );
 }

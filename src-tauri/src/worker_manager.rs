@@ -29,6 +29,11 @@ impl WorkerState {
             // Walk up from src-tauri/target/.../resource_dir to find the project root
             let mut dir = resource_dir.as_path();
             loop {
+                // In dev mode, prefer the TypeScript source (run via tsx) for hot reload
+                let dev_ts_candidate = dir.join("sparky-worker").join("src").join("main.ts");
+                if dev_ts_candidate.exists() {
+                    break dev_ts_candidate;
+                }
                 let dev_candidate = dir.join("sparky-worker").join("dist").join("main.js");
                 if dev_candidate.exists() {
                     break dev_candidate;
@@ -152,7 +157,6 @@ pub async fn worker_ensure_running(app: AppHandle) -> Result<String, String> {
     }
 
     let tmux = resolve_bin("tmux");
-    let node = resolve_bin("node");
 
     // Kill any existing session and start fresh — we have no connection
     // so any existing session is stale from a previous app run
@@ -166,13 +170,26 @@ pub async fn worker_ensure_running(app: AppHandle) -> Result<String, String> {
         .worker_script
         .to_str()
         .ok_or("Invalid worker script path")?;
+
+    // Use tsx for .ts files (dev mode), node for .js (production bundle)
+    let runner = if script.ends_with(".ts") {
+        // tsx is a local devDependency — resolve from the worker's node_modules
+        let worker_dir = state.worker_script.parent().and_then(|p| p.parent());
+        let local_tsx = worker_dir
+            .map(|d| d.join("node_modules").join(".bin").join("tsx"))
+            .filter(|p| p.exists())
+            .and_then(|p| p.to_str().map(String::from));
+        local_tsx.unwrap_or_else(|| resolve_bin("tsx"))
+    } else {
+        resolve_bin("node")
+    };
     let db = state.db_path.to_str().ok_or("Invalid db path")?;
     let sock = state.socket_path.to_str().ok_or("Invalid socket path")?;
 
     // Remove stale socket file
     let _ = std::fs::remove_file(&state.socket_path);
 
-    start_tmux_session(&tmux, &node, SESSION_NAME, script, db, sock)?;
+    start_tmux_session(&tmux, &runner, SESSION_NAME, script, db, sock)?;
 
     // Connect to socket with retry — await until connected
     let sock_path = state.socket_path.clone();

@@ -4499,6 +4499,11 @@ button.user-code:focus-visible {
   color: #a855f7;
 }
 
+.pv-log-ok {
+  color: #9ca3af;
+  font-size: 0.75rem;
+}
+
 .pv-log-info {
   color: #64748b;
 }
@@ -4721,6 +4726,57 @@ button.user-code:focus-visible {
   text-align: center;
 }
 
+.pv-executing-indicator {
+  padding: 0.5rem 1.5rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #6366f1;
+}
+
+.pv-execution-outcome {
+  margin-top: 1rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem 1rem;
+  border-radius: 8px;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.pv-outcome-success {
+  color: #15803d;
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+}
+
+.pv-outcome-error {
+  color: #dc2626;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+}
+
+.pv-outcome-icon {
+  font-size: 1.1rem;
+}
+
+.pv-outcome-pr {
+  margin-top: 0.5rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.pv-outcome-pr a {
+  color: #6366f1;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.pv-outcome-pr a:hover {
+  text-decoration: underline;
+}
+
 /* PlanView dark mode */
 @media (prefers-color-scheme: dark) {
   .pv-goal,
@@ -4827,6 +4883,10 @@ button.user-code:focus-visible {
 
   .pv-log-replan {
     color: #c084fc;
+  }
+
+  .pv-log-ok {
+    color: #6b7280;
   }
 
   .pv-log-info {

@@ -121,9 +121,11 @@ export async function removeWorktree(
   onUpdate({ ...wt, status: "removing" });
 
   try {
+    const accessToken = localStorage.getItem("github_token") ?? undefined;
     await invoke("git_remove_worktree", {
       repoFullName: wt.repo_full_name,
       issueNumber: wt.issue_number,
+      accessToken,
     });
     await deleteWorktreeRecord(wt.id);
     onUpdate({ ...wt, status: "removing", path: "" });

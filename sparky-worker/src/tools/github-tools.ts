@@ -1,4 +1,6 @@
 import { execFileSync, execSync } from "node:child_process";
+import { readFileSync, writeFileSync, existsSync } from "node:fs";
+import { join } from "node:path";
 
 export interface GitHubToolContext {
   token: string;
@@ -68,6 +70,74 @@ function sanitizeError(e: unknown, token: string): string {
   return msg;
 }
 
+/**
+ * Common patterns that should be gitignored. These use non-rooted patterns
+ * (no leading /) so they match at any depth (e.g. php-app/vendor/).
+ */
+const GITIGNORE_PATTERNS = [
+  "vendor/",
+  "node_modules/",
+  ".phpunit.result.cache",
+  ".pytest_cache/",
+  "__pycache__/",
+  ".mypy_cache/",
+  "target/",
+  ".gradle/",
+  ".sparky/",
+];
+
+/**
+ * Check for untracked dependency/cache paths and ensure they're in .gitignore.
+ * Uses `git status --porcelain` to find what would be committed, then checks
+ * against known patterns.
+ */
+function ensureGitignore(worktreePath: string): void {
+  // Ask git what untracked/modified files exist
+  let status = "";
+  try {
+    status = execFileSync("git", ["status", "--porcelain"], {
+      cwd: worktreePath, encoding: "utf-8", timeout: 10_000,
+    });
+  } catch {
+    return;
+  }
+
+  const gitignorePath = join(worktreePath, ".gitignore");
+  let existing = "";
+  try {
+    existing = readFileSync(gitignorePath, "utf-8");
+  } catch {
+    // No .gitignore exists
+  }
+
+  const existingLines = new Set(existing.split("\n").map((l) => l.trim()));
+  const toAdd: string[] = [];
+
+  for (const pattern of GITIGNORE_PATTERNS) {
+    // Already in .gitignore?
+    if (existingLines.has(pattern) || existingLines.has("/" + pattern) || existingLines.has(pattern.replace(/\/$/, ""))) continue;
+
+    // Check if any staged/untracked file matches this pattern
+    const baseName = pattern.replace(/\/$/, "");
+    const matchesStatus = status.split("\n").some((line) => {
+      const file = line.slice(3); // skip status chars + space
+      return file.includes(baseName + "/") || file === baseName || file.endsWith("/" + baseName);
+    });
+
+    if (matchesStatus) {
+      toAdd.push(pattern);
+    }
+  }
+
+  if (toAdd.length === 0) return;
+
+  const addition = (existing.endsWith("\n") || !existing ? "" : "\n") +
+    "# Added by Sparky — common dependency/cache directories\n" +
+    toAdd.join("\n") + "\n";
+
+  writeFileSync(gitignorePath, existing + addition, "utf-8");
+}
+
 export async function createPullRequest(
   ctx: GitHubToolContext,
   worktreePath: string,
@@ -82,7 +152,10 @@ export async function createPullRequest(
     const status = gitExec("status", "--porcelain");
     if (!status) return "No changes to commit.";
 
-    // 2. Stage and commit
+    // 2. Ensure common dependency/cache dirs are gitignored
+    ensureGitignore(worktreePath);
+
+    // 3. Stage changes (after gitignore update)
     gitExec("add", "-A");
     const commitMessage = `${title}\n\n${body}`;
     execFileSync("git", ["commit", "-m", commitMessage], {
@@ -91,13 +164,14 @@ export async function createPullRequest(
       timeout: 30_000,
     });
 
-    // 3. Get branch name
+    // 4. Get branch name
     const branch = gitExec("rev-parse", "--abbrev-ref", "HEAD");
 
-    // 4. Push with auth — use env var to avoid token in argv/error messages
+    // 5. Push with auth — use env var to avoid token in argv/error messages
+    // Use --force for sparky branches (they're ephemeral per-issue branches, not shared)
     const basicAuth = Buffer.from(`x-access-token:${ctx.token}`).toString("base64");
     execSync(
-      `git -c http.extraHeader="Authorization: Basic $GIT_AUTH_TOKEN" push --force-with-lease -u origin ${branch}`,
+      `git -c http.extraHeader="Authorization: Basic $GIT_AUTH_TOKEN" push --force -u origin ${branch}`,
       {
         cwd: worktreePath,
         encoding: "utf-8",
@@ -106,7 +180,7 @@ export async function createPullRequest(
       },
     );
 
-    // 5. Detect default branch
+    // 6. Detect default branch
     let defaultBranch = "main";
     try {
       const ref = gitExec("symbolic-ref", "refs/remotes/origin/HEAD", "--short");
@@ -115,7 +189,7 @@ export async function createPullRequest(
       // fallback to main
     }
 
-    // 6. Create PR
+    // 7. Create PR
     const prBody = `${body}\n\nResolves #${ctx.parentIssueNumber}`;
     const res = await fetch(`https://api.github.com/repos/${ctx.repoFullName}/pulls`, {
       method: "POST",
