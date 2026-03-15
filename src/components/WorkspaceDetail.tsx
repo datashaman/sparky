@@ -719,13 +719,17 @@ export function WorkspaceDetail({ workspaceId, onSwitchWorkspace, onDeleted, onW
                     setIssueTab("analysis");
                     if (!analysis && !analysisLoading) {
                       (async () => {
-                        const accessToken = localStorage.getItem("github_token") ?? "";
-                        if (accessToken) {
-                          await ensureWorktree(workspaceId, selectedIssue.full_name, selectedIssue.number, accessToken, setWorktree);
+                        try {
+                          const accessToken = localStorage.getItem("github_token") ?? "";
+                          if (accessToken) {
+                            await ensureWorktree(workspaceId, selectedIssue.full_name, selectedIssue.number, accessToken, setWorktree);
+                          }
+                          const a = await createAnalysis(workspaceId, selectedIssue.full_name, selectedIssue.number);
+                          setAnalysis(a);
+                          await workerSession.startAnalysis(a.id, selectedIssue);
+                        } catch (err) {
+                          console.error("[analysis] failed to start:", err);
                         }
-                        const a = await createAnalysis(workspaceId, selectedIssue.full_name, selectedIssue.number);
-                        setAnalysis(a);
-                        workerSession.startAnalysis(a.id, selectedIssue);
                       })();
                     }
                   }}
@@ -759,16 +763,20 @@ export function WorkspaceDetail({ workspaceId, onSwitchWorkspace, onDeleted, onW
                         type="button"
                         className="analyse-btn analyse-btn-inline"
                         onClick={async () => {
-                          const accessToken = localStorage.getItem("github_token") ?? "";
-                          if (accessToken) {
-                            await ensureWorktree(workspaceId, selectedIssue.full_name, selectedIssue.number, accessToken, setWorktree);
+                          try {
+                            const accessToken = localStorage.getItem("github_token") ?? "";
+                            if (accessToken) {
+                              await ensureWorktree(workspaceId, selectedIssue.full_name, selectedIssue.number, accessToken, setWorktree);
+                            }
+                            const a = await createAnalysis(workspaceId, selectedIssue.full_name, selectedIssue.number);
+                            setAnalysis(a);
+                            setPlan(null);
+                            setAllCreated(false);
+                            setIssueTab("analysis");
+                            await workerSession.startAnalysis(a.id, selectedIssue);
+                          } catch (err) {
+                            console.error("[re-analyse] failed to start:", err);
                           }
-                          const a = await createAnalysis(workspaceId, selectedIssue.full_name, selectedIssue.number);
-                          setAnalysis(a);
-                          setPlan(null);
-                          setAllCreated(false);
-                          setIssueTab("analysis");
-                          workerSession.startAnalysis(a.id, selectedIssue);
                         }}
                         disabled={workerSession.loading}
                       >
@@ -840,7 +848,7 @@ export function WorkspaceDetail({ workspaceId, onSwitchWorkspace, onDeleted, onW
                 )
               ) : issueTab === "analysis" ? (
                 <div className="issue-analysis-tab">
-                  {analysis?.status === "running" && (
+                  {(analysis?.status === "pending" || analysis?.status === "running") && (
                     <>
                       <p className="analysis-running">Analysing...</p>
                       {askUserPrompt && askUserPrompt.stepOrder === 0 && (
@@ -903,13 +911,17 @@ export function WorkspaceDetail({ workspaceId, onSwitchWorkspace, onDeleted, onW
                         type="button"
                         className="analyse-btn"
                         onClick={async () => {
-                          const accessToken = localStorage.getItem("github_token") ?? "";
-                          if (accessToken) {
-                            await ensureWorktree(workspaceId, selectedIssue.full_name, selectedIssue.number, accessToken, setWorktree);
+                          try {
+                            const accessToken = localStorage.getItem("github_token") ?? "";
+                            if (accessToken) {
+                              await ensureWorktree(workspaceId, selectedIssue.full_name, selectedIssue.number, accessToken, setWorktree);
+                            }
+                            const a = await createAnalysis(workspaceId, selectedIssue.full_name, selectedIssue.number);
+                            setAnalysis(a);
+                            await workerSession.startAnalysis(a.id, selectedIssue);
+                          } catch (err) {
+                            console.error("[retry-analyse] failed to start:", err);
                           }
-                          const a = await createAnalysis(workspaceId, selectedIssue.full_name, selectedIssue.number);
-                          setAnalysis(a);
-                          workerSession.startAnalysis(a.id, selectedIssue);
                         }}
                       >
                         Retry
