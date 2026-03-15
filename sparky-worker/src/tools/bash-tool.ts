@@ -1,6 +1,8 @@
 import { execSync } from "node:child_process";
-import { realpathSync } from "node:fs";
+import { realpathSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
+import { createHash } from "node:crypto";
+import { tmpdir } from "node:os";
 
 const DEFAULT_ALLOWED_COMMANDS = new Set([
   // Shell builtins
@@ -107,8 +109,10 @@ export async function runBash(
   // Use the inherited PATH so nvm/homebrew/etc binaries are available
   const envPath = process.env.PATH ?? "/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin";
 
-  // Redirect tool caches to .sparky/cache/home so they don't pollute the worktree
-  const cacheHome = join(root, ".sparky", "cache", "home");
+  // Redirect tool caches outside the worktree — use a stable per-worktree dir in OS temp
+  const worktreeHash = createHash("sha256").update(root).digest("hex").slice(0, 12);
+  const cacheHome = join(tmpdir(), "sparky-sandbox", worktreeHash);
+  mkdirSync(cacheHome, { recursive: true });
 
   try {
     const stdout = execSync(command, {

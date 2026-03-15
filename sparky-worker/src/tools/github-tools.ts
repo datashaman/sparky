@@ -80,7 +80,7 @@ const GITIGNORE_PATTERNS: Array<{ dir: string; patterns: string[] }> = [
   { dir: ".mypy_cache", patterns: [".mypy_cache/"] },
   { dir: "target", patterns: ["/target/"] },
   { dir: ".gradle", patterns: [".gradle/"] },
-  { dir: ".sparky", patterns: [".sparky/cache/"] },
+  { dir: ".sparky", patterns: [".sparky/"] },
 ];
 
 /**
