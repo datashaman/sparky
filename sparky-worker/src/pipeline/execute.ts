@@ -30,13 +30,23 @@ function makeFinalizeStep(existingSteps: ExecutionPlanStep[]): ExecutionPlanStep
     order: lastOrder + 1,
     title: FINALIZE_TITLE,
     description:
-      "Review what changed with 'git diff --stat', then call create_pull_request with a clear title and body describing the changes. If no changes exist, report STATUS: DONE.",
+      "Check if a pull request was already created in a previous step (look for PR URLs in prior step outputs). If so, report STATUS: DONE. Otherwise, review what changed with 'git diff --stat', then call create_pull_request with a clear title and body describing the changes. If no changes exist, report STATUS: DONE.",
     agent_name: null,
     expected_output: "A pull request URL or confirmation that no changes were needed.",
     depends_on: existingSteps.map((s) => s.order),
     verification_command: null,
     done_when: "A pull request has been created, or no changes exist.",
   };
+}
+
+/** Check if any step description or title suggests it will create a pull request. */
+function planIncludesPRStep(steps: ExecutionPlanStep[]): boolean {
+  const prPatterns = /\b(create[_ ]pull[_ ]request|open[_ ]pr|submit[_ ]pr|create[_ ]pr)\b/i;
+  return steps.some((s) =>
+    s.title === FINALIZE_TITLE ||
+    prPatterns.test(s.title) ||
+    prPatterns.test(s.description)
+  );
 }
 
 export interface ExecutionPipelineOpts {
@@ -88,8 +98,8 @@ export async function runExecutionPipeline(opts: ExecutionPipelineOpts): Promise
   const stepOutputs = new Map<number, string>();
   let steps = [...planResult.steps];
 
-  // Inject finalize step: commit + push + create PR
-  if (config.github_token && !steps.some((s) => s.title === FINALIZE_TITLE)) {
+  // Inject finalize step: commit + push + create PR (skip if plan already has one)
+  if (config.github_token && !planIncludesPRStep(steps)) {
     steps.push(makeFinalizeStep(steps));
   }
 
@@ -345,8 +355,8 @@ export async function runExecutionPipeline(opts: ExecutionPipelineOpts): Promise
 
             steps = [...completedSteps, ...newSteps];
 
-            // Re-append finalize step if replanning removed it
-            if (config.github_token && !steps.some((s) => s.title === FINALIZE_TITLE)) {
+            // Re-append finalize step if replanning removed it (and no step already handles PR)
+            if (config.github_token && !planIncludesPRStep(steps)) {
               const finalizeStep = makeFinalizeStep(steps);
               steps.push(finalizeStep);
               newSteps.push(finalizeStep);
