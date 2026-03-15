@@ -1,5 +1,5 @@
 import type { SessionConfig, StartSessionPayload, ExecutionLogEntry, AnalysisResult, Agent, Skill } from "../types.js";
-import { updateSession, updateExistingTable } from "../db.js";
+import { updateSession, updateExistingTable, getAnalysisToolLogs } from "../db.js";
 import { callLLM, callLLMWithTools } from "../llm/index.js";
 import { resolveStage, validateStage } from "./resolve-stage.js";
 import { TOOL_SCHEMAS, createToolHandler } from "../tools/index.js";
@@ -54,7 +54,12 @@ export async function runPlanPipeline(opts: PlanPipelineOpts): Promise<void> {
   const additionalContextFiles = getManifestContextFiles(worktreePath);
   const repoContext = readRepoContext(worktreePath, 2000, additionalContextFiles);
   const systemPrompt = buildPlanSystemPrompt() + (repoContext ? `\n\n${repoContext}` : "");
-  const baseUserPrompt = buildPlanUserPrompt(payload, analysisResult, agents, skills);
+
+  // Inject analysis tool context so the planner doesn't re-read the same files
+  const analysisToolContext = payload.analysis_id
+    ? buildAnalysisToolContext(payload.analysis_id)
+    : "";
+  const baseUserPrompt = buildPlanUserPrompt(payload, analysisResult, agents, skills) + analysisToolContext;
 
   const schemaInstruction = `\n\nIMPORTANT: When you are ready to provide your final plan, you MUST respond with ONLY a JSON object (no prose, no explanation) matching this schema:\n${JSON.stringify(PLAN_SCHEMA, null, 2)}`;
   const userPrompt = baseUserPrompt + schemaInstruction;
@@ -221,10 +226,13 @@ async function refinePlan(
 function buildPlanSystemPrompt(): string {
   return `You are a senior software engineering project manager. Given a GitHub issue analysis, create a step-by-step execution plan.
 
+## Context from analysis
+The analysis phase already explored the codebase — file contents and command outputs from that exploration are included below the issue details. Use that context to inform your plan without re-reading the same files.
+
 ## Tools available during planning
 - **ask_user** — Ask clarifying questions.
 - **use_skill** — Load domain-specific knowledge.
-- **read_file**, **glob**, **grep** — Explore the codebase.
+- **read_file**, **glob**, **grep** — Explore the codebase (only if you need info not already provided).
 - **bash** — Run shell commands.
 
 The plan is executed by an issue LLM with sandboxed tools. Steps can delegate to agents.
@@ -270,6 +278,40 @@ function buildPlanUserPrompt(
   }
 
   return parts.join("\n");
+}
+
+const MAX_TOOL_CONTEXT_CHARS = 6000;
+
+/**
+ * Build a condensed summary of tool calls from the analysis session.
+ * This lets the planner skip re-reading files and re-running commands
+ * that were already explored during analysis.
+ */
+function buildAnalysisToolContext(analysisId: string): string {
+  const toolLogs = getAnalysisToolLogs(analysisId);
+  if (toolLogs.length === 0) return "";
+
+  const lines: string[] = ["", "", "## Files and commands explored during analysis", ""];
+  let totalChars = 0;
+
+  for (const log of toolLogs) {
+    const name = log.tool_name;
+    const input = log.tool_input ?? "";
+    // Truncate individual results to keep total manageable
+    let result = log.tool_result ?? "(no output)";
+    const maxPerResult = Math.floor(MAX_TOOL_CONTEXT_CHARS / Math.max(toolLogs.length, 1));
+    if (result.length > maxPerResult) {
+      result = result.slice(0, maxPerResult) + "\n... (truncated)";
+    }
+
+    const entry = `### ${name}: ${input}\n\`\`\`\n${result}\n\`\`\``;
+    if (totalChars + entry.length > MAX_TOOL_CONTEXT_CHARS) break;
+    totalChars += entry.length;
+    lines.push(entry);
+  }
+
+  lines.push("", "You already have this context — avoid re-reading these files unless you need to verify something specific.");
+  return lines.join("\n");
 }
 
 const PLAN_SCHEMA = {
