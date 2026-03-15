@@ -13,6 +13,8 @@ pub struct WorkerState {
     worker_script: PathBuf,
     /// Write half for sending commands to the worker.
     writer: Arc<Mutex<Option<OwnedWriteHalf>>>,
+    /// Serialize calls to worker_ensure_running to prevent races.
+    startup_lock: Arc<Mutex<()>>,
 }
 
 impl WorkerState {
@@ -41,6 +43,7 @@ impl WorkerState {
             db_path: app_data_dir.join("sparky.db"),
             worker_script,
             writer: Arc::new(Mutex::new(None)),
+            startup_lock: Arc::new(Mutex::new(())),
         }
     }
 }
@@ -113,7 +116,10 @@ fn resolve_bin(name: &str) -> String {
 pub async fn worker_ensure_running(app: AppHandle) -> Result<String, String> {
     let state = app.state::<WorkerState>();
 
-    // Already connected — nothing to do
+    // Serialize startup attempts to prevent races
+    let _startup_guard = state.startup_lock.lock().await;
+
+    // Already connected — nothing to do (check inside lock to avoid races)
     {
         let guard = state.writer.lock().await;
         if guard.is_some() {
