@@ -24,8 +24,15 @@ const DEFAULT_ALLOWED_COMMANDS = new Set([
   "tsc", "eslint", "prettier",
 ]);
 
-/** Characters that are always dangerous (command substitution, subshells, redirects). */
-const DANGEROUS_CHARS = /[$`()<>\n\r]/;
+/**
+ * Characters that are always dangerous (command substitution, subshells).
+ * Note: > and < are allowed only in safe redirect patterns (2>/dev/null, 2>&1);
+ * raw redirects to files are stripped before checking.
+ */
+const DANGEROUS_CHARS = /[$`()\n\r]/;
+
+/** Safe redirect patterns that should not trigger the dangerous chars check. */
+const SAFE_REDIRECTS = /\s*(?:2>&1|[12]>\/dev\/null|>&\/dev\/null)\s*/g;
 
 /**
  * Split a command string on safe chaining operators (&& and ||).
@@ -52,10 +59,20 @@ export async function runBash(
   const allowAll = sandboxConfig?.allowAll ?? false;
 
   if (!allowAll) {
-    // Reject truly dangerous shell metacharacters (command substitution, subshells, redirects)
-    if (DANGEROUS_CHARS.test(command)) {
+    // Strip safe redirect patterns before checking for dangerous characters
+    const sanitized = command.replace(SAFE_REDIRECTS, " ");
+
+    // Reject truly dangerous shell metacharacters (command substitution, subshells)
+    if (DANGEROUS_CHARS.test(sanitized)) {
       throw new Error(
-        "Command contains dangerous shell metacharacters ($`()<>) which are not allowed for security.",
+        "Command contains dangerous shell metacharacters ($`()) which are not allowed for security.",
+      );
+    }
+
+    // Block arbitrary file redirects (> file, < file) that aren't safe patterns
+    if (/[<>]/.test(sanitized)) {
+      throw new Error(
+        "Command contains file redirects (> or <) which are not allowed. Use 2>/dev/null or 2>&1 for stderr suppression.",
       );
     }
 
