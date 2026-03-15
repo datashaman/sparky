@@ -230,6 +230,7 @@ pub async fn git_remove_worktree(
     app: AppHandle,
     repo_full_name: String,
     issue_number: u32,
+    access_token: Option<String>,
 ) -> Result<(), String> {
     let (owner, name) = parse_repo_name(&repo_full_name)?;
     let clone_path = repo_path(&app, owner, name)?;
@@ -263,11 +264,14 @@ pub async fn git_remove_worktree(
         // Delete local branch so a fresh one is created on next run
         let _ = run_git(&["branch", "-D", &branch_name], &clone_path);
 
-        // Delete remote branch (best-effort)
-        let _ = run_git(
-            &["push", "origin", "--delete", &branch_name],
-            &clone_path,
-        );
+        // Delete remote branch (best-effort, requires auth)
+        if let Some(ref token) = access_token {
+            let header = auth_header(token);
+            let _ = run_git(
+                &["-c", &format!("http.extraHeader={}", header), "push", "origin", "--delete", &branch_name],
+                &clone_path,
+            );
+        }
 
         Ok(())
     })
