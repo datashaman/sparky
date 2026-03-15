@@ -29,34 +29,6 @@ CREATE TABLE IF NOT EXISTS workspace_repos (
 CREATE INDEX IF NOT EXISTS idx_workspace_repos_workspace ON workspace_repos(workspace_id);
 CREATE INDEX IF NOT EXISTS idx_workspace_repos_repo ON workspace_repos(repo_id);
 
-CREATE TABLE IF NOT EXISTS agents (
-  id TEXT PRIMARY KEY,
-  workspace_id TEXT NOT NULL,
-  name TEXT NOT NULL,
-  description TEXT NOT NULL,
-  provider TEXT NOT NULL,
-  model TEXT NOT NULL,
-  max_turns INTEGER,
-  background INTEGER NOT NULL DEFAULT 0,
-  created_at TEXT NOT NULL,
-  FOREIGN KEY (workspace_id) REFERENCES workspaces(id) ON DELETE CASCADE
-);
-
-CREATE INDEX IF NOT EXISTS idx_agents_workspace ON agents(workspace_id);
-
-CREATE TABLE IF NOT EXISTS skills (
-  id TEXT PRIMARY KEY,
-  workspace_id TEXT NOT NULL,
-  name TEXT NOT NULL,
-  description TEXT,
-  provider TEXT,
-  model TEXT,
-  created_at TEXT NOT NULL,
-  FOREIGN KEY (workspace_id) REFERENCES workspaces(id) ON DELETE CASCADE
-);
-
-CREATE INDEX IF NOT EXISTS idx_skills_workspace ON skills(workspace_id);
-
 CREATE TABLE IF NOT EXISTS issue_analyses (
   id TEXT PRIMARY KEY,
   workspace_id TEXT NOT NULL,
@@ -74,24 +46,10 @@ CREATE INDEX IF NOT EXISTS idx_issue_analyses_lookup ON issue_analyses(workspace
 `;
 
 /** Migrations that add columns — safe to fail if column already exists. */
-const ALTER_MIGRATIONS = [
-  "ALTER TABLE skills ADD COLUMN content TEXT",
-  "ALTER TABLE agents ADD COLUMN content TEXT",
-];
+const ALTER_MIGRATIONS: string[] = [];
 
 /** DDL that uses IF NOT EXISTS — safe to re-run. */
 const ADDITIONAL_TABLES = `
-CREATE TABLE IF NOT EXISTS agent_skills (
-  agent_id TEXT NOT NULL,
-  skill_id TEXT NOT NULL,
-  PRIMARY KEY (agent_id, skill_id),
-  FOREIGN KEY (agent_id) REFERENCES agents(id) ON DELETE CASCADE,
-  FOREIGN KEY (skill_id) REFERENCES skills(id) ON DELETE CASCADE
-);
-
-CREATE INDEX IF NOT EXISTS idx_agent_skills_agent ON agent_skills(agent_id);
-CREATE INDEX IF NOT EXISTS idx_agent_skills_skill ON agent_skills(skill_id);
-
 CREATE TABLE IF NOT EXISTS execution_plans (
   id TEXT PRIMARY KEY,
   workspace_id TEXT NOT NULL,
@@ -122,15 +80,6 @@ CREATE TABLE IF NOT EXISTS issue_worktrees (
 );
 
 CREATE INDEX IF NOT EXISTS idx_issue_worktrees_lookup ON issue_worktrees(workspace_id, repo_full_name, issue_number);
-
-CREATE TABLE IF NOT EXISTS agent_tools (
-  agent_id TEXT NOT NULL,
-  tool_id TEXT NOT NULL,
-  PRIMARY KEY (agent_id, tool_id),
-  FOREIGN KEY (agent_id) REFERENCES agents(id) ON DELETE CASCADE
-);
-
-CREATE INDEX IF NOT EXISTS idx_agent_tools_agent ON agent_tools(agent_id);
 
 CREATE TABLE IF NOT EXISTS execution_step_results (
   plan_id TEXT NOT NULL,

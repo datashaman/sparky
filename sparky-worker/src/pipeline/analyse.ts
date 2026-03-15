@@ -1,13 +1,13 @@
 import type { SessionConfig, StartSessionPayload, ExecutionLogEntry } from "../types.js";
-import { updateSession, updateExistingTable, getSkillsForWorkspace, getAgentsForWorkspace } from "../db.js";
+import { updateSession, updateExistingTable } from "../db.js";
 import { callLLMWithTools } from "../llm/index.js";
 import { resolveStage, validateStage } from "./resolve-stage.js";
 import { TOOL_SCHEMAS, createToolHandler } from "../tools/index.js";
-import { buildSkillResolver } from "../tools/skill-tool.js";
 import { createAskUserHandler } from "../tools/ask-user-tool.js";
 import { isSessionCancelled } from "../session-manager.js";
 import { extractJSONWithRetry } from "../util.js";
 import { readRepoContext } from "../repo-context.js";
+import { ensureManifest, getSkillsFromManifest, getAgentsFromManifest, buildManifestSkillResolver, getManifestContextFiles } from "../discovery/index.js";
 
 const TOOL_IDS = ["list_files", "read_file", "glob", "grep", "bash", "ask_user", "use_skill", "create_issue", "update_issue", "close_issue"];
 
@@ -33,14 +33,13 @@ export async function runAnalysisPipeline(opts: AnalysisPipelineOpts): Promise<v
     updateExistingTable("issue_analyses", payload.analysis_id, { status: "running" });
   }
 
-  const [skills, agents] = [
-    getSkillsForWorkspace(workspace_id),
-    getAgentsForWorkspace(workspace_id),
-  ];
-
   const worktreePath = await resolveWorktreePath(repo_full_name, issue_number, config.github_token);
 
-  const skillResolver = buildSkillResolver(workspace_id);
+  ensureManifest(worktreePath);
+  const skills = getSkillsFromManifest(worktreePath);
+  const agents = getAgentsFromManifest(worktreePath);
+
+  const skillResolver = buildManifestSkillResolver(worktreePath);
   const askUserHandler = createAskUserHandler(sessionId, 0, config.ask_user_timeout_minutes);
   const githubContext = { token: config.github_token, repoFullName: repo_full_name, parentIssueNumber: issue_number };
   const sandboxConfig = {
@@ -51,7 +50,8 @@ export async function runAnalysisPipeline(opts: AnalysisPipelineOpts): Promise<v
 
   const analysisTools = TOOL_SCHEMAS.filter((t) => TOOL_IDS.includes(t.name));
 
-  const repoContext = readRepoContext(worktreePath, 2000);
+  const additionalContextFiles = getManifestContextFiles(worktreePath);
+  const repoContext = readRepoContext(worktreePath, 2000, additionalContextFiles);
   const systemPrompt = buildAnalysisSystemPrompt(skills, agents) + (repoContext ? `\n\n${repoContext}` : "");
   const baseUserPrompt = buildAnalysisUserPrompt(payload, skills, agents);
 
@@ -168,13 +168,14 @@ Follow these steps before producing your final analysis:
 
 An **issue LLM** works on resolving the issue with sandboxed tools (${toolNames}).
 
-The issue LLM can activate **agents** and **skills**:
-- **Skills**: Reusable bodies of knowledge. Every skill MUST have content.
-- **Agents**: Autonomous AI workers. Every agent MUST have content (system prompt).
+The issue LLM can activate **agents** and **skills** that were auto-discovered from the repository:
+- **Skills**: Reusable bodies of knowledge extracted from repo config files (CLAUDE.md, .cursorrules, etc.).
+- **Agents**: Autonomous AI workers discovered from framework configurations.
 
-## When recommending skills and agents
-- Check existing ones first. Prefer referencing existing ones by name.
-- Only recommend new ones when existing ones don't cover the need.
+## Discovered agents and skills
+- Agents and skills are auto-discovered from the repository's agentic ecosystem (CLAUDE.md, .cursorrules, .mcp.json, etc.).
+- Reference existing discovered agents/skills by name when relevant.
+- Do NOT recommend creating new agents or skills — they come from the repo.
 
 ## Complexity-driven decomposition
 
@@ -202,10 +203,10 @@ function buildAnalysisUserPrompt(
     parts.push("", payload.issue_body);
   }
   if (skills.length > 0) {
-    parts.push("", "## Existing skills", ...skills.map((s) => `- **${s.name}**: ${s.description || "(no description)"}`));
+    parts.push("", "## Discovered skills", ...skills.map((s) => `- **${s.name}**: ${s.description || "(no description)"}`));
   }
   if (agents.length > 0) {
-    parts.push("", "## Existing agents", ...agents.map((a) => `- **${a.name}**: ${a.description}`));
+    parts.push("", "## Discovered agents", ...agents.map((a) => `- **${a.name}**: ${a.description}`));
   }
   return parts.join("\n");
 }
@@ -261,6 +262,6 @@ const ANALYSIS_SCHEMA = {
       },
     },
   },
-  required: ["summary", "type", "complexity", "complexity_reason", "considerations", "approach", "skills", "agents"],
+  required: ["summary", "type", "complexity", "complexity_reason", "considerations", "approach"],
   additionalProperties: false,
 };

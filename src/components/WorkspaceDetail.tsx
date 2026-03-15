@@ -6,8 +6,6 @@ import {
 } from "../data/repos";
 import { addRepoToWorkspace, removeRepoFromWorkspace } from "../data/workspaceRepos";
 import { fetchRepo, listUserRepos, listRepoOpenIssues, type GitHubRepo, type GitHubIssue } from "../github";
-import { listAgentsForWorkspace, deleteAgent } from "../data/agents";
-import { listSkillsForWorkspace, deleteSkill } from "../data/skills";
 import { getAnalysisForIssue, createAnalysis, deleteAnalysesForIssue } from "../data/issueAnalyses";
 import { getPlanForIssue, createPlan, deletePlansForIssue } from "../data/executionPlans";
 import { getWorktreeForIssue, removeWorktree, ensureWorktree } from "../data/issueWorktrees";
@@ -17,13 +15,9 @@ import DOMPurify from "dompurify";
 import { AnalysisView } from "./AnalysisView";
 import { PlanView, AskUserPanel, StepLogPanel, type AskUserPrompt } from "./PlanView";
 import { useWorkerSession } from "../hooks/useWorkerSession";
-import { SkillDetail } from "./SkillDetail";
-import { AgentDetail } from "./AgentDetail";
 
 marked.setOptions({ gfm: true, breaks: true });
 import { WorkspaceList } from "./WorkspaceList";
-import { AgentsList } from "./AgentsList";
-import { SkillsList } from "./SkillsList";
 import { ErrorMessage } from "./ErrorMessage";
 import type { Workspace, Repo } from "../data/types";
 
@@ -45,7 +39,7 @@ interface WorkspaceDetailProps {
   onBackToWorkspaces?: () => void;
 }
 
-type WorkspacePage = "workspaces" | "dashboard" | "agents" | "skills" | "issues" | "settings";
+type WorkspacePage = "workspaces" | "dashboard" | "issues" | "settings";
 
 const TOOLBAR_COMPACT_KEY = "sparky_toolbar_compact";
 
@@ -81,8 +75,6 @@ export function WorkspaceDetail({ workspaceId, onSwitchWorkspace, onDeleted, onW
   const [issuesByRepo, setIssuesByRepo] = useState<Array<{ full_name: string; issues: GitHubIssue[] }>>([]);
   const [issuesLoading, setIssuesLoading] = useState(false);
   const [issuesError, setIssuesError] = useState<string | null>(null);
-  const [agentCount, setAgentCount] = useState(0);
-  const [skillCount, setSkillCount] = useState(0);
   const [workspaceNameInput, setWorkspaceNameInput] = useState("");
   const [savingWorkspace, setSavingWorkspace] = useState(false);
   const [workspaceSaveError, setWorkspaceSaveError] = useState<string | null>(null);
@@ -94,8 +86,6 @@ export function WorkspaceDetail({ workspaceId, onSwitchWorkspace, onDeleted, onW
   const [planLoading, setPlanLoading] = useState(false);
   const [allCreated, setAllCreated] = useState(false);
   const [_worktree, setWorktree] = useState<IssueWorktree | null>(null);
-  const [selectedSkillId, setSelectedSkillId] = useState<string | null>(null);
-  const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
   const [stepStatuses, setStepStatuses] = useState<Map<number, StepExecutionStatus>>(new Map());
   const [executionLogs, setExecutionLogs] = useState<ExecutionLogEntry[]>([]);
 
@@ -248,11 +238,9 @@ export function WorkspaceDetail({ workspaceId, onSwitchWorkspace, onDeleted, onW
   async function load() {
     setLoading(true);
     try {
-      const [ws, repoList, agents, skills] = await Promise.all([
+      const [ws, repoList] = await Promise.all([
         getWorkspace(workspaceId),
         listReposForWorkspace(workspaceId),
-        listAgentsForWorkspace(workspaceId),
-        listSkillsForWorkspace(workspaceId),
       ]);
       setWorkspace(ws ?? null);
       setWorkspaceNameInput(ws?.name ?? "");
@@ -260,8 +248,6 @@ export function WorkspaceDetail({ workspaceId, onSwitchWorkspace, onDeleted, onW
         onWorkspaceNameChange(ws.name);
       }
       setRepos(repoList);
-      setAgentCount(agents.length);
-      setSkillCount(skills.length);
     } finally {
       setLoading(false);
     }
@@ -562,34 +548,6 @@ export function WorkspaceDetail({ workspaceId, onSwitchWorkspace, onDeleted, onW
             </svg>
             <span className="workspace-toolbar-label">Issues</span>
           </button>
-          <button
-            type="button"
-            className={`workspace-toolbar-btn ${page === "agents" && !selectedIssue ? "active" : ""}`}
-            onClick={() => { setSelectedIssue(null); setSelectedAgentId(null); setPage("agents"); }}
-            title="Agents"
-          >
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-              <path d="M12 8V4H8" />
-              <rect width="16" height="12" x="4" y="8" rx="2" />
-              <path d="M2 14h2" />
-              <path d="M20 14h2" />
-              <path d="M15 13v2" />
-              <path d="M9 13v2" />
-            </svg>
-            <span className="workspace-toolbar-label">Agents</span>
-          </button>
-          <button
-            type="button"
-            className={`workspace-toolbar-btn ${page === "skills" && !selectedIssue ? "active" : ""}`}
-            onClick={() => { setSelectedIssue(null); setSelectedSkillId(null); setPage("skills"); }}
-            title="Skills"
-          >
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-              <path d="m9.06 11.9 8.07-8.06a2.85 2.85 0 1 1 4.03 4.03l-8.06 8.08" />
-              <path d="M7.07 14.94c-1.66 0-3 1.35-3 3.02 0 1.33-2.5 1.52-2 2.02 1.08 1.1 2.49 2.02 4 2.02 2.2 0 4-1.8 4-4.04a3.01 3.01 0 0 0-3-3.02z" />
-            </svg>
-            <span className="workspace-toolbar-label">Skills</span>
-          </button>
           <div className="workspace-toolbar-spacer" aria-hidden />
           <div className="workspace-toolbar-bottom">
             <button
@@ -805,23 +763,6 @@ export function WorkspaceDetail({ workspaceId, onSwitchWorkspace, onDeleted, onW
                           try { await removeWorktree(wt, setWorktree); } catch { /* best-effort */ }
                         }
 
-                        // Delete skills and agents that were created from this analysis
-                        if (analysis?.result) {
-                          try {
-                            const parsed: AnalysisResult = JSON.parse(analysis.result);
-                            const recommendedSkillNames = new Set(parsed.skills.map((s) => s.name));
-                            const recommendedAgentNames = new Set(parsed.agents.map((a) => a.name));
-                            const [wsSkills, wsAgents] = await Promise.all([
-                              listSkillsForWorkspace(workspaceId),
-                              listAgentsForWorkspace(workspaceId),
-                            ]);
-                            await Promise.all([
-                              ...wsSkills.filter((s) => recommendedSkillNames.has(s.name)).map((s) => deleteSkill(s.id)),
-                              ...wsAgents.filter((a) => recommendedAgentNames.has(a.name)).map((a) => deleteAgent(a.id)),
-                            ]);
-                          } catch { /* best-effort */ }
-                        }
-
                         await Promise.all([
                           deleteAnalysesForIssue(workspaceId, full_name, number),
                           deletePlansForIssue(workspaceId, full_name, number),
@@ -1010,14 +951,6 @@ export function WorkspaceDetail({ workspaceId, onSwitchWorkspace, onDeleted, onW
                   <span className="metric-value">{issuesByRepo.reduce((sum, g) => sum + g.issues.length, 0)}</span>
                   <span className="metric-label">Open issues</span>
                 </div>
-                <div className="metric-card" onClick={() => setPage("agents")} role="button" tabIndex={0}>
-                  <span className="metric-value">{agentCount}</span>
-                  <span className="metric-label">Agents</span>
-                </div>
-                <div className="metric-card" onClick={() => setPage("skills")} role="button" tabIndex={0}>
-                  <span className="metric-value">{skillCount}</span>
-                  <span className="metric-label">Skills</span>
-                </div>
               </div>
 
               {repos.length > 0 && (
@@ -1068,31 +1001,6 @@ export function WorkspaceDetail({ workspaceId, onSwitchWorkspace, onDeleted, onW
                     ).slice(0, 10)}
                   </ul>
                 </section>
-              )}
-            </div>
-          ) : page === "agents" ? (
-            <div className="workspace-page workspace-page-agents">
-              {selectedAgentId ? (
-                <AgentDetail
-                  agentId={selectedAgentId}
-                  workspaceId={workspaceId}
-                  onBack={() => setSelectedAgentId(null)}
-                  onDeleted={() => { setSelectedAgentId(null); load(); }}
-                />
-              ) : (
-                <AgentsList workspaceId={workspaceId} onSelectAgent={setSelectedAgentId} />
-              )}
-            </div>
-          ) : page === "skills" ? (
-            <div className="workspace-page workspace-page-skills">
-              {selectedSkillId ? (
-                <SkillDetail
-                  skillId={selectedSkillId}
-                  onBack={() => setSelectedSkillId(null)}
-                  onDeleted={() => { setSelectedSkillId(null); load(); }}
-                />
-              ) : (
-                <SkillsList workspaceId={workspaceId} onSelectSkill={setSelectedSkillId} />
               )}
             </div>
           ) : page === "settings" ? (

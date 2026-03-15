@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { AGENT_PROVIDERS, AGENT_MODELS } from "../data/agents";
+import { AGENT_PROVIDERS, AGENT_MODELS } from "../data/providers";
 import { fetchOllamaModels } from "../data/ollamaModels";
 import { fetchOpenRouterModels } from "../data/openrouterModels";
 import { fetchLitellmModels } from "../data/litellmModels";
