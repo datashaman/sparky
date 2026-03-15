@@ -774,8 +774,9 @@ export function WorkspaceDetail({ workspaceId, onSwitchWorkspace, onDeleted, onW
                       disabled={workerSession.loading}
                       onClick={async () => {
                         const { full_name, number } = selectedIssue;
-                        const wt = _worktree;
-                        if (wt && wt.status === "ready") {
+                        // Remove worktree regardless of status (best-effort)
+                        const wt = _worktree ?? await getWorktreeForIssue(workspaceId, full_name, number);
+                        if (wt) {
                           try { await removeWorktree(wt, setWorktree); } catch { /* best-effort */ }
                         }
 
@@ -787,6 +788,8 @@ export function WorkspaceDetail({ workspaceId, onSwitchWorkspace, onDeleted, onW
                         setPlan(null);
                         setWorktree(null);
                         setAllCreated(false);
+                        setStepStatuses(new Map());
+                        setExecutionLogs([]);
                         setIssueTab("issue");
                       }}
                     >
