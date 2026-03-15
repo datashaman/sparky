@@ -63,6 +63,7 @@ export async function runExecutionPipeline(opts: ExecutionPipelineOpts): Promise
   const { provider: execProvider, model: execModel, apiKey: execApiKey } = exec;
 
   const replan = resolveStage(config, "replanning");
+  validateStage(replan, "replanning");
   const { provider: replanProvider, model: replanModel, apiKey: replanApiKey } = replan;
 
   updateSession(sessionId, { current_phase: "execution" });
@@ -330,7 +331,7 @@ export async function runExecutionPipeline(opts: ExecutionPipelineOpts): Promise
       if (remainingSteps.length > 0) {
         try {
           stepLog({ type: "replan_check", message: "Checking if remaining steps need adjustment" });
-          const replanResult = await checkNeedReplan(output, step, remainingSteps, planResult.goal, issueContext, execProvider, execModel, execApiKey);
+          const replanResult = await checkNeedReplan(output, step, remainingSteps, planResult.goal, issueContext, replanProvider, replanModel, replanApiKey);
 
           stepLog({ type: "replan_decision", decision: replanResult.decision, reason: replanResult.reason });
 

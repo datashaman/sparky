@@ -53,7 +53,9 @@ function readStageOverride(stage: StageName): { provider: AgentProvider; model: 
   try {
     const provider = localStorage.getItem(`sparky_stage_${stage}_provider`) || "";
     const model = localStorage.getItem(`sparky_stage_${stage}_model`) || "";
-    if (provider && model) return { provider: provider as AgentProvider, model };
+    if (provider && model && AGENT_PROVIDERS.includes(provider as AgentProvider)) {
+      return { provider: provider as AgentProvider, model };
+    }
     return undefined;
   } catch { return undefined; }
 }

@@ -89,6 +89,7 @@ export async function runPlanPipeline(opts: PlanPipelineOpts): Promise<void> {
 
   // Critic review — may use a different model than planning
   const critic = resolveStage(config, "critic");
+  validateStage(critic, "critic");
   stepLog({ type: "info", message: "Running critic review" });
   let criticReview = await reviewPlan(parsed, payload, analysisResult, critic.provider, critic.model, critic.apiKey);
 

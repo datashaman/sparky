@@ -9,14 +9,23 @@ interface ResolvedStage {
   apiKey: string;
 }
 
+/** Resolve the API key for a given provider from the config. */
+function resolveApiKey(config: SessionConfig, provider: AgentProvider): string {
+  // Provider-specific key from the api_keys map
+  const specific = config.api_keys?.[provider];
+  if (specific) return specific;
+  // Only fall back to default_api_key if the provider matches the default provider
+  if (provider === config.default_provider) return config.default_api_key;
+  return "";
+}
+
 /** Resolve provider/model/apiKey for a pipeline stage, with fallback to defaults. */
 export function resolveStage(config: SessionConfig, stage: StageName): ResolvedStage {
   const override = config.stage_overrides?.[stage];
 
   // Stage override takes priority
   if (override?.provider && override?.model) {
-    const apiKey = config.api_keys?.[override.provider] ?? config.default_api_key;
-    return { provider: override.provider, model: override.model, apiKey };
+    return { provider: override.provider, model: override.model, apiKey: resolveApiKey(config, override.provider) };
   }
 
   // Legacy exec_provider/model for backward compat
@@ -24,7 +33,7 @@ export function resolveStage(config: SessionConfig, stage: StageName): ResolvedS
     return {
       provider: config.exec_provider,
       model: config.exec_model,
-      apiKey: config.exec_api_key ?? config.api_keys?.[config.exec_provider] ?? config.default_api_key,
+      apiKey: config.exec_api_key || resolveApiKey(config, config.exec_provider),
     };
   }
 

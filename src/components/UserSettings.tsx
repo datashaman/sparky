@@ -216,6 +216,9 @@ export function UserSettings({ open, onClose }: Props) {
     } else {
       setStageProviders((prev) => ({ ...prev, [selectedStage]: p }));
       try { localStorage.setItem(`sparky_stage_${selectedStage}_provider`, p); } catch { /* ignore */ }
+      // Clear the stage model when provider changes so we don't keep an incompatible model
+      setStageModels((prev) => ({ ...prev, [selectedStage]: "" }));
+      try { localStorage.removeItem(`sparky_stage_${selectedStage}_model`); } catch { /* ignore */ }
     }
   }
 
@@ -239,7 +242,7 @@ export function UserSettings({ open, onClose }: Props) {
   }
 
   const showModelInput = shouldShowModelInput(activeProvider || defaultProvider, activeModels);
-  const isOverrideSet = selectedStage !== "default" && !!(stageProviders[selectedStage]);
+  const isOverrideSet = selectedStage !== "default" && !!(stageProviders[selectedStage] || stageModels[selectedStage]);
 
   return (
     <div
@@ -316,12 +319,13 @@ export function UserSettings({ open, onClose }: Props) {
                       placeholder={selectedStage !== "default" && !activeProvider ? "Using default" : getModelInputPlaceholder(activeProvider || defaultProvider)}
                       value={activeModel}
                       onChange={(e) => setActiveModel(e.target.value)}
+                      disabled={selectedStage !== "default" && !activeProvider}
                     />
                   ) : (
                     <Select
                       value={activeModel || UNSET}
                       onValueChange={(v) => setActiveModel(v === UNSET ? "" : v)}
-                      disabled={selectedStage === "default" ? !defaultProvider : false}
+                      disabled={selectedStage === "default" ? !defaultProvider : !activeProvider}
                     >
                       <SelectTrigger>
                         <SelectValue placeholder={selectedStage !== "default" && !activeProvider ? "Using default" : "Select model"} />
