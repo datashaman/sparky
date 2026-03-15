@@ -93,6 +93,9 @@ const SESSION_NAME: &str = "sparky-worker";
 pub async fn worker_ensure_running(app: AppHandle) -> Result<String, String> {
     let state = app.state::<WorkerState>();
 
+    println!("[worker_manager] script={:?} db={:?} sock={:?}",
+             state.worker_script, state.db_path, state.socket_path);
+
     // Start tmux if needed — kill stale sessions that lost their socket
     if tmux_session_exists(SESSION_NAME) {
         if !state.socket_path.exists() {
