@@ -1,6 +1,6 @@
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { getApiKey } from "../components/UserSettings";
-import { LITELLM_BASE_URL } from "./llm";
+import { LITELLM_BASE_URL } from "./providers";
 
 let cachedModels: string[] | null = null;
 

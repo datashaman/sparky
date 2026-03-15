@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ExecutionLogEntry, ExecutionPlanResult, StepExecutionStatus, CriticReview } from "../data/types";
-import type { AskUserRequest } from "../data/tools";
-
-export interface AskUserPrompt extends AskUserRequest {
+export interface AskUserPrompt {
   stepOrder: number;
+  question: string;
+  options: string[];
+  allowMultiple: boolean;
   resolve: (selected: string[]) => void;
 }
 

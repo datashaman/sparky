@@ -10,14 +10,12 @@ import { listAgentsForWorkspace, deleteAgent } from "../data/agents";
 import { listSkillsForWorkspace, deleteSkill } from "../data/skills";
 import { getAnalysisForIssue, createAnalysis, deleteAnalysesForIssue } from "../data/issueAnalyses";
 import { getPlanForIssue, createPlan, deletePlansForIssue } from "../data/executionPlans";
-import { getWorktreeForIssue, removeWorktree } from "../data/issueWorktrees";
-import { runAnalysis } from "../data/analyseIssue";
-import { runPlanGeneration } from "../data/generatePlan";
+import { getWorktreeForIssue, removeWorktree, ensureWorktree } from "../data/issueWorktrees";
 import type { ExecutionLogEntry, IssueAnalysis, AnalysisResult, ExecutionPlan, ExecutionPlanResult, IssueWorktree, StepExecutionStatus, CriticReview } from "../data/types";
-import { executePlan } from "../data/executePlan";
 import { marked } from "marked";
 import { AnalysisView } from "./AnalysisView";
 import { PlanView, AskUserPanel, type AskUserPrompt } from "./PlanView";
+import { useWorkerSession } from "../hooks/useWorkerSession";
 import { SkillDetail } from "./SkillDetail";
 import { AgentDetail } from "./AgentDetail";
 
@@ -97,11 +95,8 @@ export function WorkspaceDetail({ workspaceId, onSwitchWorkspace, onDeleted, onW
   const [_worktree, setWorktree] = useState<IssueWorktree | null>(null);
   const [selectedSkillId, setSelectedSkillId] = useState<string | null>(null);
   const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
-  const [executing, setExecuting] = useState(false);
   const [stepStatuses, setStepStatuses] = useState<Map<number, StepExecutionStatus>>(new Map());
-  const [executionError, setExecutionError] = useState<string | null>(null);
   const [executionLogs, setExecutionLogs] = useState<ExecutionLogEntry[]>([]);
-  const [askUserPrompt, setAskUserPrompt] = useState<AskUserPrompt | null>(null);
 
   // Batch log updates to avoid per-entry React re-renders during rapid streaming
   const logBufferRef = useRef<ExecutionLogEntry[]>([]);
@@ -121,38 +116,33 @@ export function WorkspaceDetail({ workspaceId, onSwitchWorkspace, onDeleted, onW
     }
   }, [flushLogs]);
 
-  // Reusable ask-user handler that bridges execution/analysis to the UI
-  const pendingResolveRef = useRef<((selected: string[]) => void) | null>(null);
-  const createAskUserBridge = useCallback((stepOrder: number) => {
-    return (request: { question: string; options: string[]; allowMultiple: boolean }) =>
-      new Promise<string[]>((resolve) => {
-        // Cancel any previous pending prompt
-        if (pendingResolveRef.current) {
-          pendingResolveRef.current([]);
-        }
-        pendingResolveRef.current = resolve;
-        setAskUserPrompt({
-          ...request,
-          stepOrder,
-          resolve: (selected) => {
-            pendingResolveRef.current = null;
-            setAskUserPrompt(null);
-            resolve(selected);
-          },
-        });
+  // Worker session hook — routes all LLM calls through the worker process
+  const workerSession = useWorkerSession({
+    workspaceId,
+    onAnalysisUpdate: setAnalysis,
+    onPlanUpdate: setPlan,
+    onStepUpdate: (stepOrder, status) => {
+      setStepStatuses((prev) => {
+        const next = new Map(prev);
+        next.set(stepOrder, status);
+        return next;
       });
-  }, []);
+    },
+    onLog: appendLog,
+  });
 
-  // Cleanup pending ask-user prompt on issue change or unmount
-  useEffect(() => {
-    return () => {
-      if (pendingResolveRef.current) {
-        pendingResolveRef.current([]);
-        pendingResolveRef.current = null;
+  // Bridge worker ask-user prompts to the AskUserPanel UI component
+  const askUserPrompt: AskUserPrompt | null = workerSession.askUserPrompt
+    ? {
+        stepOrder: workerSession.askUserPrompt.stepOrder,
+        question: workerSession.askUserPrompt.question,
+        options: workerSession.askUserPrompt.options,
+        allowMultiple: workerSession.askUserPrompt.allowMultiple,
+        resolve: (selected: string[]) => {
+          workerSession.answerAskUser(selected);
+        },
       }
-      setAskUserPrompt(null);
-    };
-  }, [selectedIssue]);
+    : null;
 
   useEffect(() => {
     load();
@@ -281,14 +271,15 @@ export function WorkspaceDetail({ workspaceId, onSwitchWorkspace, onDeleted, onW
     setPlanLoading(true);
     try {
       const analysisResult: AnalysisResult = JSON.parse(analysis.result);
-      const [agents, skills] = await Promise.all([
-        listAgentsForWorkspace(workspaceId),
-        listSkillsForWorkspace(workspaceId),
-      ]);
+      // Ensure worktree exists before dispatching to worker
+      const accessToken = localStorage.getItem("github_token") ?? "";
+      if (accessToken) {
+        await ensureWorktree(workspaceId, selectedIssue.full_name, selectedIssue.number, accessToken, setWorktree);
+      }
       const p = await createPlan(workspaceId, selectedIssue.full_name, selectedIssue.number);
       setPlan(p);
       setIssueTab("plan");
-      runPlanGeneration(p, selectedIssue, analysisResult, agents, skills, setPlan, createAskUserBridge(0));
+      workerSession.startPlan(p.id, selectedIssue, analysisResult, analysis.id);
     } finally {
       setPlanLoading(false);
     }
@@ -727,10 +718,15 @@ export function WorkspaceDetail({ workspaceId, onSwitchWorkspace, onDeleted, onW
                   onClick={() => {
                     setIssueTab("analysis");
                     if (!analysis && !analysisLoading) {
-                      createAnalysis(workspaceId, selectedIssue.full_name, selectedIssue.number).then((a) => {
+                      (async () => {
+                        const accessToken = localStorage.getItem("github_token") ?? "";
+                        if (accessToken) {
+                          await ensureWorktree(workspaceId, selectedIssue.full_name, selectedIssue.number, accessToken, setWorktree);
+                        }
+                        const a = await createAnalysis(workspaceId, selectedIssue.full_name, selectedIssue.number);
                         setAnalysis(a);
-                        runAnalysis(a, selectedIssue, setAnalysis, createAskUserBridge(0));
-                      });
+                        workerSession.startAnalysis(a.id, selectedIssue);
+                      })();
                     }
                   }}
                 >
@@ -763,14 +759,18 @@ export function WorkspaceDetail({ workspaceId, onSwitchWorkspace, onDeleted, onW
                         type="button"
                         className="analyse-btn analyse-btn-inline"
                         onClick={async () => {
+                          const accessToken = localStorage.getItem("github_token") ?? "";
+                          if (accessToken) {
+                            await ensureWorktree(workspaceId, selectedIssue.full_name, selectedIssue.number, accessToken, setWorktree);
+                          }
                           const a = await createAnalysis(workspaceId, selectedIssue.full_name, selectedIssue.number);
                           setAnalysis(a);
                           setPlan(null);
                           setAllCreated(false);
                           setIssueTab("analysis");
-                          runAnalysis(a, selectedIssue, setAnalysis, createAskUserBridge(0));
+                          workerSession.startAnalysis(a.id, selectedIssue);
                         }}
-                        disabled={executing}
+                        disabled={workerSession.loading}
                       >
                         Re-analyse
                       </button>
@@ -780,7 +780,7 @@ export function WorkspaceDetail({ workspaceId, onSwitchWorkspace, onDeleted, onW
                         type="button"
                         className="analyse-btn analyse-btn-inline"
                         onClick={() => triggerPlanGeneration()}
-                        disabled={executing}
+                        disabled={workerSession.loading}
                       >
                         Re-plan
                       </button>
@@ -788,7 +788,7 @@ export function WorkspaceDetail({ workspaceId, onSwitchWorkspace, onDeleted, onW
                     <button
                       type="button"
                       className="analyse-btn analyse-btn-inline analyse-btn-danger"
-                      disabled={executing}
+                      disabled={workerSession.loading}
                       onClick={async () => {
                         const { full_name, number } = selectedIssue;
                         const wt = _worktree;
@@ -903,9 +903,13 @@ export function WorkspaceDetail({ workspaceId, onSwitchWorkspace, onDeleted, onW
                         type="button"
                         className="analyse-btn"
                         onClick={async () => {
+                          const accessToken = localStorage.getItem("github_token") ?? "";
+                          if (accessToken) {
+                            await ensureWorktree(workspaceId, selectedIssue.full_name, selectedIssue.number, accessToken, setWorktree);
+                          }
                           const a = await createAnalysis(workspaceId, selectedIssue.full_name, selectedIssue.number);
                           setAnalysis(a);
-                          runAnalysis(a, selectedIssue, setAnalysis, createAskUserBridge(0));
+                          workerSession.startAnalysis(a.id, selectedIssue);
                         }}
                       >
                         Retry
@@ -932,39 +936,20 @@ export function WorkspaceDetail({ workspaceId, onSwitchWorkspace, onDeleted, onW
                           result={parsed}
                           criticReview={criticReview}
                           stepStatuses={stepStatuses}
-                          executing={executing}
-                          executionError={executionError}
+                          executing={workerSession.loading}
+                          executionError={workerSession.error}
                           executionLogs={executionLogs}
                           askUserPrompt={askUserPrompt}
-                          onExecute={() => {
-                            if (executing || !selectedIssue) return;
-                            setExecuting(true);
+                          onExecute={async () => {
+                            if (workerSession.loading || !selectedIssue) return;
                             setStepStatuses(new Map());
-                            setExecutionError(null);
                             setExecutionLogs([]);
-                            setAskUserPrompt(null);
-                            executePlan({
-                              planResult: parsed,
-                              workspaceId,
-                              issue: selectedIssue,
-                              onStepUpdate: (order, status) => {
-                                setStepStatuses((prev) => {
-                                  const next = new Map(prev);
-                                  next.set(order, status);
-                                  return next;
-                                });
-                              },
-                              onWorktreeUpdate: setWorktree,
-                              onPlanUpdate: (updated) => setPlan(prev => prev ? { ...prev, result: JSON.stringify(updated) } : prev),
-                              onLog: appendLog,
-                              onAskUser: (stepOrder, request) => createAskUserBridge(stepOrder)(request),
-                            })
-                              .catch((e) => {
-                                const msg = e instanceof Error ? e.message : String(e);
-                                console.error("[execute] failed:", msg);
-                                setExecutionError(msg);
-                              })
-                              .finally(() => setExecuting(false));
+                            // Ensure worktree exists before dispatching
+                            const accessToken = localStorage.getItem("github_token") ?? "";
+                            if (accessToken) {
+                              await ensureWorktree(workspaceId, selectedIssue.full_name, selectedIssue.number, accessToken, setWorktree);
+                            }
+                            workerSession.startExecution(plan!.id, selectedIssue, parsed, analysis?.id);
                           }}
                         />
                       );

@@ -3,7 +3,7 @@ import { AGENT_PROVIDERS, AGENT_MODELS } from "../data/agents";
 import { fetchOllamaModels } from "../data/ollamaModels";
 import { fetchOpenRouterModels } from "../data/openrouterModels";
 import { fetchLitellmModels } from "../data/litellmModels";
-import { KEYLESS_PROVIDERS } from "../data/llm";
+import { KEYLESS_PROVIDERS } from "../data/providers";
 import { getModelsForProvider, shouldShowModelInput, getModelInputPlaceholder } from "../data/shared";
 import type { AgentProvider } from "../data/types";
 import { Label } from "@/components/ui/label";
