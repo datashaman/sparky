@@ -2,8 +2,12 @@ import { execSync } from "node:child_process";
 import { realpathSync } from "node:fs";
 
 const DEFAULT_ALLOWED_COMMANDS = new Set([
+  // Shell builtins
+  "cd", "export", "unset", "set", "source", "type",
+  // File utilities
   "ls", "find", "cat", "head", "tail", "wc", "sort", "uniq", "diff",
   "mkdir", "cp", "mv", "rm", "touch",
+  // VCS & package managers
   "git", "npm", "npx", "node", "cargo", "rustc",
   "python", "python3", "pip", "pip3",
   "php", "composer", "artisan",
@@ -11,11 +15,26 @@ const DEFAULT_ALLOWED_COMMANDS = new Set([
   "go",
   "java", "javac", "mvn", "mvnw", "gradle", "gradlew",
   "make", "cmake",
+  // Text processing
   "echo", "printf", "test", "true", "false",
-  "sed", "awk", "cut", "tr", "xargs",
+  "sed", "awk", "cut", "tr", "xargs", "grep",
+  // System info
   "which", "env", "pwd", "date",
+  // Dev tools
   "tsc", "eslint", "prettier",
 ]);
+
+/** Characters that are always dangerous (command substitution, subshells, redirects). */
+const DANGEROUS_CHARS = /[$`()<>\n\r]/;
+
+/**
+ * Split a command string on safe chaining operators (&& and ||).
+ * Returns individual sub-commands to validate independently.
+ * Pipe (|) is also allowed — each segment is validated.
+ */
+function splitChainedCommands(command: string): string[] {
+  return command.split(/\s*(?:&&|\|\||[|;])\s*/).map((s) => s.trim()).filter(Boolean);
+}
 
 export interface BashSandboxConfig {
   /** Extra binaries to allow beyond the defaults. */
@@ -33,6 +52,13 @@ export async function runBash(
   const allowAll = sandboxConfig?.allowAll ?? false;
 
   if (!allowAll) {
+    // Reject truly dangerous shell metacharacters (command substitution, subshells, redirects)
+    if (DANGEROUS_CHARS.test(command)) {
+      throw new Error(
+        "Command contains dangerous shell metacharacters ($`()<>) which are not allowed for security.",
+      );
+    }
+
     // Build effective allowlist: defaults + user-configured extras
     const allowed = new Set(DEFAULT_ALLOWED_COMMANDS);
     if (sandboxConfig?.allowedBinaries) {
@@ -43,22 +69,21 @@ export async function runBash(
       }
     }
 
-    // Validate command starts with an allowed program
-    const firstWord = command.split(/\s/)[0] ?? "";
-    const baseCmd = firstWord.split("/").pop() ?? firstWord;
-    if (!allowed.has(baseCmd)) {
-      throw new Error(
-        `Command '${baseCmd}' is not in the allowed list. Allowed: ${[...allowed].sort().join(", ")}`,
-      );
+    // Validate each sub-command in a chain (cd foo && cat bar.txt)
+    const subCommands = splitChainedCommands(command);
+    if (subCommands.length === 0) {
+      throw new Error("Empty command.");
     }
-  }
 
-  // Reject shell metacharacters and newlines that could bypass the allowlist
-  const DANGEROUS_CHARS = /[;|&$`()<>\n\r]/;
-  if (!allowAll && DANGEROUS_CHARS.test(command)) {
-    throw new Error(
-      "Command contains shell metacharacters (;|&$`()<>) which are not allowed for security.",
-    );
+    for (const sub of subCommands) {
+      const firstWord = sub.split(/\s/)[0] ?? "";
+      const baseCmd = firstWord.split("/").pop() ?? firstWord;
+      if (!allowed.has(baseCmd)) {
+        throw new Error(
+          `Command '${baseCmd}' is not in the allowed list. Allowed: ${[...allowed].sort().join(", ")}`,
+        );
+      }
+    }
   }
 
   // Use the inherited PATH so nvm/homebrew/etc binaries are available
