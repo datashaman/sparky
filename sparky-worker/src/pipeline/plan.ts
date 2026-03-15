@@ -1,6 +1,7 @@
 import type { SessionConfig, StartSessionPayload, ExecutionLogEntry, AnalysisResult, Agent, Skill } from "../types.js";
 import { updateSession, updateExistingTable } from "../db.js";
-import { callLLM, callLLMWithTools, KEYLESS_PROVIDERS } from "../llm/index.js";
+import { callLLM, callLLMWithTools } from "../llm/index.js";
+import { resolveStage, validateStage } from "./resolve-stage.js";
 import { TOOL_SCHEMAS, createToolHandler } from "../tools/index.js";
 import { createAskUserHandler } from "../tools/ask-user-tool.js";
 import { isSessionCancelled } from "../session-manager.js";
@@ -21,12 +22,8 @@ export async function runPlanPipeline(opts: PlanPipelineOpts): Promise<void> {
   const { sessionId, payload, config, onLog } = opts;
   const { workspace_id, repo_full_name, issue_number } = payload;
 
-  const provider = config.default_provider;
-  const modelId = config.default_model;
-  const apiKey = config.default_api_key;
-
-  if (!provider || !modelId) throw new Error("No default provider/model configured.");
-  if (!apiKey && !KEYLESS_PROVIDERS.has(provider)) throw new Error(`No API key for ${provider}.`);
+  const { provider, model: modelId, apiKey } = resolveStage(config, "planning");
+  validateStage({ provider, model: modelId, apiKey }, "planning");
   if (isSessionCancelled(sessionId)) return;
 
   const analysisResult = payload.analysis_result;
@@ -92,14 +89,16 @@ export async function runPlanPipeline(opts: PlanPipelineOpts): Promise<void> {
     throw new Error("Invalid plan response: missing goal or steps");
   }
 
-  // Critic review
+  // Critic review — may use a different model than planning
+  const critic = resolveStage(config, "critic");
+  validateStage(critic, "critic");
   stepLog({ type: "info", message: "Running critic review" });
-  let criticReview = await reviewPlan(parsed, payload, analysisResult, provider, modelId, apiKey);
+  let criticReview = await reviewPlan(parsed, payload, analysisResult, critic.provider, critic.model, critic.apiKey);
 
   if (criticReview.verdict === "fail") {
     stepLog({ type: "info", message: "Critic failed plan, refining" });
     parsed = await refinePlan(parsed, criticReview, payload, analysisResult, agents, skills, provider, modelId, apiKey);
-    criticReview = await reviewPlan(parsed, payload, analysisResult, provider, modelId, apiKey);
+    criticReview = await reviewPlan(parsed, payload, analysisResult, critic.provider, critic.model, critic.apiKey);
   }
 
   const duration = Math.round((Date.now() - startTime) / 1000);

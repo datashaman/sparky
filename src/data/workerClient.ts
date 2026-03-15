@@ -36,6 +36,11 @@ export interface WorkerEvent {
   sessions?: unknown[];
 }
 
+export interface StageOverride {
+  provider: AgentProvider;
+  model: string;
+}
+
 export interface SessionConfig {
   default_provider: AgentProvider;
   default_model: string;
@@ -46,6 +51,13 @@ export interface SessionConfig {
   github_token: string;
   ask_user_timeout_minutes: number | null;
   api_keys?: Partial<Record<AgentProvider, string>>;
+  stage_overrides?: {
+    analysis?: StageOverride;
+    planning?: StageOverride;
+    critic?: StageOverride;
+    execution?: StageOverride;
+    replanning?: StageOverride;
+  };
   sandbox_allowed_binaries?: string[];
   sandbox_allow_all?: boolean;
 }

@@ -14,6 +14,7 @@ import {
   updateExistingTable,
 } from "../db.js";
 import { callLLM, callLLMWithTools, KEYLESS_PROVIDERS } from "../llm/index.js";
+import { resolveStage, validateStage } from "./resolve-stage.js";
 import { getContextWindowSize, estimateMessageTokens } from "../llm/context-budget.js";
 import { TOOL_SCHEMAS, filterToolSchemas, createToolHandler } from "../tools/index.js";
 import { createAskUserHandler } from "../tools/ask-user-tool.js";
@@ -54,15 +55,13 @@ export async function runExecutionPipeline(opts: ExecutionPipelineOpts): Promise
   const planResult = payload.plan_result;
   if (!planResult) throw new Error("Execution requires a plan result.");
 
-  const defaultProvider = config.default_provider;
-  const defaultModel = config.default_model;
-  const defaultApiKey = config.default_api_key;
-  const execProvider = config.exec_provider;
-  const execModel = config.exec_model;
-  const execApiKey = config.exec_api_key;
+  const exec = resolveStage(config, "execution");
+  validateStage(exec, "execution");
+  const { provider: execProvider, model: execModel, apiKey: execApiKey } = exec;
 
-  if (!execProvider || !execModel) throw new Error("No exec provider/model configured.");
-  if (!execApiKey && !KEYLESS_PROVIDERS.has(execProvider)) throw new Error(`No API key for ${execProvider}.`);
+  const replan = resolveStage(config, "replanning");
+  validateStage(replan, "replanning");
+  const { provider: replanProvider, model: replanModel, apiKey: replanApiKey } = replan;
 
   updateSession(sessionId, { current_phase: "execution" });
 
@@ -331,7 +330,7 @@ export async function runExecutionPipeline(opts: ExecutionPipelineOpts): Promise
       if (remainingSteps.length > 0) {
         try {
           stepLog({ type: "replan_check", message: "Checking if remaining steps need adjustment" });
-          const replanResult = await checkNeedReplan(output, step, remainingSteps, planResult.goal, issueContext, execProvider, execModel, execApiKey);
+          const replanResult = await checkNeedReplan(output, step, remainingSteps, planResult.goal, issueContext, replanProvider, replanModel, replanApiKey);
 
           stepLog({ type: "replan_decision", decision: replanResult.decision, reason: replanResult.reason });
 
@@ -341,7 +340,7 @@ export async function runExecutionPipeline(opts: ExecutionPipelineOpts): Promise
 
             const newSteps = await regenerateRemainingSteps(
               completedSteps, stepOutputs, planResult.goal, issueContext,
-              replanResult.reason, nextOrder, defaultProvider, defaultModel, defaultApiKey,
+              replanResult.reason, nextOrder, replanProvider, replanModel, replanApiKey,
             );
 
             steps = [...completedSteps, ...newSteps];
