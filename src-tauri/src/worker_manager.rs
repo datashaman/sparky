@@ -173,7 +173,13 @@ pub async fn worker_ensure_running(app: AppHandle) -> Result<String, String> {
 
     // Use tsx for .ts files (dev mode), node for .js (production bundle)
     let runner = if script.ends_with(".ts") {
-        resolve_bin("tsx")
+        // tsx is a local devDependency — resolve from the worker's node_modules
+        let worker_dir = state.worker_script.parent().and_then(|p| p.parent());
+        let local_tsx = worker_dir
+            .map(|d| d.join("node_modules").join(".bin").join("tsx"))
+            .filter(|p| p.exists())
+            .and_then(|p| p.to_str().map(String::from));
+        local_tsx.unwrap_or_else(|| resolve_bin("tsx"))
     } else {
         resolve_bin("node")
     };
