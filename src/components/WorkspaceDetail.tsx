@@ -14,7 +14,7 @@ import { getWorktreeForIssue, removeWorktree, ensureWorktree } from "../data/iss
 import type { ExecutionLogEntry, IssueAnalysis, AnalysisResult, ExecutionPlan, ExecutionPlanResult, IssueWorktree, StepExecutionStatus, CriticReview } from "../data/types";
 import { marked } from "marked";
 import { AnalysisView } from "./AnalysisView";
-import { PlanView, AskUserPanel, type AskUserPrompt } from "./PlanView";
+import { PlanView, AskUserPanel, StepLogPanel, type AskUserPrompt } from "./PlanView";
 import { useWorkerSession } from "../hooks/useWorkerSession";
 import { SkillDetail } from "./SkillDetail";
 import { AgentDetail } from "./AgentDetail";
@@ -276,9 +276,10 @@ export function WorkspaceDetail({ workspaceId, onSwitchWorkspace, onDeleted, onW
       if (accessToken) {
         await ensureWorktree(workspaceId, selectedIssue.full_name, selectedIssue.number, accessToken, setWorktree);
       }
-      const p = await createPlan(workspaceId, selectedIssue.full_name, selectedIssue.number);
+      const p = plan?.status === "pending" ? plan : await createPlan(workspaceId, selectedIssue.full_name, selectedIssue.number);
       setPlan(p);
       setIssueTab("plan");
+      setExecutionLogs([]);
       workerSession.startPlan(p.id, selectedIssue, analysisResult, analysis.id);
     } finally {
       setPlanLoading(false);
@@ -726,6 +727,7 @@ export function WorkspaceDetail({ workspaceId, onSwitchWorkspace, onDeleted, onW
                           }
                           const a = analysis ?? await createAnalysis(workspaceId, selectedIssue.full_name, selectedIssue.number);
                           setAnalysis(a);
+                          setExecutionLogs([]);
                           await workerSession.startAnalysis(a.id, selectedIssue);
                         } catch (err) {
                           console.error("[analysis] failed to start:", err);
@@ -745,7 +747,7 @@ export function WorkspaceDetail({ workspaceId, onSwitchWorkspace, onDeleted, onW
                     className={`issue-tab ${issueTab === "plan" ? "issue-tab-active" : ""}`}
                     onClick={() => {
                       setIssueTab("plan");
-                      if (!plan && !planLoading) {
+                      if ((!plan || plan.status === "pending") && !planLoading) {
                         triggerPlanGeneration();
                       }
                     }}
@@ -773,6 +775,7 @@ export function WorkspaceDetail({ workspaceId, onSwitchWorkspace, onDeleted, onW
                             setPlan(null);
                             setAllCreated(false);
                             setIssueTab("analysis");
+                            setExecutionLogs([]);
                             await workerSession.startAnalysis(a.id, selectedIssue);
                           } catch (err) {
                             console.error("[re-analyse] failed to start:", err);
@@ -854,6 +857,7 @@ export function WorkspaceDetail({ workspaceId, onSwitchWorkspace, onDeleted, onW
                       {askUserPrompt && askUserPrompt.stepOrder === 0 && (
                         <AskUserPanel prompt={askUserPrompt} />
                       )}
+                      <StepLogPanel logs={executionLogs} />
                     </>
                   )}
                   {analysis?.status === "done" && analysis.result && (() => {
@@ -918,6 +922,7 @@ export function WorkspaceDetail({ workspaceId, onSwitchWorkspace, onDeleted, onW
                             }
                             const a = await createAnalysis(workspaceId, selectedIssue.full_name, selectedIssue.number);
                             setAnalysis(a);
+                            setExecutionLogs([]);
                             await workerSession.startAnalysis(a.id, selectedIssue);
                           } catch (err) {
                             console.error("[retry-analyse] failed to start:", err);
@@ -937,6 +942,7 @@ export function WorkspaceDetail({ workspaceId, onSwitchWorkspace, onDeleted, onW
                       {askUserPrompt && askUserPrompt.stepOrder === 0 && (
                         <AskUserPanel prompt={askUserPrompt} />
                       )}
+                      <StepLogPanel logs={executionLogs} />
                     </>
                   )}
                   {plan?.status === "done" && plan.result && (() => {
