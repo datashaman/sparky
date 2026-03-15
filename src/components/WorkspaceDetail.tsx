@@ -273,9 +273,8 @@ export function WorkspaceDetail({ workspaceId, onSwitchWorkspace, onDeleted, onW
       const analysisResult: AnalysisResult = JSON.parse(analysis.result);
       // Ensure worktree exists before dispatching to worker
       const accessToken = localStorage.getItem("github_token") ?? "";
-      if (accessToken) {
-        await ensureWorktree(workspaceId, selectedIssue.full_name, selectedIssue.number, accessToken, setWorktree);
-      }
+      if (!accessToken) throw new Error("No GitHub token. Please log in.");
+      await ensureWorktree(workspaceId, selectedIssue.full_name, selectedIssue.number, accessToken, setWorktree);
       const p = plan?.status === "pending" ? plan : await createPlan(workspaceId, selectedIssue.full_name, selectedIssue.number);
       setPlan(p);
       setIssueTab("plan");
@@ -722,9 +721,8 @@ export function WorkspaceDetail({ workspaceId, onSwitchWorkspace, onDeleted, onW
                       (async () => {
                         try {
                           const accessToken = localStorage.getItem("github_token") ?? "";
-                          if (accessToken) {
-                            await ensureWorktree(workspaceId, selectedIssue.full_name, selectedIssue.number, accessToken, setWorktree);
-                          }
+                          if (!accessToken) throw new Error("No GitHub token. Please log in.");
+                          await ensureWorktree(workspaceId, selectedIssue.full_name, selectedIssue.number, accessToken, setWorktree);
                           const a = analysis ?? await createAnalysis(workspaceId, selectedIssue.full_name, selectedIssue.number);
                           setAnalysis(a);
                           setExecutionLogs([]);
@@ -767,9 +765,8 @@ export function WorkspaceDetail({ workspaceId, onSwitchWorkspace, onDeleted, onW
                         onClick={async () => {
                           try {
                             const accessToken = localStorage.getItem("github_token") ?? "";
-                            if (accessToken) {
-                              await ensureWorktree(workspaceId, selectedIssue.full_name, selectedIssue.number, accessToken, setWorktree);
-                            }
+                            if (!accessToken) throw new Error("No GitHub token. Please log in.");
+                            await ensureWorktree(workspaceId, selectedIssue.full_name, selectedIssue.number, accessToken, setWorktree);
                             const a = await createAnalysis(workspaceId, selectedIssue.full_name, selectedIssue.number);
                             setAnalysis(a);
                             setPlan(null);
@@ -917,9 +914,8 @@ export function WorkspaceDetail({ workspaceId, onSwitchWorkspace, onDeleted, onW
                         onClick={async () => {
                           try {
                             const accessToken = localStorage.getItem("github_token") ?? "";
-                            if (accessToken) {
-                              await ensureWorktree(workspaceId, selectedIssue.full_name, selectedIssue.number, accessToken, setWorktree);
-                            }
+                            if (!accessToken) throw new Error("No GitHub token. Please log in.");
+                            await ensureWorktree(workspaceId, selectedIssue.full_name, selectedIssue.number, accessToken, setWorktree);
                             const a = await createAnalysis(workspaceId, selectedIssue.full_name, selectedIssue.number);
                             setAnalysis(a);
                             setExecutionLogs([]);
@@ -964,9 +960,8 @@ export function WorkspaceDetail({ workspaceId, onSwitchWorkspace, onDeleted, onW
                             setExecutionLogs([]);
                             // Ensure worktree exists before dispatching
                             const accessToken = localStorage.getItem("github_token") ?? "";
-                            if (accessToken) {
-                              await ensureWorktree(workspaceId, selectedIssue.full_name, selectedIssue.number, accessToken, setWorktree);
-                            }
+                            if (!accessToken) throw new Error("No GitHub token. Please log in.");
+                            await ensureWorktree(workspaceId, selectedIssue.full_name, selectedIssue.number, accessToken, setWorktree);
                             workerSession.startExecution(plan!.id, selectedIssue, parsed, analysis?.id);
                           }}
                         />

@@ -133,6 +133,7 @@ export function useWorkerSession(opts: {
   useEffect(() => {
     ensureWorker().catch((err) => {
       console.warn("[useWorkerSession] worker not ready on mount:", err);
+      setState((prev) => ({ ...prev, error: `Worker failed to start: ${err}` }));
     });
 
     return () => {
@@ -199,8 +200,19 @@ export function useWorkerSession(opts: {
           ...prev,
           loading: false,
           error: event.error ?? "Unknown error",
+          askUserPrompt: null,
         }));
         activeSessionRef.current = null;
+        break;
+
+      case "error":
+        // Non-session errors (e.g. failed to start session, invalid JSON)
+        setState((prev) => ({
+          ...prev,
+          loading: false,
+          error: event.error ?? "Worker error",
+          askUserPrompt: null,
+        }));
         break;
     }
   }, [onLog, onStepUpdate]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -267,18 +279,23 @@ export function useWorkerSession(opts: {
       };
       setState((prev) => ({ ...prev, loading: true, error: null, askUserPrompt: null }));
 
-      await startSession({
-        session_type: "analysis",
-        workspace_id: workspaceId,
-        repo_full_name: issue.full_name,
-        issue_number: issue.number,
-        issue_title: issue.title,
-        issue_body: issue.body ?? null,
-        issue_state: issue.state,
-        issue_labels: issue.labels ?? [],
-        config,
-        analysis_id: analysisId,
-      });
+      try {
+        await startSession({
+          session_type: "analysis",
+          workspace_id: workspaceId,
+          repo_full_name: issue.full_name,
+          issue_number: issue.number,
+          issue_title: issue.title,
+          issue_body: issue.body ?? null,
+          issue_state: issue.state,
+          issue_labels: issue.labels ?? [],
+          config,
+          analysis_id: analysisId,
+        });
+      } catch (err) {
+        setState((prev) => ({ ...prev, loading: false, error: `Failed to start session: ${err}` }));
+        activeSessionRef.current = null;
+      }
     },
     [workspaceId, ensureWorker],
   );
@@ -311,20 +328,25 @@ export function useWorkerSession(opts: {
       };
       setState((prev) => ({ ...prev, loading: true, error: null, askUserPrompt: null }));
 
-      await startSession({
-        session_type: "plan",
-        workspace_id: workspaceId,
-        repo_full_name: issue.full_name,
-        issue_number: issue.number,
-        issue_title: issue.title,
-        issue_body: issue.body ?? null,
-        issue_state: issue.state,
-        issue_labels: issue.labels ?? [],
-        config,
-        analysis_id: analysisId,
-        plan_id: planId,
-        analysis_result: analysisResult,
-      });
+      try {
+        await startSession({
+          session_type: "plan",
+          workspace_id: workspaceId,
+          repo_full_name: issue.full_name,
+          issue_number: issue.number,
+          issue_title: issue.title,
+          issue_body: issue.body ?? null,
+          issue_state: issue.state,
+          issue_labels: issue.labels ?? [],
+          config,
+          analysis_id: analysisId,
+          plan_id: planId,
+          analysis_result: analysisResult,
+        });
+      } catch (err) {
+        setState((prev) => ({ ...prev, loading: false, error: `Failed to start session: ${err}` }));
+        activeSessionRef.current = null;
+      }
     },
     [workspaceId, ensureWorker],
   );
@@ -337,6 +359,14 @@ export function useWorkerSession(opts: {
       analysisId?: string,
     ) => {
       const config = buildSessionConfig();
+      if (!config.default_provider || !config.default_model) {
+        setState((prev) => ({ ...prev, error: "No default provider/model configured. Set one in Settings." }));
+        return;
+      }
+      if (!config.default_api_key && !KEYLESS_PROVIDERS.has(config.default_provider)) {
+        setState((prev) => ({ ...prev, error: `No API key configured for ${config.default_provider}. Add one in Settings.` }));
+        return;
+      }
       if (!config.exec_api_key && !KEYLESS_PROVIDERS.has(config.exec_provider)) {
         setState((prev) => ({ ...prev, error: `No API key configured for exec provider ${config.exec_provider}. Add one in Settings.` }));
         return;
@@ -353,20 +383,25 @@ export function useWorkerSession(opts: {
       };
       setState((prev) => ({ ...prev, loading: true, error: null, askUserPrompt: null }));
 
-      await startSession({
-        session_type: "execution",
-        workspace_id: workspaceId,
-        repo_full_name: issue.full_name,
-        issue_number: issue.number,
-        issue_title: issue.title,
-        issue_body: issue.body ?? null,
-        issue_state: issue.state,
-        issue_labels: issue.labels ?? [],
-        config,
-        analysis_id: analysisId,
-        plan_id: planId,
-        plan_result: planResult,
-      });
+      try {
+        await startSession({
+          session_type: "execution",
+          workspace_id: workspaceId,
+          repo_full_name: issue.full_name,
+          issue_number: issue.number,
+          issue_title: issue.title,
+          issue_body: issue.body ?? null,
+          issue_state: issue.state,
+          issue_labels: issue.labels ?? [],
+          config,
+          analysis_id: analysisId,
+          plan_id: planId,
+          plan_result: planResult,
+        });
+      } catch (err) {
+        setState((prev) => ({ ...prev, loading: false, error: `Failed to start session: ${err}` }));
+        activeSessionRef.current = null;
+      }
     },
     [workspaceId, ensureWorker],
   );
