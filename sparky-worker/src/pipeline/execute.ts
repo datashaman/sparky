@@ -73,13 +73,13 @@ export async function runExecutionPipeline(opts: ExecutionPipelineOpts): Promise
 
   const worktreePath = await resolveWorktreePath(repo_full_name, issue_number);
 
+  ensureManifest(worktreePath);
+
   // Dynamic repo context budget: 5% of context window, clamped to 2000-10000 chars
   const execContextWindow = getContextWindowSize(execProvider, execModel);
   const repoContextBudget = Math.min(10000, Math.max(2000, Math.floor(execContextWindow * 0.05 * 4)));
   const additionalContextFiles = getManifestContextFiles(worktreePath);
   const repoContext = readRepoContext(worktreePath, repoContextBudget, additionalContextFiles);
-
-  ensureManifest(worktreePath);
   const agents = getAgentsFromManifest(worktreePath);
   const skills = getSkillsFromManifest(worktreePath);
 

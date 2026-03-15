@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import type { AnalysisResult } from "../data/types";
 import { marked } from "marked";
 import DOMPurify from "dompurify";
@@ -24,10 +25,11 @@ const complexityBadgeClass: Record<AnalysisResult["complexity"], string> = {
 
 export function AnalysisView({ result, onAllCreated }: AnalysisViewProps) {
   // Auto-notify parent that we're ready (no CRUD needed)
-  if (onAllCreated) {
-    // Use microtask to avoid calling during render
-    queueMicrotask(onAllCreated);
-  }
+  useEffect(() => {
+    if (onAllCreated) {
+      onAllCreated();
+    }
+  }, [onAllCreated]);
 
   const approachHtml = DOMPurify.sanitize(marked.parse(result.approach, { async: false }) as string);
 

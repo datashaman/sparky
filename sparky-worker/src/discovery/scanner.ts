@@ -1,4 +1,4 @@
-import { writeFileSync, mkdirSync, existsSync, readFileSync, lstatSync } from "node:fs";
+import { writeFileSync, mkdirSync, existsSync, readFileSync, lstatSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import type { DiscoveredManifest, FrameworkResult } from "./types.js";
 import { scan as scanClaudeCode } from "./frameworks/claude-code.js";
@@ -102,7 +102,7 @@ export function isCacheStale(repoRoot: string): boolean {
     // Check if any well-known config files are newer than the cache
     const filesToCheck = [
       "CLAUDE.md", ".claude/settings.json", ".cursorrules",
-      ".cursor/rules", ".github/copilot-instructions.md",
+      ".github/copilot-instructions.md",
       ".mcp.json", "AGENTS.md", ".sparky/manifest.json",
     ];
 
@@ -113,6 +113,27 @@ export function isCacheStale(repoRoot: string): boolean {
         if (fileStat.mtimeMs > lastScanTime) return true;
       } catch {
         // File doesn't exist — not stale
+      }
+    }
+
+    // Walk directories whose mtime doesn't reflect changes to files inside
+    const dirsToWalk = [".cursor/rules", ".claude/commands"];
+    for (const dir of dirsToWalk) {
+      const dirPath = join(repoRoot, dir);
+      try {
+        const dirStat = lstatSync(dirPath);
+        if (!dirStat.isDirectory()) continue;
+        if (dirStat.mtimeMs > lastScanTime) return true;
+        for (const entry of readdirSync(dirPath)) {
+          try {
+            const entryStat = lstatSync(join(dirPath, entry));
+            if (entryStat.mtimeMs > lastScanTime) return true;
+          } catch {
+            // skip unreadable entries
+          }
+        }
+      } catch {
+        // Directory doesn't exist — not stale
       }
     }
 

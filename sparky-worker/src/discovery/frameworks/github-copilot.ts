@@ -1,6 +1,5 @@
-import { readFileSync, lstatSync, realpathSync } from "node:fs";
-import { join } from "node:path";
 import type { FrameworkResult, DiscoveredSkill, DiscoveredContextFile } from "../types.js";
+import { safeRead } from "./safe-read.js";
 
 /** Scan for GitHub Copilot configuration: .github/copilot-instructions.md. */
 export function scan(repoRoot: string): FrameworkResult {
@@ -26,17 +25,3 @@ export function scan(repoRoot: string): FrameworkResult {
   return { framework: "github-copilot", agents: [], skills, commands: [], context_files };
 }
 
-function safeRead(root: string, relativePath: string): string | null {
-  const filepath = join(root, relativePath);
-  try {
-    const stat = lstatSync(filepath);
-    if (stat.isSymbolicLink()) return null;
-    if (!stat.isFile()) return null;
-    const resolved = realpathSync(filepath);
-    const resolvedRoot = realpathSync(root);
-    if (!resolved.startsWith(resolvedRoot + "/") && resolved !== resolvedRoot) return null;
-    return readFileSync(filepath, "utf-8").trim() || null;
-  } catch {
-    return null;
-  }
-}

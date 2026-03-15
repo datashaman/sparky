@@ -1,6 +1,7 @@
-import { readFileSync, existsSync, readdirSync, lstatSync, realpathSync } from "node:fs";
+import { existsSync, lstatSync } from "node:fs";
 import { join, basename } from "node:path";
 import type { FrameworkResult, DiscoveredAgent, DiscoveredSkill, DiscoveredContextFile, DiscoveredCommand } from "../types.js";
+import { safeRead, safeReadJSON, safeReaddir } from "./safe-read.js";
 
 /** Scan for Claude Code configuration: CLAUDE.md, .claude/ directory. */
 export function scan(repoRoot: string): FrameworkResult {
@@ -81,35 +82,3 @@ export function scan(repoRoot: string): FrameworkResult {
   return { framework: "claude-code", agents, skills, commands, context_files };
 }
 
-function safeRead(root: string, relativePath: string): string | null {
-  const filepath = join(root, relativePath);
-  try {
-    const stat = lstatSync(filepath);
-    if (stat.isSymbolicLink()) return null;
-    if (!stat.isFile()) return null;
-    const resolved = realpathSync(filepath);
-    const resolvedRoot = realpathSync(root);
-    if (!resolved.startsWith(resolvedRoot + "/") && resolved !== resolvedRoot) return null;
-    return readFileSync(filepath, "utf-8").trim() || null;
-  } catch {
-    return null;
-  }
-}
-
-function safeReadJSON(root: string, relativePath: string): unknown | null {
-  const text = safeRead(root, relativePath);
-  if (!text) return null;
-  try {
-    return JSON.parse(text);
-  } catch {
-    return null;
-  }
-}
-
-function safeReaddir(dirPath: string): string[] {
-  try {
-    return readdirSync(dirPath);
-  } catch {
-    return [];
-  }
-}
