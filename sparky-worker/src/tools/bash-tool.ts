@@ -1,5 +1,6 @@
 import { execSync } from "node:child_process";
 import { realpathSync } from "node:fs";
+import { join } from "node:path";
 
 const DEFAULT_ALLOWED_COMMANDS = new Set([
   // Shell builtins
@@ -106,6 +107,9 @@ export async function runBash(
   // Use the inherited PATH so nvm/homebrew/etc binaries are available
   const envPath = process.env.PATH ?? "/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin";
 
+  // Redirect tool caches to .sparky/cache/home so they don't pollute the worktree
+  const cacheHome = join(root, ".sparky", "cache", "home");
+
   try {
     const stdout = execSync(command, {
       cwd: root,
@@ -113,8 +117,19 @@ export async function runBash(
       maxBuffer: 10 * 1024 * 1024,
       env: {
         ...process.env,
-        HOME: root,
+        HOME: cacheHome,
         PATH: envPath,
+        // Composer
+        COMPOSER_HOME: join(cacheHome, ".composer"),
+        COMPOSER_CACHE_DIR: join(cacheHome, ".composer", "cache"),
+        // npm/node
+        npm_config_cache: join(cacheHome, ".npm"),
+        // pip
+        PIP_CACHE_DIR: join(cacheHome, ".pip"),
+        // XDG (catches most other tools)
+        XDG_CACHE_HOME: join(cacheHome, ".cache"),
+        XDG_CONFIG_HOME: join(cacheHome, ".config"),
+        XDG_DATA_HOME: join(cacheHome, ".local", "share"),
       },
       shell: "/bin/sh",
     });
