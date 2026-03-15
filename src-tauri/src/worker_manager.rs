@@ -61,6 +61,7 @@ fn tmux_session_exists(tmux: &str, session_name: &str) -> bool {
 }
 
 /// Start the tmux session with the worker process.
+/// Wraps the command in a login shell so nvm/homebrew/etc are available.
 fn start_tmux_session(
     tmux: &str,
     node: &str,
@@ -69,13 +70,20 @@ fn start_tmux_session(
     db_path: &str,
     socket_path: &str,
 ) -> Result<(), String> {
-    let cmd = format!(
+    let inner_cmd = format!(
         "{} {} --db {} --socket {}",
         shell_escape(node),
         shell_escape(script_path),
         shell_escape(db_path),
         shell_escape(socket_path),
     );
+
+    // Wrap in login shell so PATH includes nvm, homebrew, etc.
+    let shell = std::env::var("SHELL")
+        .ok()
+        .filter(|s| !s.is_empty() && std::path::Path::new(s).is_file())
+        .unwrap_or_else(|| "/bin/sh".to_string());
+    let cmd = format!("{} -l -c {}", shell_escape(&shell), shell_escape(&inner_cmd));
 
     let output = std::process::Command::new(tmux)
         .args(["new-session", "-d", "-s", session_name, &cmd])
